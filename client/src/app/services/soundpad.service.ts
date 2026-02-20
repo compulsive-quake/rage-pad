@@ -1,0 +1,142 @@
+import { Injectable, OnDestroy } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, BehaviorSubject, interval, switchMap, catchError, of, Subject, takeUntil, take } from 'rxjs';
+import { Sound, ConnectionStatus, CategoryIcon } from '../models/sound.model';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class SoundpadService implements OnDestroy {
+  private apiUrl = 'http://localhost:3000/api';
+  private connectionStatus$ = new BehaviorSubject<ConnectionStatus>({ connected: false });
+  private sounds$ = new BehaviorSubject<Sound[]>([]);
+  private destroy$ = new Subject<void>();
+
+  constructor(private http: HttpClient) {
+    // Check connection status periodically
+    this.startConnectionCheck();
+  }
+
+  ngOnDestroy(): void {
+    this.destroy$.next();
+    this.destroy$.complete();
+  }
+
+  private startConnectionCheck(): void {
+    interval(30000).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.checkConnection()),
+      catchError(() => of({ connected: false }))
+    ).subscribe(status => {
+      this.connectionStatus$.next(status);
+    });
+    
+    // Initial check
+    this.checkConnection().pipe(take(1)).subscribe(status => {
+      this.connectionStatus$.next(status);
+    });
+  }
+
+  checkConnection(): Observable<ConnectionStatus> {
+    return this.http.get<ConnectionStatus>(`${this.apiUrl}/status`).pipe(
+      catchError(() => of({ connected: false, error: 'Cannot connect to server' }))
+    );
+  }
+
+  getConnectionStatus(): Observable<ConnectionStatus> {
+    return this.connectionStatus$.asObservable();
+  }
+
+  getSounds(): Observable<Sound[]> {
+    return this.http.get<Sound[]>(`${this.apiUrl}/sounds`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  searchSounds(query: string): Observable<Sound[]> {
+    return this.http.get<Sound[]>(`${this.apiUrl}/sounds/search`, {
+      params: { q: query }
+    }).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  playSound(index: number, speakersOnly = false, micOnly = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/${index}/play`, { speakersOnly, micOnly }).pipe(
+      catchError(error => {
+        console.error('Failed to play sound:', error);
+        return of({ error: 'Failed to play sound' });
+      })
+    );
+  }
+
+  stopSound(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/stop`, {}).pipe(
+      catchError(error => {
+        console.error('Failed to stop sound:', error);
+        return of({ error: 'Failed to stop sound' });
+      })
+    );
+  }
+
+  togglePause(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/pause`, {}).pipe(
+      catchError(error => {
+        console.error('Failed to toggle pause:', error);
+        return of({ error: 'Failed to toggle pause' });
+      })
+    );
+  }
+
+  setVolume(volume: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/volume`, { volume }).pipe(
+      catchError(error => {
+        console.error('Failed to set volume:', error);
+        return of({ error: 'Failed to set volume' });
+      })
+    );
+  }
+
+  setPlayMode(mode: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/play-mode`, { mode }).pipe(
+      catchError(error => {
+        console.error('Failed to set play mode:', error);
+        return of({ error: 'Failed to set play mode' });
+      })
+    );
+  }
+
+  setSpeakersOnly(enabled: boolean): Observable<any> {
+    return this.http.post(`${this.apiUrl}/speakers-only`, { enabled }).pipe(
+      catchError(error => {
+        console.error('Failed to set speakers only mode:', error);
+        return of({ error: 'Failed to set speakers only mode' });
+      })
+    );
+  }
+
+  restartSoundpad(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/restart`, {}).pipe(
+      catchError(error => {
+        console.error('Failed to restart Soundpad:', error);
+        return of({ error: 'Failed to restart Soundpad' });
+      })
+    );
+  }
+
+  refreshSounds(): void {
+    this.getSounds().subscribe(sounds => {
+      this.sounds$.next(sounds);
+    });
+  }
+
+  getCachedSounds(): Observable<Sound[]> {
+    return this.sounds$.asObservable();
+  }
+
+  getCategoryIcons(): Observable<CategoryIcon[]> {
+    return this.http.get<CategoryIcon[]>(`${this.apiUrl}/category-icons`).pipe(
+      catchError(() => of([]))
+    );
+  }
+}
