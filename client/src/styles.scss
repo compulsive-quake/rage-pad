@@ -1,6 +1,9 @@
 /* Global Styles */
 * {
   box-sizing: border-box;
+  caret-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 html, body {

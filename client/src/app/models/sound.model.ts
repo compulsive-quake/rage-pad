@@ -8,13 +8,16 @@ export interface Sound {
   lastPlayedDate: string;
   playCount: number;
   category: string;
+  parentCategory: string;
   categoryImage: string;
+  categoryIndex: number; // position of this sound within its category (0-based)
 }
 
 export interface Category {
   name: string;
   sounds: Sound[];
   image: string;
+  subCategories: Category[];
 }
 
 export interface ConnectionStatus {

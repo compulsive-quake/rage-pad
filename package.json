@@ -6,9 +6,10 @@
   "scripts": {
     "build:server": "tsc -p tsconfig.server.json",
     "build:server:watch": "tsc -p tsconfig.server.json --watch",
-    "start:server": "node dist/server/index.js --watch",
-    "dev:server": "ts-node src/server/index.ts",
-    "build:client": "cd client && npm run build-watch",
+    "start:server": "nodemon dist/server/index.js",
+    "dev:server": "ts-node src/server/index.ts --watch",
+    "build:client": "cd client && npm run build",
+    "build:client:watch": "cd client && npm run build-watch",
     "start": "npm run build:server && npm run start:server",
     "dev": "concurrently \"npm run dev:server\" \"cd client && npm start\""
   },
@@ -23,7 +24,8 @@
     "@types/node": "^20.11.0",
     "concurrently": "^8.2.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.5.3"
+    "typescript": "^5.5.3",
+    "nodemon": "^3.1.13"
   },
   "private": true
 }

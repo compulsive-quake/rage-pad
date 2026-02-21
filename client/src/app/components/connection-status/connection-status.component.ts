@@ -6,60 +6,56 @@ import { CommonModule } from '@angular/common';
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="connection-status" [class.connected]="isConnected" [class.disconnected]="!isConnected">
+    <div
+      class="connection-status"
+      [class.connected]="isConnected"
+      [class.disconnected]="!isConnected"
+      [title]="isConnected ? 'Connected to Soundpad' : 'Disconnected'"
+    >
       <div class="status-indicator"></div>
-      <span class="status-text">
-        {{ isConnected ? 'Connected to Soundpad' : 'Disconnected' }}
-      </span>
     </div>
   `,
   styles: [`
     .connection-status {
       display: flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.5rem 1rem;
-      border-radius: 20px;
-      font-size: 0.85rem;
-      font-weight: 500;
+      justify-content: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
       transition: all 0.3s ease;
+      cursor: default;
     }
 
     .connection-status.connected {
-      background: rgba(46, 204, 113, 0.2);
-      color: #2ecc71;
+      background: rgba(46, 204, 113, 0.15);
     }
 
     .connection-status.disconnected {
-      background: rgba(231, 76, 60, 0.2);
-      color: #e74c3c;
+      background: rgba(231, 76, 60, 0.15);
     }
 
     .status-indicator {
-      width: 8px;
-      height: 8px;
+      width: 10px;
+      height: 10px;
       border-radius: 50%;
       transition: all 0.3s ease;
     }
 
     .connected .status-indicator {
       background: #2ecc71;
-      box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+      box-shadow: 0 0 8px rgba(46, 204, 113, 0.6);
       animation: pulse-green 2s ease-in-out infinite;
     }
 
     .disconnected .status-indicator {
       background: #e74c3c;
-      box-shadow: 0 0 10px rgba(231, 76, 60, 0.5);
+      box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
     }
 
     @keyframes pulse-green {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }
-    }
-
-    .status-text {
-      white-space: nowrap;
     }
   `]
 })

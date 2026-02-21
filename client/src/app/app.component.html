@@ -17,18 +17,41 @@
             <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
           </svg>
         </button>
+        <button
+          class="rename-btn-icon"
+          [class.active]="isRenameMode"
+          (click)="toggleRenameMode()"
+          title="{{ isRenameMode ? 'Exit rename mode' : 'Rename sounds' }}"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+        </button>
         <button class="settings-btn-icon" (click)="toggleSettingsModal()" title="Settings">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
           </svg>
         </button>
-        <app-connection-status [isConnected]="isConnected"></app-connection-status>
       </div>
     </div>
   </header>
 
   <!-- Main Content -->
   <main class="main-content" #mainContent>
+    <!-- Category Nav -->
+    <nav class="category-nav" *ngIf="!isLoading && categories.length > 0">
+      <ul class="category-nav-list" #categoryNavList>
+        <li
+          *ngFor="let category of categories; trackBy: trackByCategory"
+          class="category-nav-item"
+          [class.active]="activeCategory === category.name"
+          (click)="scrollToCategory(category.name)"
+        >
+          {{ category.name }}
+        </li>
+      </ul>
+    </nav>
+
     <div class="main-content-inner">
 
       <!-- Sound Grid -->
@@ -69,26 +92,58 @@
             <!-- Category Divider -->
             <div class="category-divider">
               <div class="category-icon" [class.has-image]="category.image">
-                <img *ngIf="category.image" [src]="category.image" alt="{{ category.name }}" />
+                <img *ngIf="category.image" [src]="category.image" alt="{{ category.name }}" (error)="category.image = ''" />
                 <svg *ngIf="!category.image" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path [attr.d]="getCategoryIcon(category.name)"/>
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
                 </svg>
               </div>
               <h2 class="category-title">{{ category.name }}</h2>
-              <span class="category-count">{{ category.sounds.length }} sounds</span>
+              <span class="category-count">{{ getTotalSoundCount(category) }} sounds</span>
               <div class="category-line"></div>
             </div>
-            
-            <!-- Sounds Grid for this category -->
-            <div class="sounds-grid">
+
+            <!-- Direct sounds in this category (not in sub-categories) -->
+            <div class="sounds-grid" *ngIf="category.sounds.length > 0">
               <app-sound-card
                 *ngFor="let sound of category.sounds; trackBy: trackByIndex"
                 [sound]="sound"
                 [isPlaying]="currentlyPlayingIndex === sound.index"
+                [isRenameMode]="isRenameMode"
                 (play)="playSound($event)"
+                (rename)="openRenameModal($event)"
               ></app-sound-card>
             </div>
+
+            <!-- Sub-categories -->
+            <div class="sub-categories-container" *ngIf="category.subCategories.length > 0">
+              <div class="sub-category-section"
+                   *ngFor="let subCategory of category.subCategories; trackBy: trackByCategory">
+                <!-- Sub-category Divider -->
+                <div class="sub-category-divider">
+                  <div class="sub-category-icon has-image" *ngIf="subCategory.image">
+                    <img [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="subCategory.image = ''" />
+                  </div>
+                  <h3 class="sub-category-title">{{ subCategory.name }}</h3>
+                  <span class="sub-category-count">{{ subCategory.sounds.length }} sounds</span>
+                  <div class="sub-category-line"></div>
+                </div>
+
+                <!-- Sounds Grid for this sub-category -->
+                <div class="sounds-grid">
+                  <app-sound-card
+                    *ngFor="let sound of subCategory.sounds; trackBy: trackByIndex"
+                    [sound]="sound"
+                    [isPlaying]="currentlyPlayingIndex === sound.index"
+                    [isRenameMode]="isRenameMode"
+                    (play)="playSound($event)"
+                    (rename)="openRenameModal($event)"
+                  ></app-sound-card>
+                </div>
+              </div>
+            </div>
           </div>
+          <!-- Spacer to allow last category to scroll to top -->
+          <div class="scroll-end-spacer"></div>
         </div>
       </div>
     </section>
@@ -101,15 +156,16 @@
     <div class="progress-bar-border">
       <div class="progress-bar" [style.width.%]="playbackProgress"></div>
     </div>
-    
+
     <div class="footer-controls">
       <div class="time-remaining-container">
+        <app-connection-status [isConnected]="isConnected"></app-connection-status>
         <span class="time-remaining" *ngIf="currentlyPlayingIndex !== null">{{ formatTime(playbackTimeRemaining) }}</span>
       </div>
 
       <div class="control-buttons">
-        <button 
-          class="control-btn stop-btn" 
+        <button
+          class="control-btn stop-btn"
           (click)="stopSound()"
           [disabled]="currentlyPlayingIndex === null"
           title="Stop"
@@ -118,9 +174,9 @@
             <rect x="6" y="6" width="12" height="12"/>
           </svg>
         </button>
-        
-        <button 
-          class="control-btn pause-btn" 
+
+        <button
+          class="control-btn pause-btn"
           (click)="togglePause()"
           [disabled]="currentlyPlayingIndex === null"
           title="Pause/Resume"
@@ -135,26 +191,36 @@
       </div>
 
       <div class="volume-control">
-        <button
-          class="mic-only-btn"
-          [class.active]="micOnly"
-          (click)="toggleMicOnly()"
-          title="Play on microphone only"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-          </svg>
-        </button>
-        <button
-          class="speakers-only-btn"
-          [class.active]="speakersOnly"
-          (click)="toggleSpeakersOnly()"
-          title="Play on speakers only (headphones)"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/>
-          </svg>
-        </button>
+        <div class="playback-mode-toggle" role="group" aria-label="Playback mode">
+          <button
+            class="mode-btn"
+            [class.active]="playbackMode === 'speakers'"
+            (click)="setPlaybackMode('speakers')"
+            title="Play on speakers only (headphones)"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 1c-4.97 0-9 4.03-9 9v7c0 1.66 1.34 3 3 3h3v-8H5v-2c0-3.87 3.13-7 7-7s7 3.13 7 7v2h-4v8h3c1.66 0 3-1.34 3-3v-7c0-4.97-4.03-9-9-9z"/>
+            </svg>
+          </button>
+          <button
+            class="mode-btn"
+            [class.active]="playbackMode === 'both'"
+            (click)="setPlaybackMode('both')"
+            title="Play on both microphone and speakers"
+          >
+            Both
+          </button>
+          <button
+            class="mode-btn"
+            [class.active]="playbackMode === 'mic'"
+            (click)="setPlaybackMode('mic')"
+            title="Play on microphone only"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+            </svg>
+          </button>
+        </div>
         <svg class="volume-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
           <path *ngIf="volume > 50" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
           <path *ngIf="volume > 0 && volume <= 50" d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z"/>
@@ -173,6 +239,43 @@
     </div>
   </footer>
 
+  <!-- Rename Modal -->
+  <div class="modal-overlay" *ngIf="isRenameModalOpen" (click)="cancelRename()">
+    <div class="modal-content rename-modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Rename Sound</h2>
+        <button class="close-btn" (click)="cancelRename()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="rename-current-name">Current name: <strong>{{ soundToRename?.title }}</strong></p>
+        <div class="rename-input-group">
+          <input
+            #renameInput
+            type="text"
+            class="rename-input"
+            [(ngModel)]="renameValue"
+            placeholder="Enter new name"
+            (keydown.enter)="confirmRename()"
+            (keydown.escape)="cancelRename()"
+          />
+        </div>
+        <div class="rename-actions">
+          <button class="rename-cancel-btn" (click)="cancelRename()">Cancel</button>
+          <button
+            class="rename-confirm-btn"
+            (click)="confirmRename()"
+            [disabled]="!renameValue.trim() || isRenaming"
+          >
+            <svg *ngIf="isRenaming" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; margin-right: 6px;">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            {{ isRenaming ? 'Renaming...' : 'Confirm' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings Modal -->
   <div class="modal-overlay" *ngIf="isSettingsModalOpen" (click)="toggleSettingsModal()">
     <div class="modal-content" (click)="$event.stopPropagation()">
@@ -184,9 +287,9 @@
         <div class="settings-section">
           <h3>Soundpad Actions</h3>
           <p>If Soundpad is unresponsive or needs to be reloaded, you can restart it here.</p>
-          <button 
-            class="restart-btn" 
-            (click)="restartSoundpad()" 
+          <button
+            class="restart-btn"
+            (click)="restartSoundpad()"
             [disabled]="isRestarting"
           >
             <svg *ngIf="isRestarting" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 18px; height: 18px; margin-right: 8px;">

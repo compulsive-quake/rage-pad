@@ -133,6 +133,19 @@ class SoundpadClient {
             const response = await this.sendCommand('GetSoundlist()');
             console.log('Soundpad GetSoundlist response:', response.substring(0, 500));
             const sounds = this.parseSoundList(response);
+            // Enrich sounds with category hierarchy from soundlist.spl
+            if (fs.existsSync(this.soundlistPath)) {
+                const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+                const categoryMap = this.parseCategoryHierarchy(splContent);
+                sounds.forEach(sound => {
+                    const mapping = categoryMap.get(sound.index);
+                    if (mapping) {
+                        sound.category = mapping.category;
+                        sound.parentCategory = mapping.parentCategory;
+                        sound.categoryIndex = mapping.categoryIndex;
+                    }
+                });
+            }
             return { success: true, data: sounds };
         }
         catch (error) {
@@ -147,7 +160,11 @@ class SoundpadClient {
         try {
             // Soundpad uses DoPlaySound for playing by index
             // Second param: play on speakers, Third param: play on microphone
-            const response = await this.sendCommand(`DoPlaySound(${index},${speakersOnly},${micOnly})`);
+            // If neither speakers-only nor mic-only is enabled, use DoPlaySound with index only
+            const neitherEnabled = !speakersOnly && !micOnly;
+            const response = await this.sendCommand(neitherEnabled
+                ? `DoPlaySound(${index})`
+                : `DoPlaySound(${index},${speakersOnly},${micOnly})`);
             console.log('Soundpad DoPlaySound response:', response);
             return { success: true, data: response };
         }
@@ -201,34 +218,6 @@ class SoundpadClient {
             };
         }
     }
-    async setPlayMode(mode) {
-        try {
-            const response = await this.sendCommand(`SetPlayMode(${mode})`);
-            console.log('Soundpad SetPlayMode response:', response);
-            return { success: true, data: response };
-        }
-        catch (error) {
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Failed to set play mode'
-            };
-        }
-    }
-    async setSpeakersOnly(enabled) {
-        try {
-            // Soundpad uses DoPlaySelectedSoundOnSpeakers to toggle speakers-only mode
-            // When enabled, sounds play only on speakers (not through microphone)
-            const response = await this.sendCommand(`SetPlaySelectedSoundOnSpeakers(${enabled ? 1 : 0})`);
-            console.log('Soundpad SetPlaySelectedSoundOnSpeakers response:', response);
-            return { success: true, data: response };
-        }
-        catch (error) {
-            return {
-                success: false,
-                error: error instanceof Error ? error.message : 'Failed to set speakers only mode'
-            };
-        }
-    }
     async searchSounds(query) {
         try {
             const response = await this.sendCommand('GetSoundlist()');
@@ -244,26 +233,127 @@ class SoundpadClient {
             };
         }
     }
-    async restartSoundpad() {
-        return new Promise((resolve) => {
-            // Kill Soundpad using taskkill (works regardless of pipe command support)
-            const killer = (0, child_process_1.spawn)('taskkill', ['/F', '/IM', 'Soundpad.exe'], { stdio: 'ignore' });
-            killer.on('close', (code) => {
-                // code 0 = killed, code 128 = not found (already not running) — both are fine
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                // Wait for process to fully exit, then relaunch
-                setTimeout(() => {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    const proc = (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' });
-                    proc.unref();
-                    resolve({ success: true, data: 'Soundpad restarting' });
-                }, 1500);
+    async renameSound(index, newTitle) {
+        try {
+            // Directly edit the soundlist.spl file to change the customTag attribute for the sound.
+            // Sounds in soundlist.spl are identified by their 1-based position in the file (not an
+            // index attribute). The display name is stored in the "customTag" attribute.
+            if (!fs.existsSync(this.soundlistPath)) {
+                return { success: false, error: 'Soundlist file not found' };
+            }
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const result = this.updateSoundCustomTag(splContent, index, newTitle);
+            if (!result.success) {
+                return { success: false, error: result.error };
+            }
+            fs.writeFileSync(this.soundlistPath, result.content, 'utf-8');
+            console.log(`Renamed sound index ${index} to "${newTitle}" in soundlist.spl`);
+            return { success: true, data: `Sound renamed to "${newTitle}"` };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to rename sound'
+            };
+        }
+    }
+    async restartSoundpad(index, newTitle) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        // Step 1: Gracefully close Soundpad so it releases the soundlist file
+        await new Promise((resolve) => {
+            // Send WM_CLOSE (graceful) first; wait up to 5 s for it to exit
+            const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
+            gracefulKill.on('close', () => {
+                // Give Soundpad a moment to fully exit and flush its files
+                setTimeout(resolve, 2000);
             });
-            killer.on('error', (err) => {
-                resolve({ success: false, error: `Failed to kill Soundpad: ${err.message}` });
+            gracefulKill.on('error', () => {
+                // Process may not have been running – continue anyway
+                setTimeout(resolve, 500);
             });
         });
+        this.cachedConnectionState = false;
+        this.lastConnectionCheck = 0;
+        // Step 2: Edit the soundlist.spl XML while Soundpad is closed
+        const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+        const result = this.updateSoundCustomTag(splContent, index, newTitle);
+        if (!result.success) {
+            // Soundpad is already closed – relaunch before returning the error
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            return { success: false, error: result.error };
+        }
+        fs.writeFileSync(this.soundlistPath, result.content, 'utf-8');
+        console.log(`Renamed sound index ${index} to "${newTitle}" in soundlist.spl`);
+        // Step 3: Relaunch Soundpad with the updated soundlist
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        return { success: true, data: `Sound renamed to "${newTitle}" and Soundpad restarting` };
+    }
+    /**
+     * Update the customTag attribute of the Nth <Sound> element (1-based index) in the
+     * soundlist.spl XML content.  Sounds in the SPL file do not carry an index attribute;
+     * their position in document order is their Soundpad API index (1-based).
+     *
+     * If the sound already has a customTag attribute it is replaced; if it is absent it is
+     * inserted before the closing "/> " of the element.
+     *
+     * Returns { success: true, content: updatedXml } on success or
+     *         { success: false, error: message } on failure.
+     */
+    updateSoundCustomTag(splContent, index, newTitle) {
+        const escapedTitle = newTitle
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        // Collect the start positions of every <Sound …/> element in document order.
+        // We match self-closing Sound tags only (Soundpad uses self-closing elements).
+        const soundTagRegex = /<Sound\s[^>]*?\/>/gi;
+        const matches = [];
+        let m;
+        while ((m = soundTagRegex.exec(splContent)) !== null) {
+            matches.push({ index: m.index, match: m[0] });
+        }
+        if (index < 1 || index > matches.length) {
+            return {
+                success: false,
+                error: `Sound with index ${index} not found in soundlist (file has ${matches.length} sounds)`
+            };
+        }
+        const target = matches[index - 1]; // convert 1-based to 0-based
+        let updatedTag;
+        if (/\bcustomTag="[^"]*"/.test(target.match)) {
+            // Replace existing customTag value
+            updatedTag = target.match.replace(/\bcustomTag="[^"]*"/, `customTag="${escapedTitle}"`);
+        }
+        else {
+            // Insert customTag before the closing />
+            updatedTag = target.match.replace(/\s*\/>$/, ` customTag="${escapedTitle}"/>`);
+        }
+        const updatedContent = splContent.slice(0, target.index) +
+            updatedTag +
+            splContent.slice(target.index + target.match.length);
+        return { success: true, content: updatedContent };
+    }
+    async restartSoundpadOnly() {
+        // Gracefully close Soundpad, then relaunch it
+        await new Promise((resolve) => {
+            const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
+            gracefulKill.on('close', () => {
+                setTimeout(resolve, 2000);
+            });
+            gracefulKill.on('error', () => {
+                setTimeout(resolve, 500);
+            });
+        });
+        this.cachedConnectionState = false;
+        this.lastConnectionCheck = 0;
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        return { success: true, data: 'Soundpad restarting' };
     }
     async isConnected() {
         const now = Date.now();
@@ -331,58 +421,17 @@ class SoundpadClient {
         const sounds = [];
         console.log('Parsing sound list, response length:', xmlResponse.length);
         console.log('XML Response sample:', xmlResponse.substring(0, 1000));
-        // Soundpad returns XML with categories like:
+        // Soundpad returns XML with nested categories like:
         // <Soundlist>
-        //   <Category index="1" name="CategoryName">
-        //     <Sound index="1" url="..." title="..." ... />
+        //   <Category index="1" name="ParentCategory">
+        //     <Category index="2" name="SubCategory">
+        //       <Sound index="1" url="..." title="..." ... />
+        //     </Category>
+        //     <Sound index="2" url="..." title="..." ... />
         //   </Category>
         // </Soundlist>
-        // First, try to parse with category structure
-        const categoryRegex = /<Category\s+([^>]*?)>([\s\S]*?)<\/Category>/gi;
-        let categoryMatch;
-        let hasCategories = false;
-        while ((categoryMatch = categoryRegex.exec(xmlResponse)) !== null) {
-            hasCategories = true;
-            const categoryAttrs = categoryMatch[1];
-            const categoryContent = categoryMatch[2];
-            const categoryName = this.extractAttribute(categoryAttrs, 'name') || 'Uncategorized';
-            // Try multiple possible attribute names for the category icon
-            const categoryImage = this.extractAttribute(categoryAttrs, 'image') ||
-                this.extractAttribute(categoryAttrs, 'icon') ||
-                this.extractAttribute(categoryAttrs, 'iconPath') ||
-                this.extractAttribute(categoryAttrs, 'imagePath') ||
-                '';
-            console.log('Category found:', categoryName);
-            console.log('Category attrs:', categoryAttrs);
-            console.log('Category image:', categoryImage);
-            // Parse sounds within this category
-            const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
-            let soundMatch;
-            while ((soundMatch = soundRegex.exec(categoryContent)) !== null) {
-                const attrs = soundMatch[1] || soundMatch[0];
-                const indexMatch = /index="(\d+)"/i.exec(attrs);
-                if (indexMatch) {
-                    const index = parseInt(indexMatch[1], 10);
-                    const url = this.extractAttribute(attrs, 'url') || '';
-                    const sound = {
-                        index,
-                        title: this.extractAttribute(attrs, 'title') ||
-                            this.extractAttribute(attrs, 'name') ||
-                            `Sound ${index}`,
-                        url,
-                        artist: this.extractAttribute(attrs, 'artist') || '',
-                        duration: this.extractAttribute(attrs, 'duration') ||
-                            this.formatDuration(this.extractAttribute(attrs, 'durationInMs')),
-                        addedDate: this.extractAttribute(attrs, 'addedDate') || '',
-                        lastPlayedDate: this.extractAttribute(attrs, 'lastPlayedDate') || '',
-                        playCount: parseInt(this.extractAttribute(attrs, 'playCount') || '0', 10),
-                        category: categoryName,
-                        categoryImage: categoryImage
-                    };
-                    sounds.push(sound);
-                }
-            }
-        }
+        // Use recursive parsing to handle nested categories
+        const hasCategories = this.parseCategoryRecursive(xmlResponse, '', sounds);
         // If no categories found, fall back to parsing sounds directly
         if (!hasCategories) {
             const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
@@ -397,7 +446,8 @@ class SoundpadClient {
                     const categoryFromAttr = this.extractAttribute(attrs, 'category');
                     const sound = {
                         index,
-                        title: this.extractAttribute(attrs, 'title') ||
+                        title: this.extractAttribute(attrs, 'tag') ||
+                            this.extractAttribute(attrs, 'title') ||
                             this.extractAttribute(attrs, 'name') ||
                             `Sound ${index}`,
                         url,
@@ -408,7 +458,9 @@ class SoundpadClient {
                         lastPlayedDate: this.extractAttribute(attrs, 'lastPlayedDate') || '',
                         playCount: parseInt(this.extractAttribute(attrs, 'playCount') || '0', 10),
                         category: categoryFromAttr || this.extractCategoryFromUrl(url),
-                        categoryImage: ''
+                        parentCategory: '',
+                        categoryImage: '',
+                        categoryIndex: 0
                     };
                     sounds.push(sound);
                 }
@@ -416,6 +468,150 @@ class SoundpadClient {
         }
         console.log('Parsed sounds count:', sounds.length);
         return sounds;
+    }
+    /**
+     * Recursively parse categories and their nested sub-categories.
+     * Returns true if any categories were found.
+     */
+    parseCategoryRecursive(xmlContent, parentCategoryName, sounds) {
+        let hasCategories = false;
+        // We need to find top-level <Category> elements only (not nested ones).
+        // We do this by scanning character by character to find balanced tags.
+        const topLevelCategories = this.extractTopLevelCategories(xmlContent);
+        for (const { attrs: categoryAttrs, content: categoryContent } of topLevelCategories) {
+            hasCategories = true;
+            const categoryName = this.extractAttribute(categoryAttrs, 'name') || 'Uncategorized';
+            const categoryImage = this.extractAttribute(categoryAttrs, 'image') ||
+                this.extractAttribute(categoryAttrs, 'icon') ||
+                this.extractAttribute(categoryAttrs, 'iconPath') ||
+                this.extractAttribute(categoryAttrs, 'imagePath') ||
+                '';
+            console.log(`Category found: "${categoryName}" (parent: "${parentCategoryName}")`);
+            // Check if this category has nested sub-categories
+            const hasSubCategories = /<Category\s/i.test(categoryContent);
+            if (hasSubCategories) {
+                // Recurse into sub-categories, passing this category as the parent
+                this.parseCategoryRecursive(categoryContent, categoryName, sounds);
+                // Also parse any direct sounds in this category (not inside sub-categories)
+                const contentWithoutSubCategories = this.removeNestedCategories(categoryContent);
+                this.parseSoundsInContent(contentWithoutSubCategories, categoryName, parentCategoryName, categoryImage, sounds);
+            }
+            else {
+                // Leaf category - parse sounds directly
+                this.parseSoundsInContent(categoryContent, categoryName, parentCategoryName, categoryImage, sounds);
+            }
+        }
+        return hasCategories;
+    }
+    /**
+     * Extract top-level <Category> elements from XML content (non-nested).
+     */
+    extractTopLevelCategories(xmlContent) {
+        const results = [];
+        let i = 0;
+        while (i < xmlContent.length) {
+            // Find the next <Category opening tag
+            const categoryStart = xmlContent.indexOf('<Category', i);
+            if (categoryStart === -1)
+                break;
+            // Find the end of the opening tag
+            const openTagEnd = xmlContent.indexOf('>', categoryStart);
+            if (openTagEnd === -1)
+                break;
+            const openTag = xmlContent.substring(categoryStart, openTagEnd + 1);
+            // Check if it's a self-closing tag
+            if (openTag.endsWith('/>')) {
+                const attrsStr = openTag.slice('<Category'.length, -2).trim();
+                results.push({ attrs: attrsStr, content: '' });
+                i = openTagEnd + 1;
+                continue;
+            }
+            // Extract attributes from the opening tag
+            const attrsStr = openTag.slice('<Category'.length, -1).trim();
+            // Find the matching closing </Category> tag, accounting for nesting
+            let depth = 1;
+            let j = openTagEnd + 1;
+            while (j < xmlContent.length && depth > 0) {
+                const nextOpen = xmlContent.indexOf('<Category', j);
+                const nextClose = xmlContent.indexOf('</Category>', j);
+                if (nextClose === -1)
+                    break; // Malformed XML
+                if (nextOpen !== -1 && nextOpen < nextClose) {
+                    // Check it's not a self-closing tag
+                    const nextOpenTagEnd = xmlContent.indexOf('>', nextOpen);
+                    if (nextOpenTagEnd !== -1 && !xmlContent.substring(nextOpen, nextOpenTagEnd + 1).endsWith('/>')) {
+                        depth++;
+                    }
+                    j = nextOpenTagEnd !== -1 ? nextOpenTagEnd + 1 : nextOpen + 1;
+                }
+                else {
+                    depth--;
+                    if (depth === 0) {
+                        const content = xmlContent.substring(openTagEnd + 1, nextClose);
+                        results.push({ attrs: attrsStr, content });
+                        i = nextClose + '</Category>'.length;
+                        break;
+                    }
+                    j = nextClose + '</Category>'.length;
+                }
+            }
+            if (depth !== 0) {
+                // Couldn't find matching close tag, skip
+                i = openTagEnd + 1;
+            }
+        }
+        return results;
+    }
+    /**
+     * Remove nested <Category> blocks from content, leaving only direct sounds.
+     */
+    removeNestedCategories(content) {
+        let result = content;
+        let changed = true;
+        // Iteratively remove innermost <Category>...</Category> blocks
+        while (changed) {
+            changed = false;
+            const newResult = result.replace(/<Category\b[^>]*>[\s\S]*?<\/Category>/gi, '');
+            if (newResult !== result) {
+                result = newResult;
+                changed = true;
+            }
+        }
+        return result;
+    }
+    /**
+     * Parse <Sound> elements from content and add them to the sounds array.
+     */
+    parseSoundsInContent(content, categoryName, parentCategoryName, categoryImage, sounds) {
+        const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
+        let soundMatch;
+        while ((soundMatch = soundRegex.exec(content)) !== null) {
+            const attrs = soundMatch[1] || soundMatch[0];
+            const indexMatch = /index="(\d+)"/i.exec(attrs);
+            if (indexMatch) {
+                const index = parseInt(indexMatch[1], 10);
+                const url = this.extractAttribute(attrs, 'url') || '';
+                const sound = {
+                    index,
+                    title: this.extractAttribute(attrs, 'tag') ||
+                        this.extractAttribute(attrs, 'title') ||
+                        this.extractAttribute(attrs, 'name') ||
+                        `Sound ${index}`,
+                    url,
+                    artist: this.extractAttribute(attrs, 'artist') || '',
+                    duration: this.extractAttribute(attrs, 'duration') ||
+                        this.formatDuration(this.extractAttribute(attrs, 'durationInMs')),
+                    addedDate: this.extractAttribute(attrs, 'addedDate') || '',
+                    lastPlayedDate: this.extractAttribute(attrs, 'lastPlayedDate') || '',
+                    playCount: parseInt(this.extractAttribute(attrs, 'playCount') || '0', 10),
+                    category: categoryName,
+                    parentCategory: parentCategoryName,
+                    categoryImage: categoryImage,
+                    categoryIndex: 0
+                };
+                sounds.push(sound);
+            }
+        }
     }
     extractCategoryFromUrl(url) {
         if (!url)
@@ -512,8 +708,8 @@ class SoundpadClient {
             // Skip categories without a name (like the hidden list category)
             if (!name)
                 continue;
-            // Check if icon is base64 encoded (starts with image data) or a stock icon name
-            const isBase64 = !!(icon && !icon.startsWith('stock_'));
+            // Check if icon is base64 encoded (long string of only base64 chars) or a stock icon name / file path
+            const isBase64 = !!(icon && !icon.startsWith('stock_') && /^[A-Za-z0-9+/=]{20,}$/.test(icon));
             icons.push({
                 name,
                 icon: icon || '',
@@ -522,6 +718,61 @@ class SoundpadClient {
             console.log(`Category icon found: ${name}, isBase64: ${isBase64}, icon length: ${icon?.length || 0}`);
         }
         return icons;
+    }
+    /**
+     * Parse the <Categories> section of soundlist.spl to build a map of
+     * sound index -> { category, parentCategory }.
+     * The SPL file uses <Sound id="N"/> references (1-based index) inside
+     * nested <Category> elements.
+     */
+    parseCategoryHierarchy(xmlContent) {
+        const result = new Map();
+        // Find the Categories section
+        const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(xmlContent);
+        if (!categoriesMatch) {
+            console.log('No Categories section found for hierarchy parsing');
+            return result;
+        }
+        const categoriesContent = categoriesMatch[1];
+        // Recursively walk the top-level categories
+        this.walkCategoryHierarchy(categoriesContent, '', result);
+        console.log(`Category hierarchy: mapped ${result.size} sounds`);
+        return result;
+    }
+    /**
+     * Recursively walk <Category> elements, assigning category/parentCategory/categoryIndex
+     * to each <Sound id="N"/> found within.
+     */
+    walkCategoryHierarchy(xmlContent, parentCategoryName, result) {
+        const topLevel = this.extractTopLevelCategories(xmlContent);
+        for (const { attrs, content } of topLevel) {
+            const hidden = this.extractAttribute(attrs, 'hidden');
+            if (hidden === 'true')
+                continue; // skip hidden system categories
+            const categoryName = this.extractAttribute(attrs, 'name');
+            if (!categoryName)
+                continue;
+            // Find direct <Sound id="N"/> references (not inside nested categories)
+            // The order they appear in the XML is the order Soundpad displays them.
+            const contentWithoutSubCategories = this.removeNestedCategories(content);
+            const soundIdRegex = /<Sound\s+id="(\d+)"\s*\/>/gi;
+            let m;
+            let categoryIndex = 0;
+            while ((m = soundIdRegex.exec(contentWithoutSubCategories)) !== null) {
+                // SPL file uses 0-based IDs; Soundpad API returns 1-based indices.
+                // Add 1 to convert so the map key matches sound.index from GetSoundlist().
+                const soundIndex = parseInt(m[1], 10) + 1;
+                result.set(soundIndex, {
+                    category: categoryName,
+                    parentCategory: parentCategoryName,
+                    categoryIndex: categoryIndex++
+                });
+            }
+            // Recurse into sub-categories
+            if (/<Category\s/i.test(content)) {
+                this.walkCategoryHierarchy(content, categoryName, result);
+            }
+        }
     }
 }
 exports.SoundpadClient = SoundpadClient;

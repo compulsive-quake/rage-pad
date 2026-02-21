@@ -39,9 +39,38 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const os = __importStar(require("os"));
 const soundpad_client_1 = __importDefault(require("./soundpad-client"));
 const router = express_1.default.Router();
 const soundpadClient = new soundpad_client_1.default();
+// --- SSE config-watch setup ---
+const soundlistPath = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Leppsoft', 'soundlist.spl');
+// Set of active SSE response objects
+const sseClients = new Set();
+let debounceTimer = null;
+function notifySseClients() {
+    for (const client of sseClients) {
+        client.write('event: reload\ndata: {}\n\n');
+    }
+}
+// Watch the soundlist.spl file for changes
+if (fs.existsSync(soundlistPath)) {
+    fs.watch(soundlistPath, (eventType) => {
+        if (eventType === 'change') {
+            // Debounce: Soundpad may write the file multiple times in quick succession
+            if (debounceTimer)
+                clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                console.log('[config-watch] soundlist.spl changed – notifying clients');
+                notifySseClients();
+            }, 300);
+        }
+    });
+    console.log(`[config-watch] Watching ${soundlistPath}`);
+}
+else {
+    console.warn(`[config-watch] soundlist.spl not found at ${soundlistPath}; watcher not started`);
+}
 // Get connection status
 router.get('/status', async (req, res) => {
     try {
@@ -157,55 +186,59 @@ router.post('/volume', async (req, res) => {
         res.status(500).json({ error: 'Failed to set volume' });
     }
 });
-// Set play mode
-router.post('/play-mode', async (req, res) => {
+// Rename a sound by index
+router.post('/sounds/:index/rename', async (req, res) => {
     try {
-        const { mode } = req.body;
-        if (typeof mode !== 'number') {
-            res.status(400).json({ error: 'Mode must be a number' });
+        const index = parseInt(req.params.index, 10);
+        if (isNaN(index)) {
+            res.status(400).json({ error: 'Invalid sound index' });
             return;
         }
-        const result = await soundpadClient.setPlayMode(mode);
+        const { title } = req.body;
+        if (typeof title !== 'string' || !title.trim()) {
+            res.status(400).json({ error: 'Title must be a non-empty string' });
+            return;
+        }
+        const result = await soundpadClient.renameSound(index, title.trim());
         if (result.success) {
-            res.json({ message: 'Play mode set', mode });
+            res.json({ message: 'Sound renamed', data: result.data });
         }
         else {
             res.status(500).json({ error: result.error });
         }
     }
     catch (error) {
-        res.status(500).json({ error: 'Failed to set play mode' });
+        res.status(500).json({ error: 'Failed to rename sound' });
     }
 });
-// Set speakers only mode
-router.post('/speakers-only', async (req, res) => {
-    try {
-        const { enabled } = req.body;
-        if (typeof enabled !== 'boolean') {
-            res.status(400).json({ error: 'Enabled must be a boolean' });
-            return;
-        }
-        const result = await soundpadClient.setSpeakersOnly(enabled);
-        if (result.success) {
-            res.json({ message: 'Speakers only mode set', enabled });
-        }
-        else {
-            res.status(500).json({ error: result.error });
-        }
-    }
-    catch (error) {
-        res.status(500).json({ error: 'Failed to set speakers only mode' });
-    }
-});
-// Restart Soundpad
+// Restart Soundpad (optionally with rename: renames the tag in soundlist.spl then kills/relaunches Soundpad)
 router.post('/restart', async (req, res) => {
     try {
-        const result = await soundpadClient.restartSoundpad();
-        if (result.success) {
-            res.json({ message: 'Soundpad restarting' });
+        const index = req.body.index !== undefined ? parseInt(req.body.index, 10) : undefined;
+        const { title } = req.body;
+        const hasRename = index !== undefined && typeof title === 'string' && title.trim();
+        if (index !== undefined && isNaN(index)) {
+            res.status(400).json({ error: 'Invalid sound index' });
+            return;
+        }
+        if (hasRename) {
+            const result = await soundpadClient.restartSoundpad(index, title.trim());
+            if (result.success) {
+                res.json({ message: 'Sound renamed and Soundpad restarting', data: result.data });
+            }
+            else {
+                res.status(500).json({ error: result.error });
+            }
         }
         else {
-            res.status(500).json({ error: result.error });
+            // Plain restart without rename
+            const result = await soundpadClient.restartSoundpadOnly();
+            if (result.success) {
+                res.json({ message: 'Soundpad restarting', data: result.data });
+            }
+            else {
+                res.status(500).json({ error: result.error });
+            }
         }
     }
     catch (error) {
@@ -265,6 +298,25 @@ router.get('/category-icons', async (req, res) => {
     catch (error) {
         res.status(500).json({ error: 'Failed to get category icons' });
     }
+});
+// SSE endpoint: client subscribes here to receive reload events
+router.get('/config-watch', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no'); // disable nginx buffering if present
+    res.flushHeaders();
+    // Send a heartbeat comment every 15 s to keep the connection alive
+    const heartbeat = setInterval(() => {
+        res.write(': heartbeat\n\n');
+    }, 15000);
+    sseClients.add(res);
+    console.log(`[config-watch] Client connected (total: ${sseClients.size})`);
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        sseClients.delete(res);
+        console.log(`[config-watch] Client disconnected (total: ${sseClients.size})`);
+    });
 });
 exports.default = router;
 //# sourceMappingURL=routes.js.map
