@@ -70,6 +70,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
   @ViewChild('mainContent') mainContent!: ElementRef;
   @ViewChild('categoryNavList') categoryNavList!: ElementRef;
   @ViewChild('renameInput') renameInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('scrollEndSpacer') scrollEndSpacer!: ElementRef<HTMLElement>;
 
   private destroy$ = new Subject<void>();
   private searchSubject$ = new Subject<string>();
@@ -539,6 +540,7 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
         // Observe category elements after view updates
         setTimeout(() => {
           this.observeAllCategories();
+          this.updateSpacerHeight();
           this.scrollListener?.();
           // Seed active category to the first one if not already set
           if (!this.activeCategory && this.categories.length > 0) {
@@ -565,6 +567,60 @@ export class AppComponent implements OnInit, OnDestroy, AfterViewInit {
     categoryElements.forEach((element) => {
       this.intersectionObserver?.observe(element);
     });
+  }
+
+  /**
+   * Set the scroll-end-spacer height so the last category section can scroll
+   * exactly to the top of the viewport (aligned with the nav list) while the
+   * scrollbar reaches its end.
+   *
+   * We use getBoundingClientRect so that margins, padding, and the nav offset
+   * are all accounted for correctly.
+   *
+   * Desired invariant:
+   *   maxScroll == lastSection.top_in_scroll_container - navOffset
+   *
+   * maxScroll = scrollHeight - clientHeight
+   * scrollHeight (after setting spacer) = lastSectionBottom_in_scroll_container + spacerHeight
+   *
+   * Solving for spacerHeight:
+   *   spacerHeight = clientHeight - navOffset - lastSection.offsetHeight
+   *
+   * where lastSection.offsetHeight is the rendered height of the last section
+   * (excluding its bottom margin, which we add explicitly).
+   */
+  updateSpacerHeight(): void {
+    const container = this.mainContent?.nativeElement as HTMLElement | undefined;
+    const spacer = this.scrollEndSpacer?.nativeElement as HTMLElement | undefined;
+    if (!container || !spacer) return;
+
+    // Temporarily zero out the spacer so measurements are clean
+    spacer.style.height = '0px';
+
+    const categorySections = container.querySelectorAll('.category-section') as NodeListOf<HTMLElement>;
+    if (!categorySections.length) {
+      return;
+    }
+
+    const containerRect = container.getBoundingClientRect();
+
+    // navOffset: distance from container top to where category tops should align
+    const navOffset = this.categoryNavList?.nativeElement
+      ? this.categoryNavList.nativeElement.getBoundingClientRect().top - containerRect.top
+      : 0;
+
+    const lastSection = categorySections[categorySections.length - 1];
+    const lastSectionRect = lastSection.getBoundingClientRect();
+
+    // Absolute position of the last section's top within the scroll container
+    const lastSectionTop = lastSectionRect.top - containerRect.top + container.scrollTop;
+
+    // Spacer height needed so that maxScroll == lastSectionTop - navOffset
+    // maxScroll = (lastSectionTop + lastSection.offsetHeight + spacerHeight) - clientHeight
+    // Setting maxScroll = lastSectionTop - navOffset:
+    //   spacerHeight = clientHeight - navOffset - lastSection.offsetHeight
+    const spacerHeight = Math.max(0, container.clientHeight - navOffset - lastSection.offsetHeight);
+    spacer.style.height = `${spacerHeight}px`;
   }
 
   onSearch(query: string): void {

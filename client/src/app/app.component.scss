@@ -110,9 +110,9 @@
   padding: 1.5rem 2rem 0;
 }
 
-// Spacer that allows the last category to scroll to the top of the view
+// Spacer that allows the last category to scroll to the top of the view.
+// Height is set dynamically by updateSpacerHeight() in the component.
 .scroll-end-spacer {
-  height: 100vh;
   flex-shrink: 0;
   pointer-events: none;
 }
@@ -334,7 +334,11 @@
 .category-section {
   margin-bottom: 2rem;
 
-  &:last-child {
+  // The spacer div is always the last child of .categories-container, so
+  // :last-child never matches a .category-section. Use the adjacent-sibling
+  // combinator to strip the margin from whichever section sits immediately
+  // before the spacer.
+  &:has(+ .scroll-end-spacer) {
     margin-bottom: 0;
   }
 }
@@ -353,12 +357,7 @@ app-sound-card {
   gap: 1rem;
   margin-bottom: 1.5rem;
   padding: 0.5rem 0 0.5rem;
-  position: sticky;
-  top: 0;
-  z-index: 10;
   width: 100%;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-  backdrop-filter: blur(10px);
 }
 
 .category-icon {
@@ -428,13 +427,8 @@ app-sound-card {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: -44px; // negative margin so sounds-grid padding-top creates the visual gap
+  margin-bottom: 1rem;
   padding: 0.25rem 0;
-  position: sticky;
-  top: 64px;
-  z-index: 9;
-  background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
-  backdrop-filter: blur(10px);
 }
 
 .sub-category-icon {
@@ -494,13 +488,6 @@ app-sound-card {
   gap: 1rem;
 }
 
-// When inside a sub-category section, add padding-top equal to the sticky sub-category
-// divider height (44px) so that sounds snap to directly below the sticky header and
-// don't visually scroll behind it.
-// The .sub-category-divider has margin-bottom: -44px to compensate in normal flow.
-.sub-category-section > .sounds-grid {
-  padding-top: 44px; // equals sub-category divider height so sounds snap below sticky header
-}
 
 // Footer with Playback Controls
 .footer {
