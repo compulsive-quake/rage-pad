@@ -137,13 +137,22 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  addSound(file: File, category: string, displayName?: string): Observable<any> {
+  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, title?: string): Observable<any> {
     const formData = new FormData();
     formData.append('soundFile', file);
     formData.append('category', category);
     if (displayName) {
       formData.append('displayName', displayName);
     }
+    if (cropStartSec !== undefined) {
+      formData.append('cropStart', String(cropStartSec));
+    }
+    if (cropEndSec !== undefined) {
+      formData.append('cropEnd', String(cropEndSec));
+    }
+    // Always send artist and title (even as empty strings) so the server can write them to the SPL tag
+    formData.append('artist', artist ?? '');
+    formData.append('title', title ?? '');
     return this.http.post(`${this.apiUrl}/sounds/add`, formData);
   }
 

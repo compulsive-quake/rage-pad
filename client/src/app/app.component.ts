@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, ViewChild, ElementRef, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
@@ -48,10 +48,13 @@ export class AppComponent implements OnInit, OnDestroy {
   isAddingSound = false;
   addSoundFile: File | null = null;
   addSoundName = '';
+  addSoundArtist = '';
+  addSoundTitle = '';
   addSoundCategory = '';
   addSoundCategories: { name: string; parentCategory: string }[] = [];
   addSoundError = '';
   isDragOver = false;
+  isAddSoundCancelFlashing = false;
 
   // Config-watch (soundlist.spl change detection) toggle
   configWatchEnabled: boolean;
@@ -76,13 +79,47 @@ export class AppComponent implements OnInit, OnDestroy {
   // Ordered list of category names as they appear in Soundpad (from SPL file)
   categoryOrder: string[] = [];
 
+  // ── Waveform / Audio Preview ─────────────────────────────────────────────
+  previewLoading = false;
+  previewDuration = 0;
+  previewCurrentTime = 0;
+  previewIsPlaying = false;
+  previewPlayheadPos = 0;   // 0–1 fraction across the full waveform
+  /** Crop start as a fraction 0–1 of total duration */
+  cropStart = 0;
+  /** Crop end as a fraction 0–1 of total duration */
+  cropEnd = 1;
+  /** Which crop handle is currently keyboard-focused: 'start' | 'end' | null */
+  focusedCropHandle: 'start' | 'end' | null = null;
+  /** True while the crop is being applied (encoding WAV) */
+  isCropping = false;
+  /** Original file before any crop was applied – set by applyCrop(), cleared on reset/remove */
+  originalFile: File | null = null;
+  /** Original AudioBuffer before any crop was applied */
+  private originalAudioBuffer: AudioBuffer | null = null;
+
+  private audioCtx: AudioContext | null = null;
+  private audioBuffer: AudioBuffer | null = null;
+  private previewSourceNode: AudioBufferSourceNode | null = null;
+  private previewStartedAt = 0;   // audioCtx.currentTime when playback started
+  private previewOffsetSec = 0;   // seconds into the buffer where playback began
+  private previewAnimFrame: number | null = null;
+  private waveformPeaks: Float32Array | null = null;
+
+  // Crop drag state
+  private cropDragHandle: 'start' | 'end' | null = null;
+  private cropDragBound: ((e: MouseEvent) => void) | null = null;
+  private cropDragEndBound: (() => void) | null = null;
+
   @ViewChild('renameInput') renameInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('waveformCanvas') waveformCanvas!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('waveformSection') waveformSection!: ElementRef<HTMLDivElement>;
 
   private destroy$ = new Subject<void>();
   private searchSubject$ = new Subject<string>();
   private playbackTimer: any = null;
 
-  constructor(private soundpadService: SoundpadService) {
+  constructor(private soundpadService: SoundpadService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
     // Restore config-watch preference from localStorage (default: disabled)
     const stored = localStorage.getItem('configWatchEnabled');
     this.configWatchEnabled = stored === 'true';
@@ -153,6 +190,7 @@ export class AppComponent implements OnInit, OnDestroy {
       clearInterval(this.playbackTimer);
       this.playbackTimer = null;
     }
+    this.destroyPreviewAudio();
   }
 
   loadSounds(silent = false): void {
@@ -478,10 +516,13 @@ export class AppComponent implements OnInit, OnDestroy {
     this.isAddSoundModalOpen = true;
     this.addSoundFile = null;
     this.addSoundName = '';
+    this.addSoundArtist = '';
+    this.addSoundTitle = '';
     this.addSoundCategory = '';
     this.addSoundError = '';
     this.isDragOver = false;
     this.isAddingSound = false;
+    this.resetPreviewState();
 
     // Fetch categories from the server so the dropdown is always fresh
     this.soundpadService.getCategories()
@@ -500,14 +541,26 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
 
+  flashAddSoundCancelBtn(): void {
+    if (this.isAddingSound || this.isAddSoundCancelFlashing) return;
+    this.isAddSoundCancelFlashing = true;
+    setTimeout(() => {
+      this.isAddSoundCancelFlashing = false;
+    }, 800);
+  }
+
   closeAddSoundModal(): void {
     if (this.isAddingSound) return; // prevent closing while upload is in progress
     this.isAddSoundModalOpen = false;
     this.addSoundFile = null;
     this.addSoundName = '';
+    this.addSoundArtist = '';
+    this.addSoundTitle = '';
     this.addSoundCategory = '';
     this.addSoundError = '';
     this.isDragOver = false;
+    this.destroyPreviewAudio();
+    this.resetPreviewState();
   }
 
   onDragOver(event: DragEvent): void {
@@ -538,6 +591,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     this.addSoundFile = file;
     this.addSoundName = this.fileNameWithoutExtension(file.name);
+    this.loadAudioPreview(file);
   }
 
   onFileSelected(event: Event): void {
@@ -553,6 +607,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
     this.addSoundFile = file;
     this.addSoundName = this.fileNameWithoutExtension(file.name);
+    this.loadAudioPreview(file);
   }
 
   private fileNameWithoutExtension(name: string): string {
@@ -564,6 +619,10 @@ export class AppComponent implements OnInit, OnDestroy {
     event.stopPropagation();
     this.addSoundFile = null;
     this.addSoundName = '';
+    this.addSoundArtist = '';
+    this.addSoundTitle = '';
+    this.destroyPreviewAudio();
+    this.resetPreviewState();
   }
 
   formatFileSize(bytes: number): string {
@@ -584,12 +643,23 @@ export class AppComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const displayName = this.addSoundName.trim() || this.fileNameWithoutExtension(this.addSoundFile.name);
+    if (!this.addSoundName.trim()) {
+      this.addSoundError = 'Tag is required.';
+      return;
+    }
+
+    const displayName = this.addSoundName.trim();
+    const artist = this.addSoundArtist.trim();
+    const title = this.addSoundTitle.trim();
 
     this.isAddingSound = true;
     this.addSoundError = '';
 
-    this.soundpadService.addSound(this.addSoundFile, category, displayName)
+    // If crop is applied, pass crop times; otherwise pass undefined
+    const cropStartSec = this.cropStart > 0 ? this.cropStart * this.previewDuration : undefined;
+    const cropEndSec = this.cropEnd < 1 ? this.cropEnd * this.previewDuration : undefined;
+
+    this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title)
       .pipe(take(1))
       .subscribe({
         next: () => {
@@ -597,7 +667,11 @@ export class AppComponent implements OnInit, OnDestroy {
           this.isAddSoundModalOpen = false;
           this.addSoundFile = null;
           this.addSoundName = '';
+          this.addSoundArtist = '';
+          this.addSoundTitle = '';
           this.addSoundCategory = '';
+          this.destroyPreviewAudio();
+          this.resetPreviewState();
           // Refresh the sound list immediately so the grid updates
           this.loadSounds(true);
         },
@@ -607,5 +681,635 @@ export class AppComponent implements OnInit, OnDestroy {
           this.isAddingSound = false;
         }
       });
+  }
+
+  // ── Audio Preview / Waveform ─────────────────────────────────────────────
+
+  private resetPreviewState(): void {
+    this.previewLoading = false;
+    this.previewDuration = 0;
+    this.previewCurrentTime = 0;
+    this.previewIsPlaying = false;
+    this.previewPlayheadPos = 0;
+    this.cropStart = 0;
+    this.cropEnd = 1;
+    this.focusedCropHandle = null;
+    this.isCropping = false;
+    this.audioBuffer = null;
+    this.waveformPeaks = null;
+    this.previewOffsetSec = 0;
+    this.previewStartedAt = 0;
+    this.originalFile = null;
+    this.originalAudioBuffer = null;
+  }
+
+  private destroyPreviewAudio(): void {
+    this.stopPreviewPlayback();
+    if (this.previewAnimFrame !== null) {
+      cancelAnimationFrame(this.previewAnimFrame);
+      this.previewAnimFrame = null;
+    }
+    if (this.audioCtx) {
+      this.audioCtx.close().catch(() => {});
+      this.audioCtx = null;
+    }
+    this.removeCropDragListeners();
+  }
+
+  private loadAudioPreview(file: File): void {
+    this.destroyPreviewAudio();
+    this.resetPreviewState();
+    this.previewLoading = true;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const arrayBuffer = e.target?.result as ArrayBuffer;
+      if (!arrayBuffer) {
+        this.previewLoading = false;
+        return;
+      }
+
+      // Parse ID3v2 tags and pre-fill Artist / Title if not already set by the user
+      const tags = this.parseId3Tags(arrayBuffer);
+      if (tags.artist && !this.addSoundArtist) {
+        this.addSoundArtist = tags.artist;
+      }
+      if (tags.title && !this.addSoundTitle) {
+        this.addSoundTitle = tags.title;
+        // If Title gets a valid value from ID3 tags, use it for Tag instead of file name
+        this.addSoundName = tags.title;
+      }
+
+      this.audioCtx = new AudioContext();
+      this.audioCtx.decodeAudioData(arrayBuffer.slice(0))
+        .then((buffer) => {
+          this.ngZone.run(() => {
+            this.audioBuffer = buffer;
+            this.previewDuration = buffer.duration;
+            this.previewLoading = false;
+            this.waveformPeaks = this.computePeaks(buffer, 600);
+            // Draw after Angular renders the canvas
+            setTimeout(() => this.drawWaveform(), 50);
+          });
+        })
+        .catch(() => {
+          this.ngZone.run(() => {
+            this.previewLoading = false;
+          });
+        });
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  /**
+   * Minimal ID3v2 parser – extracts TPE1 (artist) and TIT2 (title) from the
+   * beginning of an audio file's ArrayBuffer.  Supports ID3v2.3 and v2.4.
+   * Returns empty strings for any tag that is absent or cannot be decoded.
+   */
+  private parseId3Tags(buffer: ArrayBuffer): { artist: string; title: string } {
+    const result = { artist: '', title: '' };
+    try {
+      const bytes = new Uint8Array(buffer);
+
+      // ID3v2 header: "ID3" + version (2 bytes) + flags (1 byte) + size (4 bytes syncsafe)
+      if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) {
+        return result; // No ID3v2 header
+      }
+
+      const majorVersion = bytes[3]; // 2, 3, or 4
+      // Syncsafe integer for total tag size (excluding 10-byte header)
+      const tagSize =
+        ((bytes[6] & 0x7f) << 21) |
+        ((bytes[7] & 0x7f) << 14) |
+        ((bytes[8] & 0x7f) << 7) |
+        (bytes[9] & 0x7f);
+
+      let offset = 10;
+      const end = Math.min(10 + tagSize, bytes.length);
+
+      // Skip extended header if present (flag bit 6 of byte 5)
+      if (bytes[5] & 0x40) {
+        if (majorVersion === 4) {
+          const extSize =
+            ((bytes[10] & 0x7f) << 21) |
+            ((bytes[11] & 0x7f) << 14) |
+            ((bytes[12] & 0x7f) << 7) |
+            (bytes[13] & 0x7f);
+          offset += extSize;
+        } else {
+          const extSize = (bytes[10] << 24) | (bytes[11] << 16) | (bytes[12] << 8) | bytes[13];
+          offset += extSize + 4;
+        }
+      }
+
+      const decoder = new TextDecoder('utf-8');
+
+      while (offset + 10 < end) {
+        // Frame ID: 4 chars (v2.3/v2.4) or 3 chars (v2.2)
+        const frameIdLen = majorVersion === 2 ? 3 : 4;
+        const frameId = String.fromCharCode(...bytes.slice(offset, offset + frameIdLen));
+
+        // Frame size
+        let frameSize: number;
+        if (majorVersion === 2) {
+          frameSize = (bytes[offset + 3] << 16) | (bytes[offset + 4] << 8) | bytes[offset + 5];
+          offset += 6;
+        } else if (majorVersion === 4) {
+          // Syncsafe in v2.4
+          frameSize =
+            ((bytes[offset + 4] & 0x7f) << 21) |
+            ((bytes[offset + 5] & 0x7f) << 14) |
+            ((bytes[offset + 6] & 0x7f) << 7) |
+            (bytes[offset + 7] & 0x7f);
+          offset += 10;
+        } else {
+          // v2.3: plain big-endian
+          frameSize = (bytes[offset + 4] << 24) | (bytes[offset + 5] << 16) | (bytes[offset + 6] << 8) | bytes[offset + 7];
+          offset += 10;
+        }
+
+        if (frameSize <= 0 || offset + frameSize > end) break;
+
+        const isArtist = frameId === 'TPE1' || frameId === 'TP1';
+        const isTitle  = frameId === 'TIT2' || frameId === 'TT2';
+
+        if (isArtist || isTitle) {
+          // First byte of text frame is encoding: 0=Latin-1, 1=UTF-16, 2=UTF-16BE, 3=UTF-8
+          const encoding = bytes[offset];
+          const textBytes = bytes.slice(offset + 1, offset + frameSize);
+          let text = '';
+          if (encoding === 1 || encoding === 2) {
+            // UTF-16 (with or without BOM)
+            text = new TextDecoder('utf-16le').decode(textBytes);
+          } else {
+            text = decoder.decode(textBytes);
+          }
+          // Strip null terminators
+          text = text.replace(/\0/g, '').trim();
+          if (isArtist) result.artist = text;
+          if (isTitle)  result.title  = text;
+        }
+
+        offset += frameSize;
+
+        if (result.artist && result.title) break; // found both, stop early
+      }
+    } catch {
+      // Silently ignore parse errors – fields stay empty
+    }
+    return result;
+  }
+
+  /** Compute peak amplitudes (max absolute value per bucket) for waveform display */
+  private computePeaks(buffer: AudioBuffer, numBuckets: number): Float32Array {
+    const channelData = buffer.getChannelData(0);
+    const blockSize = Math.floor(channelData.length / numBuckets);
+    const peaks = new Float32Array(numBuckets);
+    for (let i = 0; i < numBuckets; i++) {
+      let max = 0;
+      const start = i * blockSize;
+      const end = start + blockSize;
+      for (let j = start; j < end; j++) {
+        const abs = Math.abs(channelData[j]);
+        if (abs > max) max = abs;
+      }
+      peaks[i] = max;
+    }
+    return peaks;
+  }
+
+  /** Draw the waveform on the canvas */
+  drawWaveform(): void {
+    const canvasEl = this.waveformCanvas?.nativeElement;
+    if (!canvasEl || !this.waveformPeaks) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvasEl.getBoundingClientRect();
+    canvasEl.width = rect.width * dpr;
+    canvasEl.height = rect.height * dpr;
+
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const W = rect.width;
+    const H = rect.height;
+    const peaks = this.waveformPeaks;
+    const n = peaks.length;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Background
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillRect(0, 0, W, H);
+
+    const barW = W / n;
+    const midY = H / 2;
+
+    for (let i = 0; i < n; i++) {
+      const x = i * barW;
+      const frac = i / n;
+      const barH = peaks[i] * midY * 0.95;
+
+      // Determine colour based on crop region
+      if (frac < this.cropStart || frac > this.cropEnd) {
+        ctx.fillStyle = 'rgba(155, 89, 182, 0.25)';
+      } else {
+        // Gradient: purple → red
+        const t = (frac - this.cropStart) / Math.max(this.cropEnd - this.cropStart, 0.001);
+        const r = Math.round(155 + (231 - 155) * t);
+        const g = Math.round(89 + (76 - 89) * t);
+        const b = Math.round(182 + (60 - 182) * t);
+        ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+      }
+
+      ctx.fillRect(x, midY - barH, Math.max(barW - 0.5, 0.5), barH * 2);
+    }
+  }
+
+  /** Handle click on waveform canvas to seek */
+  onWaveformMousedown(event: MouseEvent): void {
+    const canvasEl = this.waveformCanvas?.nativeElement;
+    if (!canvasEl || !this.audioBuffer) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+    this.seekPreviewTo(frac * this.previewDuration);
+    this.focusedCropHandle = null;
+    // Focus the waveform section for keyboard events
+    this.waveformSection?.nativeElement?.focus();
+  }
+
+  private seekPreviewTo(timeSec: number): void {
+    const wasPlaying = this.previewIsPlaying;
+    if (wasPlaying) this.stopPreviewPlayback();
+    this.previewOffsetSec = Math.max(this.cropStart * this.previewDuration,
+      Math.min(this.cropEnd * this.previewDuration, timeSec));
+    this.previewCurrentTime = this.previewOffsetSec;
+    this.previewPlayheadPos = this.previewDuration > 0 ? this.previewOffsetSec / this.previewDuration : 0;
+    if (wasPlaying) this.startPreviewPlayback();
+  }
+
+  togglePreviewPlayback(): void {
+    if (this.previewIsPlaying) {
+      this.pausePreviewPlayback();
+    } else {
+      this.startPreviewPlayback();
+    }
+    // Focus the waveform section for keyboard events
+    setTimeout(() => this.waveformSection?.nativeElement?.focus(), 0);
+  }
+
+  restartPreviewFromCropStart(): void {
+    this.stopPreviewPlayback();
+    this.previewOffsetSec = this.cropStart * this.previewDuration;
+    this.previewCurrentTime = this.previewOffsetSec;
+    this.previewPlayheadPos = this.cropStart;
+    this.startPreviewPlayback();
+    // Focus the waveform section for keyboard events
+    setTimeout(() => this.waveformSection?.nativeElement?.focus(), 0);
+  }
+
+  private startPreviewPlayback(): void {
+    if (!this.audioCtx || !this.audioBuffer) return;
+
+    // Resume suspended context (browser autoplay policy)
+    if (this.audioCtx.state === 'suspended') {
+      this.audioCtx.resume();
+    }
+
+    const startOffset = this.previewOffsetSec;
+    const cropEndSec = this.cropEnd * this.previewDuration;
+    const duration = cropEndSec - startOffset;
+    if (duration <= 0) {
+      // Reset to crop start and play from there
+      this.previewOffsetSec = this.cropStart * this.previewDuration;
+      return this.startPreviewPlayback();
+    }
+
+    const source = this.audioCtx.createBufferSource();
+    source.buffer = this.audioBuffer;
+    source.connect(this.audioCtx.destination);
+    source.start(0, startOffset, duration);
+    source.onended = () => {
+      this.ngZone.run(() => {
+        if (this.previewIsPlaying) {
+          this.previewIsPlaying = false;
+          this.previewOffsetSec = this.cropStart * this.previewDuration;
+          this.previewCurrentTime = this.previewOffsetSec;
+          this.previewPlayheadPos = this.cropStart;
+          this.drawWaveform();
+          this.cdr.detectChanges();
+        }
+      });
+    };
+
+    this.previewSourceNode = source;
+    this.previewStartedAt = this.audioCtx.currentTime;
+    this.previewIsPlaying = true;
+    this.schedulePlayheadAnimation();
+  }
+
+  private pausePreviewPlayback(): void {
+    if (!this.previewIsPlaying || !this.audioCtx) return;
+    // Capture current position before stopping
+    const elapsed = this.audioCtx.currentTime - this.previewStartedAt;
+    this.previewOffsetSec = Math.min(
+      this.previewOffsetSec + elapsed,
+      this.cropEnd * this.previewDuration
+    );
+    this.stopPreviewPlayback();
+  }
+
+  private stopPreviewPlayback(): void {
+    if (this.previewSourceNode) {
+      try { this.previewSourceNode.onended = null; this.previewSourceNode.stop(); } catch {}
+      this.previewSourceNode = null;
+    }
+    this.previewIsPlaying = false;
+    if (this.previewAnimFrame !== null) {
+      cancelAnimationFrame(this.previewAnimFrame);
+      this.previewAnimFrame = null;
+    }
+  }
+
+  private schedulePlayheadAnimation(): void {
+    if (this.previewAnimFrame !== null) {
+      cancelAnimationFrame(this.previewAnimFrame);
+    }
+    const tick = () => {
+      if (!this.previewIsPlaying || !this.audioCtx) return;
+      const elapsed = this.audioCtx.currentTime - this.previewStartedAt;
+      const currentSec = Math.min(this.previewOffsetSec + elapsed, this.cropEnd * this.previewDuration);
+      this.ngZone.run(() => {
+        this.previewCurrentTime = currentSec;
+        this.previewPlayheadPos = this.previewDuration > 0 ? currentSec / this.previewDuration : 0;
+        this.drawWaveform();
+      });
+      this.previewAnimFrame = requestAnimationFrame(tick);
+    };
+    this.previewAnimFrame = requestAnimationFrame(tick);
+  }
+
+  // ── Crop handles ─────────────────────────────────────────────────────────
+
+  startCropDrag(event: MouseEvent, handle: 'start' | 'end'): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.cropDragHandle = handle;
+    this.focusedCropHandle = handle;
+
+    this.cropDragBound = (e: MouseEvent) => this.onCropDragMove(e);
+    this.cropDragEndBound = () => this.onCropDragEnd();
+
+    document.addEventListener('mousemove', this.cropDragBound);
+    document.addEventListener('mouseup', this.cropDragEndBound);
+
+    // Focus waveform section for keyboard events
+    this.waveformSection?.nativeElement?.focus();
+  }
+
+  private onCropDragMove(event: MouseEvent): void {
+    const canvasEl = this.waveformCanvas?.nativeElement;
+    if (!canvasEl || !this.cropDragHandle) return;
+    const rect = canvasEl.getBoundingClientRect();
+    const frac = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+
+    if (this.cropDragHandle === 'start') {
+      this.cropStart = Math.min(frac, this.cropEnd - 0.01);
+      // If playhead is before new start, move it
+      if (this.previewPlayheadPos < this.cropStart) {
+        this.previewOffsetSec = this.cropStart * this.previewDuration;
+        this.previewPlayheadPos = this.cropStart;
+        this.previewCurrentTime = this.previewOffsetSec;
+      }
+    } else {
+      this.cropEnd = Math.max(frac, this.cropStart + 0.01);
+      if (this.previewPlayheadPos > this.cropEnd) {
+        this.previewOffsetSec = this.cropEnd * this.previewDuration;
+        this.previewPlayheadPos = this.cropEnd;
+        this.previewCurrentTime = this.previewOffsetSec;
+      }
+    }
+    this.drawWaveform();
+  }
+
+  private onCropDragEnd(): void {
+    this.cropDragHandle = null;
+    this.removeCropDragListeners();
+  }
+
+  private removeCropDragListeners(): void {
+    if (this.cropDragBound) {
+      document.removeEventListener('mousemove', this.cropDragBound);
+      this.cropDragBound = null;
+    }
+    if (this.cropDragEndBound) {
+      document.removeEventListener('mouseup', this.cropDragEndBound);
+      this.cropDragEndBound = null;
+    }
+  }
+
+  resetCrop(): void {
+    this.cropStart = 0;
+    this.cropEnd = 1;
+    this.drawWaveform();
+  }
+
+  /** Deselect any focused crop handle (start or end). */
+  blurCropHandles(): void {
+    if (this.focusedCropHandle !== null) {
+      this.focusedCropHandle = null;
+    }
+  }
+
+  /**
+   * Apply the current crop: slice the AudioBuffer to [cropStart, cropEnd],
+   * encode it as a WAV Blob, replace addSoundFile, regenerate peaks and
+   * redraw the waveform.  Crop handles are reset to 0/1 afterwards.
+   */
+  applyCrop(): void {
+    if (!this.audioBuffer || !this.audioCtx || this.isCropping) return;
+    if (this.cropStart === 0 && this.cropEnd === 1) return; // nothing to crop
+
+    this.isCropping = true;
+    this.stopPreviewPlayback();
+
+    const sampleRate = this.audioBuffer.sampleRate;
+    const numChannels = this.audioBuffer.numberOfChannels;
+    const startSample = Math.floor(this.cropStart * this.audioBuffer.length);
+    const endSample   = Math.ceil(this.cropEnd   * this.audioBuffer.length);
+    const newLength   = endSample - startSample;
+
+    // Save originals before replacing (only on first crop – keep the very first original)
+    if (!this.originalFile) {
+      this.originalFile = this.addSoundFile;
+      this.originalAudioBuffer = this.audioBuffer;
+    }
+
+    // Build a new AudioBuffer containing only the cropped region
+    const croppedBuffer = this.audioCtx.createBuffer(numChannels, newLength, sampleRate);
+    for (let ch = 0; ch < numChannels; ch++) {
+      const src = this.audioBuffer.getChannelData(ch);
+      const dst = croppedBuffer.getChannelData(ch);
+      dst.set(src.subarray(startSample, endSample));
+    }
+
+    // Encode to WAV in-browser (PCM 16-bit)
+    const wavBlob = this.audioBufferToWav(croppedBuffer);
+    const originalName = this.addSoundFile?.name ?? 'cropped.wav';
+    const baseName = this.fileNameWithoutExtension(originalName);
+    const newFile = new File([wavBlob], `${baseName}.wav`, { type: 'audio/wav' });
+
+    // Replace the audio buffer and file reference
+    this.audioBuffer = croppedBuffer;
+    this.addSoundFile = newFile;
+    this.previewDuration = croppedBuffer.duration;
+
+    // Reset crop handles and playhead
+    this.cropStart = 0;
+    this.cropEnd = 1;
+    this.previewOffsetSec = 0;
+    this.previewCurrentTime = 0;
+    this.previewPlayheadPos = 0;
+
+    // Recompute peaks and redraw
+    this.waveformPeaks = this.computePeaks(croppedBuffer, 600);
+    this.isCropping = false;
+    this.cdr.detectChanges();
+    setTimeout(() => this.drawWaveform(), 0);
+  }
+
+  /**
+   * Restore the original (pre-crop) file and AudioBuffer.
+   * Resets the waveform display to the full-length media.
+   */
+  resetToOriginal(): void {
+    if (!this.originalFile || !this.originalAudioBuffer) return;
+
+    this.stopPreviewPlayback();
+
+    this.addSoundFile = this.originalFile;
+    this.audioBuffer = this.originalAudioBuffer;
+    this.previewDuration = this.originalAudioBuffer.duration;
+
+    // Clear the saved originals so the button disappears
+    this.originalFile = null;
+    this.originalAudioBuffer = null;
+
+    // Reset crop handles and playhead
+    this.cropStart = 0;
+    this.cropEnd = 1;
+    this.previewOffsetSec = 0;
+    this.previewCurrentTime = 0;
+    this.previewPlayheadPos = 0;
+    this.focusedCropHandle = null;
+
+    // Recompute peaks and redraw
+    this.waveformPeaks = this.computePeaks(this.audioBuffer, 600);
+    this.cdr.detectChanges();
+    setTimeout(() => this.drawWaveform(), 0);
+  }
+
+  /**
+   * Encode an AudioBuffer as a 16-bit PCM WAV Blob.
+   * Interleaves all channels (standard WAV layout).
+   */
+  private audioBufferToWav(buffer: AudioBuffer): Blob {
+    const numChannels = buffer.numberOfChannels;
+    const sampleRate  = buffer.sampleRate;
+    const numSamples  = buffer.length;
+    const bytesPerSample = 2; // 16-bit
+    const blockAlign  = numChannels * bytesPerSample;
+    const dataSize    = numSamples * blockAlign;
+    const headerSize  = 44;
+
+    const arrayBuffer = new ArrayBuffer(headerSize + dataSize);
+    const view = new DataView(arrayBuffer);
+
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) {
+        view.setUint8(offset + i, str.charCodeAt(i));
+      }
+    };
+
+    writeStr(0, 'RIFF');
+    view.setUint32(4,  36 + dataSize, true);
+    writeStr(8, 'WAVE');
+    writeStr(12, 'fmt ');
+    view.setUint32(16, 16, true);           // PCM chunk size
+    view.setUint16(20, 1, true);            // PCM format
+    view.setUint16(22, numChannels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * blockAlign, true); // byte rate
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, 16, true);           // bits per sample
+    writeStr(36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // Interleave channel data
+    let offset = 44;
+    const channels: Float32Array[] = [];
+    for (let ch = 0; ch < numChannels; ch++) {
+      channels.push(buffer.getChannelData(ch));
+    }
+    for (let i = 0; i < numSamples; i++) {
+      for (let ch = 0; ch < numChannels; ch++) {
+        const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([arrayBuffer], { type: 'audio/wav' });
+  }
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+
+  onPreviewKeydown(event: KeyboardEvent): void {
+    if (event.code === 'Escape') {
+      event.preventDefault();
+      this.blurCropHandles();
+      return;
+    }
+
+    if (event.code === 'Space') {
+      event.preventDefault();
+      this.restartPreviewFromCropStart();
+      return;
+    }
+
+    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') {
+      event.preventDefault();
+      const step = event.shiftKey ? 0.01 : 0.001; // shift = coarser step
+      const delta = event.code === 'ArrowLeft' ? -step : step;
+
+      if (this.focusedCropHandle === 'start') {
+        this.cropStart = Math.max(0, Math.min(this.cropEnd - 0.001, this.cropStart + delta));
+        this.drawWaveform();
+      } else if (this.focusedCropHandle === 'end') {
+        this.cropEnd = Math.max(this.cropStart + 0.001, Math.min(1, this.cropEnd + delta));
+        this.drawWaveform();
+      }
+      return;
+    }
+
+    // Tab between handles
+    if (event.code === 'Tab') {
+      event.preventDefault();
+      if (this.focusedCropHandle === null || this.focusedCropHandle === 'end') {
+        this.focusedCropHandle = 'start';
+      } else {
+        this.focusedCropHandle = 'end';
+      }
+    }
+  }
+
+  // ── Utility ──────────────────────────────────────────────────────────────
+
+  formatTime(seconds: number): string {
+    if (!isFinite(seconds) || seconds < 0) return '0:00';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 }

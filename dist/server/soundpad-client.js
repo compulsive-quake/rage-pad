@@ -407,8 +407,10 @@ class SoundpadClient {
      * @param originalName  Original filename (used as display label fallback)
      * @param categoryName  Category (or sub-category) name to place the sound in
      * @param displayName   Optional custom display name provided by the user
+     * @param artist        Optional artist metadata to write into the SPL tag
+     * @param title         Optional title metadata to write into the SPL tag
      */
-    async addSound(tempFilePath, originalName, categoryName, displayName) {
+    async addSound(tempFilePath, originalName, categoryName, displayName, artist = '', title = '') {
         try {
             if (!fs.existsSync(this.soundlistPath)) {
                 return { success: false, error: 'Soundlist file not found' };
@@ -454,8 +456,18 @@ class SoundpadClient {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/"/g, '&quot;');
+            const escapedArtist = artist
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const escapedTitle = title
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
             // Build the new <Sound /> tag to insert into the Soundlist section
-            const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}"/>`;
+            const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}" artist="${escapedArtist}" title="${escapedTitle}"/>`;
             // --- Insert the new sound into the flat <Soundlist> section ---
             // The SPL file structure is:
             //   <Soundlist>
