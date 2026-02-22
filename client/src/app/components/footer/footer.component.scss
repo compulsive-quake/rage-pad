@@ -281,6 +281,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+
+  .launch-error-text {
+    color: #f0a500;
+    font-weight: 500;
+  }
 }
 
 .manual-launch-btn {
