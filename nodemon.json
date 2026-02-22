@@ -1,0 +1,7 @@
+{
+  "watch": ["dist/server"],
+  "ext": "js",
+  "delay": 1000,
+  "legacyWatch": true,
+  "exec": "ts-node src/server/index.ts"
+}

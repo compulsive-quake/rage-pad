@@ -19,10 +19,21 @@ export class FooterComponent {
   @Input() volume = 100;
   @Input() playbackMode: 'both' | 'mic' | 'speakers' = 'both';
 
+  /** Whether auto-launch is enabled (controls visibility of manual start button) */
+  @Input() autoLaunchEnabled = true;
+  /** True while a launch attempt is in progress */
+  @Input() isLaunching = false;
+  /** Error message to show in the footer when auto-launch fails */
+  @Input() launchErrorMessage = '';
+  /** Seconds remaining until the next auto-launch retry */
+  @Input() launchRetryCountdown = 0;
+
   @Output() stop = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
   @Output() volumeChange = new EventEmitter<number>();
   @Output() playbackModeChange = new EventEmitter<'both' | 'mic' | 'speakers'>();
+  /** Emitted when the user clicks the manual "Start Soundpad" button */
+  @Output() manualLaunch = new EventEmitter<void>();
 
   onStop(): void {
     this.stop.emit();
@@ -38,6 +49,10 @@ export class FooterComponent {
 
   onSetPlaybackMode(mode: 'both' | 'mic' | 'speakers'): void {
     this.playbackModeChange.emit(mode);
+  }
+
+  onManualLaunch(): void {
+    this.manualLaunch.emit();
   }
 
   formatTime(seconds: number): string {

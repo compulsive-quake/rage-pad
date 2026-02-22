@@ -80,7 +80,7 @@ export declare class SoundpadClient {
      * @param artist        Optional artist metadata to write into the SPL tag
      * @param title         Optional title metadata to write into the SPL tag
      */
-    addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist?: string, title?: string): Promise<SoundpadResponse>;
+    addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist?: string, title?: string, durationSeconds?: number): Promise<SoundpadResponse>;
     /**
      * Get the 0-based sound IDs that belong to a given category in the <Categories> section.
      * This looks at <Sound id="N"/> references inside the matching <Category> element.
@@ -99,6 +99,12 @@ export declare class SoundpadClient {
      */
     private collectCategories;
     restartSoundpadOnly(): Promise<SoundpadResponse>;
+    /**
+     * Launch Soundpad if it is not already running.
+     * Does NOT kill an existing instance first – this is a "start if not running" helper.
+     * Returns success:true once Soundpad is detected on the named pipe (or was already running).
+     */
+    launchSoundpad(): Promise<SoundpadResponse>;
     /**
      * Poll the Soundpad named pipe until it responds, or until the timeout expires.
      * This is used after relaunching Soundpad to ensure it is fully ready before

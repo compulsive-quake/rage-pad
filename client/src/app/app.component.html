@@ -34,10 +34,15 @@
     [playbackTimeRemaining]="playbackTimeRemaining"
     [volume]="volume"
     [playbackMode]="playbackMode"
+    [autoLaunchEnabled]="autoLaunchEnabled"
+    [isLaunching]="isLaunching"
+    [launchErrorMessage]="launchErrorMessage"
+    [launchRetryCountdown]="launchRetryCountdown"
     (stop)="stopSound()"
     (togglePause)="togglePause()"
     (volumeChange)="setVolume($event)"
     (playbackModeChange)="setPlaybackMode($event)"
+    (manualLaunch)="manualLaunchSoundpad()"
   ></app-footer>
 
   <!-- Rename Modal -->
@@ -99,6 +104,19 @@
           </div>
         </div>
         <div class="settings-section">
+          <h3>Auto-Start Soundpad</h3>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Automatically start Soundpad</span>
+              <span class="settings-toggle-description">Launch Soundpad automatically when it is not detected. Retries with increasing delays on failure.</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="autoLaunchEnabled" (change)="toggleAutoLaunch()" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="settings-section">
           <h3>Soundpad Actions</h3>
           <p>If Soundpad is unresponsive or needs to be reloaded, you can restart it here.</p>
           <button
@@ -123,245 +141,350 @@
         <h2>Add Sound</h2>
         <button class="close-btn" (click)="closeAddSoundModal()">&times;</button>
       </div>
-      <div class="modal-body" (click)="blurCropHandles()">
-        <!-- Drop Zone -->
-        <div
-          class="drop-zone"
-          [class.drag-over]="isDragOver"
-          [class.has-file]="addSoundFile !== null"
-          (dragover)="onDragOver($event)"
-          (dragleave)="onDragLeave($event)"
-          (drop)="onDrop($event)"
-          (click)="addSoundFile ? null : fileInput.click()"
-        >
-          <input
-            #fileInput
-            type="file"
-            accept=".mp3,.wav,.ogg,.flac,.aac,.wma,.m4a,.opus,.aiff,.ape"
-            (change)="onFileSelected($event)"
-            style="display: none"
-          />
-          <div *ngIf="!addSoundFile" class="drop-zone-content">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="drop-zone-icon">
-              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
-            </svg>
-            <p class="drop-zone-text">Drag & drop a sound file here</p>
-            <p class="drop-zone-hint">or click to browse</p>
-            <p class="drop-zone-formats">MP3, WAV, OGG, FLAC, AAC, WMA, M4A, OPUS, AIFF, APE</p>
-          </div>
-          <div *ngIf="addSoundFile" class="drop-zone-file">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="file-icon">
-              <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-            </svg>
-            <div class="file-info">
-              <p class="file-name">{{ addSoundFile.name }}</p>
-              <p class="file-size">{{ formatFileSize(addSoundFile.size) }}</p>
-            </div>
-            <button class="remove-file-btn" (click)="removeFile($event)" title="Remove file">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-              </svg>
-            </button>
-          </div>
-        </div>
+      <div class="modal-body add-sound-modal-body" (click)="blurCropHandles()">
 
-        <!-- Waveform Preview (shown when file is selected) -->
-        <div class="waveform-preview-section" *ngIf="addSoundFile" (keydown)="onPreviewKeydown($event)" tabindex="-1" #waveformSection>
-          <!-- Loading state -->
-          <div *ngIf="previewLoading" class="waveform-loading">
-            <div class="waveform-spinner"></div>
-            <span>Analyzing audio...</span>
-          </div>
+        <!-- Single-column layout: drop zone + waveform + form fields -->
+        <div class="add-sound-columns">
 
-          <!-- Waveform canvas + crop UI -->
-          <div *ngIf="!previewLoading" class="waveform-container" (click)="$event.stopPropagation()">
-            <!-- Canvas for waveform drawing -->
-            <canvas
-              #waveformCanvas
-              class="waveform-canvas"
-              (mousedown)="onWaveformMousedown($event)"
-            ></canvas>
-
-            <!-- Crop overlay: left muted region -->
+          <!-- Main content: Drop zone + waveform + form fields -->
+          <div class="add-sound-left">
+            <!-- Drop Zone -->
             <div
-              class="crop-region crop-region-left"
-              [style.width.%]="cropStart * 100"
-            ></div>
-
-            <!-- Crop overlay: right muted region -->
-            <div
-              class="crop-region crop-region-right"
-              [style.width.%]="(1 - cropEnd) * 100"
-            ></div>
-
-            <!-- Playhead -->
-            <div
-              class="playhead"
-              [style.left.%]="previewPlayheadPos * 100"
-              [class.visible]="previewIsPlaying || previewPlayheadPos > 0"
-            ></div>
-
-            <!-- Crop handle: start -->
-            <div
-              class="crop-handle crop-handle-start"
-              [style.left.%]="cropStart * 100"
-              [class.focused]="focusedCropHandle === 'start'"
-              (mousedown)="startCropDrag($event, 'start')"
-              (click)="$event.stopPropagation()"
-              title="Drag to set start crop point (← → to fine-tune)"
+              class="drop-zone"
+              [class.drag-over]="isDragOver"
+              [class.has-file]="addSoundFile !== null"
+              (dragover)="onDragOver($event)"
+              (dragleave)="onDragLeave($event)"
+              (drop)="onDrop($event)"
+              (click)="addSoundFile ? null : fileInput.click()"
             >
-              <div class="crop-handle-line"></div>
-              <div class="crop-handle-grip crop-handle-grip-start">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-              </div>
-              <div class="crop-handle-label">{{ formatTime(cropStart * previewDuration) }}</div>
-            </div>
-
-            <!-- Crop handle: end -->
-            <div
-              class="crop-handle crop-handle-end"
-              [style.left.%]="cropEnd * 100"
-              [class.focused]="focusedCropHandle === 'end'"
-              (mousedown)="startCropDrag($event, 'end')"
-              (click)="$event.stopPropagation()"
-              title="Drag to set end crop point (← → to fine-tune)"
-            >
-              <div class="crop-handle-line"></div>
-              <div class="crop-handle-grip crop-handle-grip-end">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5v14L5 12z"/></svg>
-              </div>
-              <div class="crop-handle-label">{{ formatTime(cropEnd * previewDuration) }}</div>
-            </div>
-          </div>
-
-          <!-- Playback controls row -->
-          <div *ngIf="!previewLoading" class="preview-controls">
-            <button
-              class="preview-play-btn"
-              (click)="togglePreviewPlayback()"
-              [title]="previewIsPlaying ? 'Pause' : 'Play (Space = restart from crop start)'"
-            >
-              <!-- Play icon -->
-              <svg *ngIf="!previewIsPlaying" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M8 5v14l11-7z"/>
-              </svg>
-              <!-- Pause icon -->
-              <svg *ngIf="previewIsPlaying" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-              </svg>
-            </button>
-
-            <div class="preview-time-info">
-              <span class="preview-current-time">{{ formatTime(previewCurrentTime) }}</span>
-              <span class="preview-time-sep">/</span>
-              <span class="preview-duration">{{ formatTime(previewDuration) }}</span>
-            </div>
-
-            <div class="preview-crop-info" *ngIf="cropStart > 0 || cropEnd < 1">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="crop-icon">
-                <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
-              </svg>
-              <span>Crop: {{ formatTime(cropStart * previewDuration) }} – {{ formatTime(cropEnd * previewDuration) }}</span>
-              <span class="crop-duration">({{ formatTime((cropEnd - cropStart) * previewDuration) }})</span>
-              <button class="apply-crop-btn" (click)="applyCrop()" [disabled]="isCropping" title="Apply crop – trims the audio to the selected region">
-                <svg *ngIf="isCropping" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px; margin-right: 4px;">
-                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                </svg>
-                {{ isCropping ? 'Cropping…' : 'Crop' }}
-              </button>
-              <button class="reset-crop-btn" (click)="resetCrop()" title="Reset crop">Reset</button>
-            </div>
-
-            <div class="preview-crop-info preview-crop-info--original" *ngIf="originalFile !== null && cropStart === 0 && cropEnd === 1">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="crop-icon crop-icon--applied">
-                <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
-              </svg>
-              <span class="crop-applied-label">Crop applied</span>
-              <span class="crop-duration">({{ formatTime(previewDuration) }})</span>
-              <button class="reset-to-original-btn" (click)="resetToOriginal()" title="Restore the original full-length audio">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px; margin-right: 4px;">
-                  <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
-                </svg>
-                Reset to Original
-              </button>
-            </div>
-
-            <div class="preview-hint">
-              <span>Space: play/pause &nbsp;·&nbsp; Click waveform: seek &nbsp;·&nbsp; Drag handles or click + ←→: crop &nbsp;·&nbsp; Crop button: apply &amp; trim audio</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Tag / Artist / Title / Filename Inputs -->
-        <div class="sound-name-section" *ngIf="addSoundFile">
-          <label class="category-label">Tag <span class="required-star">*</span></label>
-          <input
-            type="text"
-            class="sound-name-input"
-            [(ngModel)]="addSoundName"
-            placeholder="Enter tag (required)"
-          />
-        </div>
-
-        <div class="sound-meta-section" *ngIf="addSoundFile">
-          <!-- Title field (full width) -->
-          <div class="sound-meta-field-full">
-            <label class="category-label">Title</label>
-            <div class="field-input-row">
               <input
-                type="text"
-                class="sound-name-input"
-                [(ngModel)]="addSoundTitle"
-                placeholder="Enter title"
+                #fileInput
+                type="file"
+                accept=".mp3,.wav,.ogg,.flac,.aac,.wma,.m4a,.opus,.aiff,.ape"
+                (change)="onFileSelected($event)"
+                style="display: none"
               />
-              <button
-                class="field-clear-btn"
-                *ngIf="addSoundTitle"
-                (click)="addSoundTitle = ''"
-                title="Clear title"
-                type="button"
-              >&times;</button>
+              <div *ngIf="!addSoundFile" class="drop-zone-content">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="drop-zone-icon">
+                  <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+                </svg>
+                <p class="drop-zone-text">Drag & drop a sound file here</p>
+                <p class="drop-zone-hint">or click to browse</p>
+                <p class="drop-zone-formats">MP3, WAV, OGG, FLAC, AAC, WMA, M4A, OPUS, AIFF, APE</p>
+              </div>
+              <div *ngIf="addSoundFile" class="drop-zone-file">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="file-icon">
+                  <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                </svg>
+                <div class="file-info">
+                  <p class="file-name">{{ addSoundFile.name }}</p>
+                  <p class="file-size">{{ formatFileSize(addSoundFile.size) }}</p>
+                </div>
+                <button class="remove-file-btn" (click)="removeFile($event)" title="Remove file">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
-          </div>
-
-          <!-- Artist field (full width) -->
-          <div class="sound-meta-field-full">
-            <label class="category-label">Artist</label>
-            <div class="field-input-row">
-              <input
-                type="text"
-                class="sound-name-input"
-                [(ngModel)]="addSoundArtist"
-                placeholder="Enter artist"
-              />
-              <button
-                class="field-clear-btn"
-                *ngIf="addSoundArtist"
-                (click)="addSoundArtist = ''"
-                title="Clear artist"
-                type="button"
-              >&times;</button>
+            <!-- YouTube URL Input -->
+            <div class="youtube-url-section" *ngIf="!addSoundFile">
+              <div class="youtube-url-label">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="youtube-icon">
+                  <path d="M21.58 7.19c-.23-.86-.91-1.54-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.81.42c-.86.23-1.54.91-1.77 1.77C2 8.75 2 12 2 12s0 3.25.42 4.81c.23.86.91 1.54 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.81-.42c.86-.23 1.54-.91 1.77-1.77C22 15.25 22 12 22 12s0-3.25-.42-4.81zM10 15V9l5.2 3-5.2 3z"/>
+                </svg>
+                <span>Or paste a YouTube URL</span>
+              </div>
+              <div class="youtube-url-input-row">
+                <input
+                  type="url"
+                  class="youtube-url-input"
+                  [(ngModel)]="youtubeUrl"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  [disabled]="isFetchingYoutube || isAddingSound"
+                  (keydown.enter)="fetchFromYoutube()"
+                />
+                <button
+                  class="youtube-fetch-btn"
+                  (click)="fetchFromYoutube()"
+                  [disabled]="!youtubeUrl.trim() || isFetchingYoutube || isAddingSound"
+                  title="Fetch audio from YouTube"
+                >
+                  <svg *ngIf="isFetchingYoutube" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                    <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                  </svg>
+                  <svg *ngIf="!isFetchingYoutube" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+                  </svg>
+                  <span>{{ isFetchingYoutube ? 'Fetching...' : 'Fetch' }}</span>
+                </button>
+              </div>
+              <!-- YouTube loading indicator -->
+              <div *ngIf="isFetchingYoutube" class="youtube-loading">
+                <div class="youtube-loading-bar">
+                  <div class="youtube-loading-progress"></div>
+                </div>
+                <span class="youtube-loading-text">Downloading and processing audio from YouTube…</span>
+              </div>
+              <!-- YouTube fetch error -->
+              <p *ngIf="youtubeFetchError" class="youtube-fetch-error">{{ youtubeFetchError }}</p>
             </div>
 
+            <!-- Waveform Preview (shown when file is selected) -->
+            <div class="waveform-preview-section" *ngIf="addSoundFile" (keydown)="onPreviewKeydown($event)" tabindex="-1" #waveformSection>
+              <!-- Loading state -->
+              <div *ngIf="previewLoading" class="waveform-loading">
+                <div class="waveform-spinner"></div>
+                <span>Analyzing audio...</span>
+              </div>
+
+              <!-- Waveform canvas + crop UI -->
+              <div *ngIf="!previewLoading" class="waveform-container" (click)="$event.stopPropagation()">
+                <!-- Canvas for waveform drawing -->
+                <canvas
+                  #waveformCanvas
+                  class="waveform-canvas"
+                  (mousedown)="onWaveformMousedown($event)"
+                ></canvas>
+
+                <!-- Crop overlay: left muted region -->
+                <div
+                  class="crop-region crop-region-left"
+                  [style.width.%]="cropStart * 100"
+                ></div>
+
+                <!-- Crop overlay: right muted region -->
+                <div
+                  class="crop-region crop-region-right"
+                  [style.width.%]="(1 - cropEnd) * 100"
+                ></div>
+
+                <!-- Playhead -->
+                <div
+                  class="playhead"
+                  [style.left.%]="previewPlayheadPos * 100"
+                  [class.visible]="previewIsPlaying || previewPlayheadPos > 0"
+                ></div>
+
+                <!-- Crop handle: start -->
+                <div
+                  class="crop-handle crop-handle-start"
+                  [style.left.%]="cropStart * 100"
+                  [class.focused]="focusedCropHandle === 'start'"
+                  (mousedown)="startCropDrag($event, 'start')"
+                  (click)="$event.stopPropagation()"
+                  title="Drag to set start crop point (← → to fine-tune)"
+                >
+                  <div class="crop-handle-line"></div>
+                  <div class="crop-handle-grip crop-handle-grip-start">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                  </div>
+                  <div class="crop-handle-label">{{ formatTime(cropStart * previewDuration) }}</div>
+                </div>
+
+                <!-- Crop handle: end -->
+                <div
+                  class="crop-handle crop-handle-end"
+                  [style.left.%]="cropEnd * 100"
+                  [class.focused]="focusedCropHandle === 'end'"
+                  (mousedown)="startCropDrag($event, 'end')"
+                  (click)="$event.stopPropagation()"
+                  title="Drag to set end crop point (← → to fine-tune)"
+                >
+                  <div class="crop-handle-line"></div>
+                  <div class="crop-handle-grip crop-handle-grip-end">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M16 5v14L5 12z"/></svg>
+                  </div>
+                  <div class="crop-handle-label">{{ formatTime(cropEnd * previewDuration) }}</div>
+                </div>
+              </div>
+
+              <!-- Playback controls row -->
+              <div *ngIf="!previewLoading" class="preview-controls">
+                <button
+                  class="preview-play-btn"
+                  (click)="togglePreviewPlayback()"
+                  [title]="previewIsPlaying ? 'Pause' : 'Play (Space = restart from crop start)'"
+                >
+                  <!-- Play icon -->
+                  <svg *ngIf="!previewIsPlaying" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M8 5v14l11-7z"/>
+                  </svg>
+                  <!-- Pause icon -->
+                  <svg *ngIf="previewIsPlaying" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                  </svg>
+                </button>
+
+                <div class="preview-time-info">
+                  <span class="preview-current-time">{{ formatTime(previewCurrentTime) }}</span>
+                  <span class="preview-time-sep">/</span>
+                  <span class="preview-duration">{{ formatTime(previewDuration) }}</span>
+                </div>
+
+                <div class="preview-crop-info" *ngIf="cropStart > 0 || cropEnd < 1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="crop-icon">
+                    <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
+                  </svg>
+                  <span>Crop: {{ formatTime(cropStart * previewDuration) }} – {{ formatTime(cropEnd * previewDuration) }}</span>
+                  <span class="crop-duration">({{ formatTime((cropEnd - cropStart) * previewDuration) }})</span>
+                  <button class="apply-crop-btn" (click)="applyCrop()" [disabled]="isCropping" title="Apply crop – trims the audio to the selected region">
+                    <svg *ngIf="isCropping" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px; margin-right: 4px;">
+                      <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                    </svg>
+                    {{ isCropping ? 'Cropping…' : 'Crop' }}
+                  </button>
+                  <button class="reset-crop-btn" (click)="resetCrop()" title="Reset crop">Reset</button>
+                </div>
+
+                <div class="preview-crop-info preview-crop-info--original" *ngIf="originalFile !== null && cropStart === 0 && cropEnd === 1">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="crop-icon crop-icon--applied">
+                    <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
+                  </svg>
+                  <span class="crop-applied-label">Crop applied</span>
+                  <span class="crop-duration">({{ formatTime(previewDuration) }})</span>
+                  <button class="reset-to-original-btn" (click)="resetToOriginal()" title="Restore the original full-length audio">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px; margin-right: 4px;">
+                      <path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>
+                    </svg>
+                    Reset to Original
+                  </button>
+                </div>
+
+                <div class="preview-hint">
+                  <span>Space: play/pause &nbsp;·&nbsp; Click waveform: seek &nbsp;·&nbsp; Drag handles or click + ←→: crop &nbsp;·&nbsp; Crop button: apply &amp; trim audio</span>
+                </div>
+              </div>
+            </div>
           </div>
 
-        </div>
+          <!-- Form fields: 2-column grid below crop tool -->
+          <div class="add-sound-form-fields">
+            <!-- Row 1: Tag | Title -->
+            <div class="form-fields-row">
+              <!-- Tag -->
+              <div class="form-field-col">
+                <label class="category-label">Tag <span class="required-star">*</span></label>
+                <input
+                  type="text"
+                  class="sound-name-input"
+                  [(ngModel)]="addSoundName"
+                  placeholder="Enter tag (required)"
+                />
+              </div>
+              <!-- Title -->
+              <div class="form-field-col">
+                <label class="category-label">Title</label>
+                <div class="field-input-row">
+                  <input
+                    type="text"
+                    class="sound-name-input"
+                    [(ngModel)]="addSoundTitle"
+                    placeholder="Enter title"
+                  />
+                  <button
+                    class="field-clear-btn"
+                    *ngIf="addSoundTitle"
+                    (click)="addSoundTitle = ''"
+                    title="Clear title"
+                    type="button"
+                  >&times;</button>
+                </div>
+              </div>
+            </div>
 
-        <!-- Category Selection -->
-        <div class="category-select-section">
-          <label class="category-label">Category</label>
-          <select class="category-select" [(ngModel)]="addSoundCategory">
-            <option *ngFor="let cat of addSoundCategories" [value]="cat.name">
-              {{ cat.parentCategory ? '  └ ' + cat.name : cat.name }}
-            </option>
-          </select>
-        </div>
+            <!-- Row 2: Artist | Category -->
+            <div class="form-fields-row">
+              <!-- Artist -->
+              <div class="form-field-col">
+                <label class="category-label">Artist</label>
+                <div class="field-input-row artist-autocomplete-wrapper">
+                  <input
+                    type="text"
+                    class="sound-name-input"
+                    [(ngModel)]="addSoundArtist"
+                    placeholder="Enter artist"
+                    autocomplete="off"
+                    (input)="onArtistInput()"
+                    (focus)="onArtistFocus()"
+                    (blur)="onArtistBlur()"
+                  />
+                  <button
+                    class="field-clear-btn"
+                    *ngIf="addSoundArtist"
+                    (click)="addSoundArtist = ''; showArtistSuggestions = false"
+                    title="Clear artist"
+                    type="button"
+                  >&times;</button>
+                  <!-- Autocomplete dropdown -->
+                  <ul class="artist-suggestions" *ngIf="showArtistSuggestions">
+                    <li
+                      *ngFor="let artist of filteredArtistSuggestions"
+                      class="artist-suggestion-item"
+                      (mousedown)="selectArtistSuggestion(artist)"
+                    >{{ artist }}</li>
+                  </ul>
+                </div>
+              </div>
+              <!-- Category -->
+              <div class="form-field-col">
+                <label class="category-label">Category</label>
+                <div class="custom-category-select" [class.open]="isCategoryDropdownOpen">
+                  <!-- Trigger button -->
+                  <button
+                    type="button"
+                    class="custom-category-trigger"
+                    (click)="toggleCategoryDropdown()"
+                    (blur)="onCategoryDropdownBlur()"
+                  >
+                    <span class="custom-category-selected">
+                      <span class="custom-category-icon-wrap" *ngIf="getCategoryImageUrl(addSoundCategory)">
+                        <img [src]="getCategoryImageUrl(addSoundCategory)" alt="" class="custom-category-icon-img" #selCatImg (error)="selCatImg.style.display='none'; selCatImgFallback.style.display='inline-flex'" />
+                        <span #selCatImgFallback class="cat-img-fallback" style="display:none">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </span>
+                      </span>
+                      <span class="custom-category-icon-wrap default-icon" *ngIf="!getCategoryImageUrl(addSoundCategory)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                      </span>
+                      <span class="custom-category-name">{{ addSoundCategory || 'Select category...' }}</span>
+                    </span>
+                    <svg class="custom-category-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+                  </button>
+                  <!-- Dropdown list -->
+                  <ul class="custom-category-list" *ngIf="isCategoryDropdownOpen">
+                    <li
+                      *ngFor="let cat of addSoundCategories"
+                      class="custom-category-option"
+                      [class.selected]="addSoundCategory === cat.name"
+                      [class.is-sub]="!!cat.parentCategory"
+                      (mousedown)="selectCategory(cat.name)"
+                    >
+                      <span class="custom-category-icon-wrap" *ngIf="getCategoryImageUrl(cat.name)">
+                        <img [src]="getCategoryImageUrl(cat.name)" alt="" class="custom-category-icon-img" #catImg (error)="catImg.style.display='none'; catImgFallback.style.display='inline-flex'" />
+                        <span #catImgFallback class="cat-img-fallback" style="display:none">
+                          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                        </span>
+                      </span>
+                      <span class="custom-category-icon-wrap default-icon" *ngIf="!getCategoryImageUrl(cat.name)">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+                      </span>
+                      <span class="custom-category-name">{{ cat.parentCategory ? '└ ' + cat.name : cat.name }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
 
-        <!-- Error message -->
-        <p *ngIf="addSoundError" class="add-sound-error">{{ addSoundError }}</p>
+            <!-- Error message -->
+            <p *ngIf="addSoundError" class="add-sound-error">{{ addSoundError }}</p>
+          </div>
 
-        <!-- Actions -->
+        </div><!-- /.add-sound-columns -->
+
+        <!-- Actions (full-width footer) -->
         <div class="add-sound-actions">
           <button class="rename-cancel-btn" [class.flash-cancel]="isAddSoundCancelFlashing" (click)="closeAddSoundModal()">Cancel</button>
           <button

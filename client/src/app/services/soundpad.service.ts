@@ -1,6 +1,7 @@
 import { Injectable, NgZone, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject, interval, switchMap, catchError, of, Subject, takeUntil, take } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Sound, ConnectionStatus, CategoryIcon } from '../models/sound.model';
 
 @Injectable({
@@ -65,6 +66,10 @@ export class SoundpadService implements OnDestroy {
     return this.http.post(`${this.apiUrl}/sounds/${index}/play`, { speakersOnly, micOnly }).pipe(
       catchError(error => {
         console.error('Failed to play sound:', error);
+        const body = error?.error;
+        if (body?.soundpadNotRunning) {
+          return of({ error: 'Soundpad is not running', soundpadNotRunning: true });
+        }
         return of({ error: 'Failed to play sound' });
       })
     );
@@ -115,6 +120,15 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  launchSoundpad(): Observable<any> {
+    return this.http.post(`${this.apiUrl}/launch-soundpad`, {}).pipe(
+      catchError(error => {
+        console.error('Failed to launch Soundpad:', error);
+        return of({ error: 'Failed to launch Soundpad' });
+      })
+    );
+  }
+
   refreshSounds(): void {
     this.getSounds().subscribe(sounds => {
       this.sounds$.next(sounds);
@@ -137,7 +151,7 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, title?: string): Observable<any> {
+  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, title?: string, durationSeconds?: number): Observable<any> {
     const formData = new FormData();
     formData.append('soundFile', file);
     formData.append('category', category);
@@ -153,6 +167,9 @@ export class SoundpadService implements OnDestroy {
     // Always send artist and title (even as empty strings) so the server can write them to the SPL tag
     formData.append('artist', artist ?? '');
     formData.append('title', title ?? '');
+    if (durationSeconds !== undefined && durationSeconds > 0) {
+      formData.append('durationSeconds', String(durationSeconds));
+    }
     return this.http.post(`${this.apiUrl}/sounds/add`, formData);
   }
 
@@ -178,5 +195,38 @@ export class SoundpadService implements OnDestroy {
       // Teardown: close the EventSource when the subscriber unsubscribes
       return () => es.close();
     });
+  }
+
+  /**
+   * Fetches audio from a YouTube URL.
+   * Returns an Observable that emits { file: File, title: string, durationSeconds: number }.
+   */
+  fetchYoutubeAudio(url: string): Observable<{ file: File; title: string; durationSeconds: number }> {
+    return this.http.post(`${this.apiUrl}/youtube/fetch`, { url }, {
+      responseType: 'blob',
+      observe: 'response',
+    }).pipe(
+      map(response => {
+        const blob = response.body as Blob;
+        // Extract title from response header
+        const encodedTitle = response.headers.get('X-Video-Title') || '';
+        const title = encodedTitle ? decodeURIComponent(encodedTitle) : 'YouTube Audio';
+        // Extract duration from response header
+        const durationSeconds = parseInt(response.headers.get('X-Video-Duration') || '0', 10) || 0;
+        // Extract filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition') || '';
+        let fileName = 'youtube_audio.mp3';
+        const match = contentDisposition.match(/filename="([^"]+)"/);
+        if (match) {
+          try {
+            fileName = decodeURIComponent(match[1]);
+          } catch {
+            fileName = match[1];
+          }
+        }
+        const file = new File([blob], fileName, { type: 'audio/mpeg' });
+        return { file, title, durationSeconds };
+      })
+    );
   }
 }

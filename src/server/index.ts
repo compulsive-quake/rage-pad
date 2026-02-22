@@ -1,12 +1,32 @@
 import express, { Application, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import soundpadRoutes from './routes';
 
-console.log(`MMMHMM`);
-console.log(`MMMHMM`);
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
+
+// Redirect ytdl-core debug files (e.g. player-script.js) to ./tmp instead of
+// the project root.  The tmp directory is listed in .gitignore.
+const ytdlTmpDir = path.resolve(__dirname, '../../tmp');
+if (!fs.existsSync(ytdlTmpDir)) {
+  fs.mkdirSync(ytdlTmpDir, { recursive: true });
+}
+process.env.YTDL_DEBUG_PATH = ytdlTmpDir;
+
+// Clean up any stale ytdl debug files left in tmp from previous runs.
+try {
+  const staleFiles = fs.readdirSync(ytdlTmpDir).filter(f => f.endsWith('-player-script.js'));
+  for (const f of staleFiles) {
+    try { fs.unlinkSync(path.join(ytdlTmpDir, f)); } catch { /* ignore */ }
+  }
+  if (staleFiles.length > 0) {
+    console.log(`[startup] Cleaned up ${staleFiles.length} stale ytdl debug file(s) from tmp/`);
+  }
+} catch { /* ignore */ }
+
+console.log(`Server running on port ${PORT}`);
 
 // Middleware
 app.use(cors({
@@ -49,10 +69,17 @@ app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🎵 Rage Pad server running on http://localhost:${PORT}`);
   console.log(`📡 API available at http://localhost:${PORT}/api`);
   console.log(`🔗 Soundpad integration ready`);
 });
+
+// Graceful shutdown so nodemon can restart cleanly without EADDRINUSE
+const shutdown = () => {
+  server.close(() => process.exit(0));
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 export default app;

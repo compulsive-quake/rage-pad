@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import SoundpadClient from './soundpad-client';
+import ytdl from '@distube/ytdl-core';
 
 const router: Router = express.Router();
 const soundpadClient = new SoundpadClient();
@@ -133,10 +134,23 @@ router.post('/sounds/:index/play', async (req: Request, res: Response) => {
     if (result.success) {
       res.json({ message: 'Sound playing', data: result.data });
     } else {
-      res.status(500).json({ error: result.error });
+      // Check if the error is due to Soundpad not running (ENOENT pipe error)
+      const isSoundpadNotRunning = result.error?.includes('ENOENT') ||
+        result.error?.includes('sp_remote_control');
+      if (isSoundpadNotRunning) {
+        res.status(503).json({ error: result.error, soundpadNotRunning: true });
+      } else {
+        res.status(500).json({ error: result.error });
+      }
     }
   } catch (error) {
-    res.status(500).json({ error: 'Failed to play sound' });
+    const errMsg = error instanceof Error ? error.message : 'Failed to play sound';
+    const isSoundpadNotRunning = errMsg.includes('ENOENT') || errMsg.includes('sp_remote_control');
+    if (isSoundpadNotRunning) {
+      res.status(503).json({ error: errMsg, soundpadNotRunning: true });
+    } else {
+      res.status(500).json({ error: errMsg });
+    }
   }
 });
 
@@ -211,6 +225,20 @@ router.post('/sounds/:index/rename', async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(500).json({ error: 'Failed to rename sound' });
+  }
+});
+
+// Launch Soundpad if it is not already running
+router.post('/launch-soundpad', async (req: Request, res: Response) => {
+  try {
+    const result = await soundpadClient.launchSoundpad();
+    if (result.success) {
+      res.json({ message: result.data });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to launch Soundpad' });
   }
 });
 
@@ -351,6 +379,11 @@ router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res:
     const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
     const title = typeof req.body.title === 'string' ? req.body.title : '';
 
+    // Optional duration in seconds (provided when the audio was fetched from YouTube)
+    const durationSeconds = req.body.durationSeconds !== undefined
+      ? parseInt(req.body.durationSeconds as string, 10) || 0
+      : 0;
+
     // Suppress SSE notifications while we kill/restart Soundpad.
     // The file watcher would otherwise fire before Soundpad is back up,
     // causing the client to hit a dead pipe and get an empty sound list.
@@ -362,7 +395,8 @@ router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res:
       categoryName,
       displayName,
       artist,
-      title
+      title,
+      durationSeconds
     );
 
     // Re-enable SSE and notify clients now that Soundpad is ready
@@ -401,6 +435,108 @@ router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res:
     }
 
     res.status(500).json({ error: 'Failed to add sound' });
+  }
+});
+
+/**
+ * Normalise a YouTube URL so that Shorts links and other alternate formats
+ * are converted to the canonical https://www.youtube.com/watch?v=VIDEO_ID
+ * form that ytdl-core handles reliably.
+ *
+ * Handles:
+ *   https://www.youtube.com/shorts/VIDEO_ID[?...]
+ *   https://youtube.com/shorts/VIDEO_ID[?...]
+ *   https://youtu.be/VIDEO_ID[?...]          (already handled by ytdl, but normalised anyway)
+ */
+function normaliseYouTubeUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.replace(/^www\./, '');
+
+    // Shorts: youtube.com/shorts/VIDEO_ID
+    if ((host === 'youtube.com' || host === 'm.youtube.com') && u.pathname.startsWith('/shorts/')) {
+      const videoId = u.pathname.split('/shorts/')[1]?.split('/')[0];
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    }
+
+    // youtu.be/VIDEO_ID
+    if (host === 'youtu.be') {
+      const videoId = u.pathname.replace(/^\//, '').split('/')[0];
+      if (videoId) {
+        return `https://www.youtube.com/watch?v=${videoId}`;
+      }
+    }
+  } catch {
+    // Not a valid URL – return as-is and let ytdl validate it
+  }
+  return raw;
+}
+
+// YouTube audio fetch endpoint
+router.post('/youtube/fetch', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'YouTube URL is required' });
+      return;
+    }
+
+    // Normalise Shorts / youtu.be links → canonical watch?v= URL
+    const normalisedUrl = normaliseYouTubeUrl(url.trim());
+
+    // Validate it's a YouTube URL
+    if (!ytdl.validateURL(normalisedUrl)) {
+      res.status(400).json({ error: 'Invalid YouTube URL' });
+      return;
+    }
+
+    // Get video info for the title and duration
+    const info = await ytdl.getInfo(normalisedUrl);
+    const videoTitle = info.videoDetails.title;
+    const videoDurationSeconds = parseInt(info.videoDetails.lengthSeconds, 10) || 0;
+
+    // Sanitize title for use as filename
+    const safeTitle = videoTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'youtube_audio';
+
+    // Write audio to a temp file
+    const tmpDir = path.join(os.tmpdir(), 'rage-pad-uploads');
+    if (!fs.existsSync(tmpDir)) {
+      fs.mkdirSync(tmpDir, { recursive: true });
+    }
+    const tmpFilePath = path.join(tmpDir, `yt_${Date.now()}_${safeTitle}.mp3`);
+
+    await new Promise<void>((resolve, reject) => {
+      const audioStream = ytdl(normalisedUrl, {
+        quality: 'highestaudio',
+        filter: 'audioonly',
+      });
+
+      const writeStream = fs.createWriteStream(tmpFilePath);
+      audioStream.pipe(writeStream);
+      audioStream.on('error', reject);
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
+
+    // Read the file and send it as a response with the title in a header
+    const fileBuffer = fs.readFileSync(tmpFilePath);
+    const fileName = `${safeTitle}.mp3`;
+
+    // Clean up temp file
+    try { fs.unlinkSync(tmpFilePath); } catch { /* ignore */ }
+
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+    res.setHeader('X-Video-Title', encodeURIComponent(videoTitle));
+    res.setHeader('X-Video-Duration', String(videoDurationSeconds));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Video-Title, X-Video-Duration, Content-Disposition');
+    res.send(fileBuffer);
+  } catch (error) {
+    console.error('[youtube/fetch] Error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to fetch YouTube audio';
+    res.status(500).json({ error: message });
   }
 });
 

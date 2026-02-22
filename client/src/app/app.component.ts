@@ -56,9 +56,36 @@ export class AppComponent implements OnInit, OnDestroy {
   isDragOver = false;
   isAddSoundCancelFlashing = false;
 
+  // YouTube URL input state
+  youtubeUrl = '';
+  isFetchingYoutube = false;
+  youtubeFetchError = '';
+  /** Duration in seconds returned by the YouTube fetch endpoint (0 = unknown) */
+  youtubeDurationSeconds = 0;
+
+  // Artist autocomplete state
+  showArtistSuggestions = false;
+  filteredArtistSuggestions: string[] = [];
+
+  // Category dropdown state
+  isCategoryDropdownOpen = false;
+
   // Config-watch (soundlist.spl change detection) toggle
   configWatchEnabled: boolean;
   private configWatchSub: Subscription | null = null;
+
+  // Auto-launch Soundpad toggle
+  autoLaunchEnabled: boolean;
+  /** True while a launch attempt is in progress */
+  isLaunching = false;
+  /** Number of consecutive failed launch attempts */
+  private launchFailCount = 0;
+  /** Seconds remaining until the next auto-launch retry */
+  launchRetryCountdown = 0;
+  /** Error message shown in the footer when auto-launch fails */
+  launchErrorMessage = '';
+  private launchRetryTimer: any = null;
+  private launchCountdownTimer: any = null;
 
   // Playback progress tracking
   playbackProgress = 0;
@@ -123,6 +150,10 @@ export class AppComponent implements OnInit, OnDestroy {
     // Restore config-watch preference from localStorage (default: disabled)
     const stored = localStorage.getItem('configWatchEnabled');
     this.configWatchEnabled = stored === 'true';
+
+    // Restore auto-launch preference from localStorage (default: enabled)
+    const storedAutoLaunch = localStorage.getItem('autoLaunchEnabled');
+    this.autoLaunchEnabled = storedAutoLaunch === null ? true : storedAutoLaunch === 'true';
   }
 
   ngOnInit(): void {
@@ -130,7 +161,16 @@ export class AppComponent implements OnInit, OnDestroy {
     this.soundpadService.getConnectionStatus()
       .pipe(takeUntil(this.destroy$))
       .subscribe((status: ConnectionStatus) => {
+        const wasConnected = this.isConnected;
         this.isConnected = status.connected;
+
+        if (status.connected) {
+          // Soundpad is now connected – clear any pending retry state
+          this.clearLaunchRetry();
+        } else if (!status.connected && this.autoLaunchEnabled && !this.isLaunching && !this.launchRetryTimer) {
+          // Not connected – trigger auto-launch (initial check or reconnect scenario)
+          this.attemptAutoLaunch();
+        }
       });
 
     // Setup search with debounce
@@ -182,8 +222,117 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  // ── Auto-launch Soundpad ─────────────────────────────────────────────────
+
+  /** Toggle auto-launch on/off and persist the preference. */
+  toggleAutoLaunch(): void {
+    this.autoLaunchEnabled = !this.autoLaunchEnabled;
+    localStorage.setItem('autoLaunchEnabled', String(this.autoLaunchEnabled));
+
+    if (!this.autoLaunchEnabled) {
+      // User turned off auto-launch – cancel any pending retry
+      this.clearLaunchRetry();
+    } else if (!this.isConnected && !this.isLaunching) {
+      // User turned on auto-launch while Soundpad is not connected – try immediately
+      this.attemptAutoLaunch();
+    }
+  }
+
+  /**
+   * Attempt to launch Soundpad.  On failure, schedule a retry with exponential
+   * back-off (capped at 60 s) and show a countdown in the footer.
+   */
+  attemptAutoLaunch(): void {
+    if (this.isLaunching || this.isConnected) return;
+
+    this.isLaunching = true;
+    this.launchErrorMessage = '';
+    this.launchRetryCountdown = 0;
+    this.clearLaunchRetry();
+
+    this.soundpadService.launchSoundpad()
+      .pipe(take(1))
+      .subscribe({
+        next: (result: any) => {
+          this.isLaunching = false;
+          if (result?.error) {
+            this.onLaunchFailed(result.error);
+          } else {
+            // Success – the connection-status subscription will clear retry state
+            this.launchFailCount = 0;
+            this.launchErrorMessage = '';
+            // Trigger a connection check to update status quickly
+            this.soundpadService.checkConnection().pipe(take(1)).subscribe(status => {
+              this.isConnected = status.connected;
+              if (status.connected) {
+                this.clearLaunchRetry();
+                this.loadSounds();
+              }
+            });
+          }
+        },
+        error: (err: any) => {
+          this.isLaunching = false;
+          this.onLaunchFailed(err?.message || 'Failed to launch Soundpad');
+        }
+      });
+  }
+
+  /** Called when a launch attempt fails. Schedules a retry with back-off. */
+  private onLaunchFailed(errorMsg: string): void {
+    this.launchFailCount++;
+
+    // Exponential back-off: 5s, 10s, 20s, 40s, 60s (capped)
+    const baseDelay = 5;
+    const delaySec = Math.min(baseDelay * Math.pow(2, this.launchFailCount - 1), 60);
+
+    this.launchErrorMessage = `Failed to start Soundpad: ${errorMsg}`;
+    this.launchRetryCountdown = delaySec;
+
+    if (!this.autoLaunchEnabled) return;
+
+    // Countdown timer (ticks every second)
+    this.launchCountdownTimer = setInterval(() => {
+      this.launchRetryCountdown = Math.max(this.launchRetryCountdown - 1, 0);
+      this.cdr.detectChanges();
+    }, 1000);
+
+    // Retry timer
+    this.launchRetryTimer = setTimeout(() => {
+      if (this.launchCountdownTimer) {
+        clearInterval(this.launchCountdownTimer);
+        this.launchCountdownTimer = null;
+      }
+      if (this.autoLaunchEnabled && !this.isConnected) {
+        this.attemptAutoLaunch();
+      }
+    }, delaySec * 1000);
+  }
+
+  /** Cancel any pending retry timers and reset launch state. */
+  private clearLaunchRetry(): void {
+    if (this.launchRetryTimer) {
+      clearTimeout(this.launchRetryTimer);
+      this.launchRetryTimer = null;
+    }
+    if (this.launchCountdownTimer) {
+      clearInterval(this.launchCountdownTimer);
+      this.launchCountdownTimer = null;
+    }
+    this.launchRetryCountdown = 0;
+    this.launchErrorMessage = '';
+    this.isLaunching = false;
+  }
+
+  /** Manual "Start Soundpad" button handler (used when auto-launch is off). */
+  manualLaunchSoundpad(): void {
+    this.launchFailCount = 0;
+    this.attemptAutoLaunch();
+  }
+
   ngOnDestroy(): void {
     this.stopConfigWatch();
+    this.clearLaunchRetry();
     this.destroy$.next();
     this.destroy$.complete();
     if (this.playbackTimer) {
@@ -326,7 +475,22 @@ export class AppComponent implements OnInit, OnDestroy {
     this.soundpadService.playSound(sound.index, this.playbackMode === 'speakers', this.playbackMode === 'mic')
       .pipe(take(1))
       .subscribe({
-        next: () => {
+        next: (result: any) => {
+          if (result?.soundpadNotRunning) {
+            // Soundpad is not running – update connection state and handle accordingly
+            this.isConnected = false;
+            if (this.autoLaunchEnabled && !this.isLaunching) {
+              this.attemptAutoLaunch();
+            } else if (!this.autoLaunchEnabled) {
+              // Show error in footer with Start Soundpad button
+              this.launchErrorMessage = 'Soundpad is not running';
+            }
+            return;
+          }
+          if (result?.error) {
+            console.error('Failed to play sound:', result.error);
+            return;
+          }
           this.currentlyPlayingIndex = sound.index;
           this.isActuallyPlaying = true;
           this.isPaused = false;
@@ -522,6 +686,13 @@ export class AppComponent implements OnInit, OnDestroy {
     this.addSoundError = '';
     this.isDragOver = false;
     this.isAddingSound = false;
+    this.showArtistSuggestions = false;
+    this.filteredArtistSuggestions = [];
+    this.isCategoryDropdownOpen = false;
+    this.youtubeUrl = '';
+    this.isFetchingYoutube = false;
+    this.youtubeFetchError = '';
+    this.youtubeDurationSeconds = 0;
     this.resetPreviewState();
 
     // Fetch categories from the server so the dropdown is always fresh
@@ -559,8 +730,88 @@ export class AppComponent implements OnInit, OnDestroy {
     this.addSoundCategory = '';
     this.addSoundError = '';
     this.isDragOver = false;
+    this.showArtistSuggestions = false;
+    this.filteredArtistSuggestions = [];
+    this.isCategoryDropdownOpen = false;
+    this.youtubeUrl = '';
+    this.isFetchingYoutube = false;
+    this.youtubeFetchError = '';
+    this.youtubeDurationSeconds = 0;
     this.destroyPreviewAudio();
     this.resetPreviewState();
+  }
+
+  /** Returns a sorted, deduplicated list of all non-empty artists from existing sounds. */
+  get allArtists(): string[] {
+    const set = new Set<string>();
+    this.sounds.forEach(s => {
+      if (s.artist && s.artist.trim()) {
+        set.add(s.artist.trim());
+      }
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }
+
+  onArtistInput(): void {
+    const query = this.addSoundArtist.trim().toLowerCase();
+    if (!query) {
+      this.filteredArtistSuggestions = this.allArtists;
+    } else {
+      this.filteredArtistSuggestions = this.allArtists.filter(a =>
+        a.toLowerCase().includes(query)
+      );
+    }
+    this.showArtistSuggestions = this.filteredArtistSuggestions.length > 0;
+  }
+
+  onArtistFocus(): void {
+    const query = this.addSoundArtist.trim().toLowerCase();
+    if (!query) {
+      this.filteredArtistSuggestions = this.allArtists;
+    } else {
+      this.filteredArtistSuggestions = this.allArtists.filter(a =>
+        a.toLowerCase().includes(query)
+      );
+    }
+    this.showArtistSuggestions = this.filteredArtistSuggestions.length > 0;
+  }
+
+  onArtistBlur(): void {
+    // Delay hiding so a click on a suggestion registers first
+    setTimeout(() => {
+      this.showArtistSuggestions = false;
+    }, 150);
+  }
+
+  selectArtistSuggestion(artist: string): void {
+    this.addSoundArtist = artist;
+    this.showArtistSuggestions = false;
+  }
+
+  /** Returns the resolved image URL for a category name (from categoryIconsMap). */
+  getCategoryImageUrl(categoryName: string): string {
+    const icon = this.categoryIconsMap.get(categoryName);
+    return this.resolveCategoryImageUrl(icon);
+  }
+
+  toggleCategoryDropdown(): void {
+    this.isCategoryDropdownOpen = !this.isCategoryDropdownOpen;
+  }
+
+  selectCategory(categoryName: string): void {
+    this.addSoundCategory = categoryName;
+    this.isCategoryDropdownOpen = false;
+  }
+
+  closeCategoryDropdown(): void {
+    this.isCategoryDropdownOpen = false;
+  }
+
+  onCategoryDropdownBlur(): void {
+    // Delay so mousedown on an option fires before the dropdown closes
+    setTimeout(() => {
+      this.isCategoryDropdownOpen = false;
+    }, 150);
   }
 
   onDragOver(event: DragEvent): void {
@@ -621,8 +872,41 @@ export class AppComponent implements OnInit, OnDestroy {
     this.addSoundName = '';
     this.addSoundArtist = '';
     this.addSoundTitle = '';
+    this.youtubeUrl = '';
+    this.youtubeFetchError = '';
+    this.youtubeDurationSeconds = 0;
     this.destroyPreviewAudio();
     this.resetPreviewState();
+  }
+
+  fetchFromYoutube(): void {
+    const url = this.youtubeUrl.trim();
+    if (!url || this.isFetchingYoutube) return;
+
+    this.isFetchingYoutube = true;
+    this.youtubeFetchError = '';
+    this.addSoundError = '';
+
+    this.soundpadService.fetchYoutubeAudio(url)
+      .pipe(take(1))
+      .subscribe({
+        next: ({ file, title, durationSeconds }) => {
+          this.isFetchingYoutube = false;
+          this.addSoundFile = file;
+          // Store the duration so it can be written to the SPL tag
+          this.youtubeDurationSeconds = durationSeconds;
+          // Auto-populate the title and tag from the YouTube video title
+          this.addSoundTitle = title;
+          this.addSoundName = title;
+          // Load the audio into the waveform/crop tool
+          this.loadAudioPreview(file);
+        },
+        error: (err) => {
+          this.isFetchingYoutube = false;
+          const errMsg = err?.error?.error || err?.message || 'Failed to fetch audio from YouTube.';
+          this.youtubeFetchError = errMsg;
+        }
+      });
   }
 
   formatFileSize(bytes: number): string {
@@ -659,7 +943,21 @@ export class AppComponent implements OnInit, OnDestroy {
     const cropStartSec = this.cropStart > 0 ? this.cropStart * this.previewDuration : undefined;
     const cropEndSec = this.cropEnd < 1 ? this.cropEnd * this.previewDuration : undefined;
 
-    this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title)
+    // Compute effective duration for the SPL tag:
+    // - If the audio was fetched from YouTube, use the server-provided duration
+    // - Adjust for any crop that was applied
+    // - If the waveform was decoded, use the AudioBuffer duration as a fallback
+    let effectiveDuration = this.youtubeDurationSeconds > 0
+      ? this.youtubeDurationSeconds
+      : (this.previewDuration > 0 ? this.previewDuration : 0);
+    if (effectiveDuration > 0 && (cropStartSec !== undefined || cropEndSec !== undefined)) {
+      const start = cropStartSec ?? 0;
+      const end = cropEndSec ?? effectiveDuration;
+      effectiveDuration = Math.max(end - start, 0);
+    }
+    const durationSeconds = effectiveDuration > 0 ? Math.round(effectiveDuration) : undefined;
+
+    this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds)
       .pipe(take(1))
       .subscribe({
         next: () => {

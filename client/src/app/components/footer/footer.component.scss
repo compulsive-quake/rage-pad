@@ -219,3 +219,111 @@
     gap: 1rem;
   }
 }
+
+// ── Auto-launch status bar ────────────────────────────────────────────────
+
+.launch-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.4rem 1.5rem;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  min-height: 36px;
+  gap: 0.75rem;
+  font-size: 0.82rem;
+}
+
+// Launching spinner state
+.launch-status-launching {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.7);
+
+  .launch-icon {
+    width: 16px;
+    height: 16px;
+    color: #9b59b6;
+    flex-shrink: 0;
+  }
+}
+
+// Error + countdown state
+.launch-status-error {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+
+  .launch-error-icon {
+    width: 16px;
+    height: 16px;
+    color: #e74c3c;
+    flex-shrink: 0;
+  }
+
+  .launch-error-text {
+    color: #e74c3c;
+    font-weight: 500;
+  }
+
+  .launch-retry-countdown {
+    color: rgba(255, 255, 255, 0.5);
+    font-style: italic;
+    white-space: nowrap;
+  }
+}
+
+// Manual start button state
+.launch-status-manual {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.manual-launch-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 1rem;
+  background: rgba(155, 89, 182, 0.25);
+  border: 1px solid rgba(155, 89, 182, 0.5);
+  border-radius: 6px;
+  color: #c39bd3;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    color: #c39bd3;
+  }
+
+  &:hover {
+    background: rgba(155, 89, 182, 0.4);
+    border-color: rgba(155, 89, 182, 0.8);
+    color: #d7bde2;
+
+    svg {
+      color: #d7bde2;
+    }
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+}
+
+// Spinning animation (reused from app component)
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

@@ -6,11 +6,32 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
 const routes_1 = __importDefault(require("./routes"));
-console.log(`MMMHMM`);
-console.log(`MMMHMM`);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
+// Redirect ytdl-core debug files (e.g. player-script.js) to ./tmp instead of
+// the project root.  The tmp directory is listed in .gitignore.
+const ytdlTmpDir = path_1.default.resolve(__dirname, '../../tmp');
+if (!fs_1.default.existsSync(ytdlTmpDir)) {
+    fs_1.default.mkdirSync(ytdlTmpDir, { recursive: true });
+}
+process.env.YTDL_DEBUG_PATH = ytdlTmpDir;
+// Clean up any stale ytdl debug files left in tmp from previous runs.
+try {
+    const staleFiles = fs_1.default.readdirSync(ytdlTmpDir).filter(f => f.endsWith('-player-script.js'));
+    for (const f of staleFiles) {
+        try {
+            fs_1.default.unlinkSync(path_1.default.join(ytdlTmpDir, f));
+        }
+        catch { /* ignore */ }
+    }
+    if (staleFiles.length > 0) {
+        console.log(`[startup] Cleaned up ${staleFiles.length} stale ytdl debug file(s) from tmp/`);
+    }
+}
+catch { /* ignore */ }
+console.log(`Server running on port ${PORT}`);
 // Middleware
 app.use((0, cors_1.default)({
     origin: ['http://localhost:4200', 'http://localhost:3000'],
@@ -47,10 +68,16 @@ app.use((err, req, res, next) => {
     });
 });
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`🎵 Rage Pad server running on http://localhost:${PORT}`);
     console.log(`📡 API available at http://localhost:${PORT}/api`);
     console.log(`🔗 Soundpad integration ready`);
 });
+// Graceful shutdown so nodemon can restart cleanly without EADDRINUSE
+const shutdown = () => {
+    server.close(() => process.exit(0));
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 exports.default = app;
 //# sourceMappingURL=index.js.map

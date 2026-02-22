@@ -453,7 +453,7 @@ export class SoundpadClient {
    * @param artist        Optional artist metadata to write into the SPL tag
    * @param title         Optional title metadata to write into the SPL tag
    */
-  async addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist = '', title = ''): Promise<SoundpadResponse> {
+  async addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist = '', title = '', durationSeconds = 0): Promise<SoundpadResponse> {
     try {
       if (!fs.existsSync(this.soundlistPath)) {
         return { success: false, error: 'Soundlist file not found' };
@@ -518,8 +518,13 @@ export class SoundpadClient {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 
+      // Format duration as MM:SS for the SPL tag (Soundpad uses this format)
+      const durationAttr = durationSeconds > 0
+        ? ` duration="${Math.floor(durationSeconds / 60)}:${String(Math.floor(durationSeconds % 60)).padStart(2, '0')}"`
+        : '';
+
       // Build the new <Sound /> tag to insert into the Soundlist section
-      const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}" artist="${escapedArtist}" title="${escapedTitle}"/>`;
+      const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}" artist="${escapedArtist}" title="${escapedTitle}"${durationAttr}/>`;
 
       // --- Insert the new sound into the flat <Soundlist> section ---
       // The SPL file structure is:
@@ -784,6 +789,51 @@ export class SoundpadClient {
     await this.waitForSoundpadReady(15000, 500);
 
     return { success: true, data: 'Soundpad restarting' };
+  }
+
+  /**
+   * Launch Soundpad if it is not already running.
+   * Does NOT kill an existing instance first – this is a "start if not running" helper.
+   * Returns success:true once Soundpad is detected on the named pipe (or was already running).
+   */
+  async launchSoundpad(): Promise<SoundpadResponse> {
+    try {
+      // Check if already running
+      const alreadyConnected = await this.quickConnectionCheck();
+      if (alreadyConnected) {
+        this.cachedConnectionState = true;
+        this.lastConnectionCheck = Date.now();
+        return { success: true, data: 'Soundpad is already running' };
+      }
+
+      const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+
+      // Check if the executable exists
+      if (!fs.existsSync(soundpadPath)) {
+        return { success: false, error: `Soundpad executable not found at ${soundpadPath}` };
+      }
+
+      spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+      console.log('[launchSoundpad] Soundpad launched – waiting for pipe…');
+
+      // Wait up to 15 s for Soundpad to become ready
+      await this.waitForSoundpadReady(15000, 500);
+
+      // Final check
+      const ready = await this.quickConnectionCheck();
+      if (ready) {
+        this.cachedConnectionState = true;
+        this.lastConnectionCheck = Date.now();
+        return { success: true, data: 'Soundpad launched successfully' };
+      }
+
+      return { success: false, error: 'Soundpad launched but did not become ready in time' };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to launch Soundpad'
+      };
+    }
   }
 
   /**
