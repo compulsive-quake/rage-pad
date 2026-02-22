@@ -131,6 +131,22 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  getCategories(): Observable<{ name: string; parentCategory: string }[]> {
+    return this.http.get<{ name: string; parentCategory: string }[]>(`${this.apiUrl}/categories`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  addSound(file: File, category: string, displayName?: string): Observable<any> {
+    const formData = new FormData();
+    formData.append('soundFile', file);
+    formData.append('category', category);
+    if (displayName) {
+      formData.append('displayName', displayName);
+    }
+    return this.http.post(`${this.apiUrl}/sounds/add`, formData);
+  }
+
   /**
    * Returns an Observable that emits once every time the server detects a
    * change to soundlist.spl.  The Observable completes when the caller

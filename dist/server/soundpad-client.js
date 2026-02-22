@@ -257,23 +257,78 @@ class SoundpadClient {
             };
         }
     }
+    /**
+     * Reliably kill Soundpad and wait until the process is fully gone.
+     *
+     * Strategy:
+     *   1. Send a graceful WM_CLOSE via `taskkill /IM Soundpad.exe` (no /F).
+     *   2. Poll `tasklist` every 250 ms to check whether the process is still
+     *      running.  Give it up to `gracefulTimeoutMs` (default 6 s) to exit on
+     *      its own.
+     *   3. If it is still alive after the graceful window, force-kill it with
+     *      `taskkill /F /IM Soundpad.exe` and wait another 3 s for the OS to
+     *      clean up the process entry.
+     *   4. Return only once `tasklist` confirms the process is gone (or after the
+     *      combined timeout).
+     */
+    async killSoundpadAndWait(gracefulTimeoutMs = 6000) {
+        const isSoundpadRunning = () => {
+            try {
+                const output = (0, child_process_1.execSync)('tasklist /FI "IMAGENAME eq Soundpad.exe" /NH', {
+                    encoding: 'utf-8',
+                    timeout: 3000,
+                    stdio: ['ignore', 'pipe', 'ignore']
+                });
+                return output.toLowerCase().includes('soundpad.exe');
+            }
+            catch {
+                return false; // tasklist failed – assume not running
+            }
+        };
+        // If Soundpad isn't running at all, nothing to do
+        if (!isSoundpadRunning()) {
+            console.log('[killSoundpad] Soundpad was not running');
+            return;
+        }
+        // Step 1: Graceful close
+        await new Promise((resolve) => {
+            const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
+            gracefulKill.on('close', resolve);
+            gracefulKill.on('error', resolve); // not running – that's fine
+        });
+        // Step 2: Poll until the process disappears or the graceful timeout expires
+        const gracefulDeadline = Date.now() + gracefulTimeoutMs;
+        while (Date.now() < gracefulDeadline) {
+            await new Promise(r => setTimeout(r, 250));
+            if (!isSoundpadRunning()) {
+                console.log(`[killSoundpad] Soundpad exited gracefully after ~${gracefulTimeoutMs - (gracefulDeadline - Date.now())}ms`);
+                return;
+            }
+        }
+        // Step 3: Force-kill if still alive
+        console.warn('[killSoundpad] Soundpad did not exit gracefully – force-killing');
+        await new Promise((resolve) => {
+            const forceKill = (0, child_process_1.spawn)('taskkill', ['/F', '/IM', 'Soundpad.exe'], { stdio: 'ignore' });
+            forceKill.on('close', resolve);
+            forceKill.on('error', resolve);
+        });
+        // Step 4: Wait for the OS to fully remove the process entry (up to 3 s)
+        const forceDeadline = Date.now() + 3000;
+        while (Date.now() < forceDeadline) {
+            await new Promise(r => setTimeout(r, 250));
+            if (!isSoundpadRunning()) {
+                console.log('[killSoundpad] Soundpad force-killed successfully');
+                return;
+            }
+        }
+        console.warn('[killSoundpad] Soundpad process may still be running after force-kill');
+    }
     async restartSoundpad(index, newTitle) {
         if (!fs.existsSync(this.soundlistPath)) {
             return { success: false, error: 'Soundlist file not found' };
         }
-        // Step 1: Gracefully close Soundpad so it releases the soundlist file
-        await new Promise((resolve) => {
-            // Send WM_CLOSE (graceful) first; wait up to 5 s for it to exit
-            const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
-            gracefulKill.on('close', () => {
-                // Give Soundpad a moment to fully exit and flush its files
-                setTimeout(resolve, 2000);
-            });
-            gracefulKill.on('error', () => {
-                // Process may not have been running – continue anyway
-                setTimeout(resolve, 500);
-            });
-        });
+        // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
+        await this.killSoundpadAndWait();
         this.cachedConnectionState = false;
         this.lastConnectionCheck = 0;
         // Step 2: Edit the soundlist.spl XML while Soundpad is closed
@@ -290,6 +345,8 @@ class SoundpadClient {
         // Step 3: Relaunch Soundpad with the updated soundlist
         const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
         (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        // Step 4: Wait for Soundpad to become available via its named pipe
+        await this.waitForSoundpadReady(15000, 500);
         return { success: true, data: `Sound renamed to "${newTitle}" and Soundpad restarting` };
     }
     /**
@@ -338,22 +395,317 @@ class SoundpadClient {
             splContent.slice(target.index + target.match.length);
         return { success: true, content: updatedContent };
     }
+    /**
+     * Add a new sound file to Soundpad.
+     * Since Soundpad has no API for adding files, we must:
+     *   1. Close Soundpad so it releases the soundlist.spl file
+     *   2. Copy the uploaded file to a permanent location
+     *   3. Edit soundlist.spl to add a <Sound> entry in the correct category
+     *   4. Relaunch Soundpad
+     *
+     * @param tempFilePath  Path to the uploaded temp file
+     * @param originalName  Original filename (used as display label fallback)
+     * @param categoryName  Category (or sub-category) name to place the sound in
+     * @param displayName   Optional custom display name provided by the user
+     */
+    async addSound(tempFilePath, originalName, categoryName, displayName) {
+        try {
+            if (!fs.existsSync(this.soundlistPath)) {
+                return { success: false, error: 'Soundlist file not found' };
+            }
+            // Determine permanent storage directory next to soundlist.spl
+            const soundsDir = path.join(path.dirname(this.soundlistPath), 'sounds');
+            if (!fs.existsSync(soundsDir)) {
+                fs.mkdirSync(soundsDir, { recursive: true });
+            }
+            // Build a unique destination filename to avoid collisions
+            const ext = path.extname(originalName);
+            const baseName = path.basename(originalName, ext);
+            let destFileName = originalName;
+            let destPath = path.join(soundsDir, destFileName);
+            let counter = 1;
+            while (fs.existsSync(destPath)) {
+                destFileName = `${baseName} (${counter})${ext}`;
+                destPath = path.join(soundsDir, destFileName);
+                counter++;
+            }
+            // Copy the uploaded temp file to the permanent location
+            fs.copyFileSync(tempFilePath, destPath);
+            // Clean up the temp file
+            try {
+                fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Edit soundlist.spl to add the new sound
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            // Build the display label from the custom name or filename (without extension)
+            const displayLabel = displayName || baseName;
+            const escapedLabel = displayLabel
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const escapedUrl = destPath
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            // Build the new <Sound /> tag to insert into the Soundlist section
+            const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}"/>`;
+            // --- Insert the new sound into the flat <Soundlist> section ---
+            // The SPL file structure is:
+            //   <Soundlist>
+            //     <Sound url="..." .../> <!-- flat list of sound definitions -->
+            //     ...
+            //     <Categories>...</Categories>  <!-- nested inside Soundlist -->
+            //     <Hotbar>...</Hotbar>
+            //   </Soundlist>
+            //
+            // Category references use <Sound id="N"/> where N is a 0-based index
+            // into the flat list of <Sound url="..."/> entries. We must:
+            //   1. Count only <Sound> tags with a url attribute (not id references)
+            //   2. Insert the new sound BEFORE <Categories> (not at end of Soundlist)
+            const categoriesOpenIdx = splContent.indexOf('<Categories>');
+            const soundlistCloseIdx = splContent.lastIndexOf('</Soundlist>');
+            if (soundlistCloseIdx === -1) {
+                // Relaunch Soundpad before returning error
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: 'Could not find </Soundlist> in soundlist.spl' };
+            }
+            // Count only actual sound definitions (those with a url attribute),
+            // NOT the <Sound id="N"/> category references inside <Categories>.
+            // Search the entire <Soundlist> section since sounds may appear after </Categories>.
+            const soundlistOpenIdx = splContent.indexOf('<Soundlist');
+            const soundlistSection = splContent.slice(soundlistOpenIdx, soundlistCloseIdx);
+            const soundUrlTagRegex = /<Sound\s[^>]*url="[^"]*"[^>]*\/>/gi;
+            let existingSoundCount = 0;
+            while (soundUrlTagRegex.exec(soundlistSection) !== null) {
+                existingSoundCount++;
+            }
+            const newSoundId = existingSoundCount;
+            // Insert the new sound tag BEFORE <Categories> (or before </Soundlist> if no categories)
+            const insertIdx = categoriesOpenIdx !== -1 ? categoriesOpenIdx : soundlistCloseIdx;
+            splContent =
+                splContent.slice(0, insertIdx) +
+                    '  ' + newSoundTag + '\n' +
+                    splContent.slice(insertIdx);
+            // Insert the sound reference into the correct category in <Categories>
+            const newSoundRef = `<Sound id="${newSoundId}"/>`;
+            const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+            if (categoriesMatch && categoryName) {
+                const escapedCatName = categoryName
+                    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // Find the category by name – look for <Category ... name="categoryName" ...>
+                // We need to insert the sound ref before the closing </Category> of the matching category.
+                // Handle both parent and sub-categories by finding the LAST occurrence of the category
+                // (sub-categories appear nested inside parents).
+                const catOpenRegex = new RegExp(`<Category\\s[^>]*name="${escapedCatName}"[^>]*>`, 'gi');
+                let lastCatMatch = null;
+                let catMatch;
+                while ((catMatch = catOpenRegex.exec(splContent)) !== null) {
+                    lastCatMatch = catMatch;
+                }
+                if (lastCatMatch) {
+                    // Find the matching </Category> for this opening tag
+                    const afterOpen = lastCatMatch.index + lastCatMatch[0].length;
+                    let depth = 1;
+                    let j = afterOpen;
+                    let closingIdx = -1;
+                    while (j < splContent.length && depth > 0) {
+                        const nextOpen = splContent.indexOf('<Category', j);
+                        const nextClose = splContent.indexOf('</Category>', j);
+                        if (nextClose === -1)
+                            break;
+                        if (nextOpen !== -1 && nextOpen < nextClose) {
+                            // Check if self-closing
+                            const tagEnd = splContent.indexOf('>', nextOpen);
+                            if (tagEnd !== -1 && splContent[tagEnd - 1] !== '/') {
+                                depth++;
+                            }
+                            j = tagEnd + 1;
+                        }
+                        else {
+                            depth--;
+                            if (depth === 0) {
+                                closingIdx = nextClose;
+                            }
+                            j = nextClose + '</Category>'.length;
+                        }
+                    }
+                    if (closingIdx !== -1) {
+                        // Insert the sound reference just before </Category>
+                        splContent =
+                            splContent.slice(0, closingIdx) +
+                                '  ' + newSoundRef + '\n' +
+                                splContent.slice(closingIdx);
+                    }
+                }
+            }
+            // Write the updated soundlist.spl
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Added sound "${displayLabel}" to category "${categoryName}" in soundlist.spl`);
+            // Step 3: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 4: Wait for Soundpad to become available via its named pipe
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound "${displayLabel}" added to "${categoryName}" and Soundpad restarted` };
+        }
+        catch (error) {
+            // Attempt to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch { /* ignore */ }
+            // Clean up temp file on error
+            try {
+                if (fs.existsSync(tempFilePath))
+                    fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to add sound'
+            };
+        }
+    }
+    /**
+     * Get the 0-based sound IDs that belong to a given category in the <Categories> section.
+     * This looks at <Sound id="N"/> references inside the matching <Category> element.
+     */
+    getSoundIdsForCategory(splContent, categoryName) {
+        const ids = [];
+        const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+        if (!categoriesMatch)
+            return ids;
+        const escapedCatName = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Find the category by name
+        const catOpenRegex = new RegExp(`<Category\\s[^>]*name="${escapedCatName}"[^>]*>`, 'gi');
+        let lastCatMatch = null;
+        let catMatch;
+        while ((catMatch = catOpenRegex.exec(splContent)) !== null) {
+            lastCatMatch = catMatch;
+        }
+        if (!lastCatMatch)
+            return ids;
+        // Find the matching </Category> for this opening tag
+        const afterOpen = lastCatMatch.index + lastCatMatch[0].length;
+        let depth = 1;
+        let j = afterOpen;
+        let closingIdx = -1;
+        while (j < splContent.length && depth > 0) {
+            const nextOpen = splContent.indexOf('<Category', j);
+            const nextClose = splContent.indexOf('</Category>', j);
+            if (nextClose === -1)
+                break;
+            if (nextOpen !== -1 && nextOpen < nextClose) {
+                const tagEnd = splContent.indexOf('>', nextOpen);
+                if (tagEnd !== -1 && splContent[tagEnd - 1] !== '/') {
+                    depth++;
+                }
+                j = tagEnd + 1;
+            }
+            else {
+                depth--;
+                if (depth === 0) {
+                    closingIdx = nextClose;
+                }
+                j = nextClose + '</Category>'.length;
+            }
+        }
+        if (closingIdx === -1)
+            return ids;
+        // Extract the content of this category (excluding nested sub-categories)
+        const categoryContent = splContent.slice(afterOpen, closingIdx);
+        const contentWithoutSubCategories = this.removeNestedCategories(categoryContent);
+        // Find all <Sound id="N"/> references
+        const soundIdRegex = /<Sound\s+id="(\d+)"\s*\/>/gi;
+        let m;
+        while ((m = soundIdRegex.exec(contentWithoutSubCategories)) !== null) {
+            ids.push(parseInt(m[1], 10));
+        }
+        return ids;
+    }
+    /**
+     * Get the list of categories and sub-categories from soundlist.spl.
+     * Returns a flat list of { name, parentCategory } objects.
+     */
+    getCategoriesList() {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return [];
+        }
+        const xmlContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+        const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(xmlContent);
+        if (!categoriesMatch) {
+            return [];
+        }
+        const result = [];
+        this.collectCategories(categoriesMatch[1], '', result);
+        return result;
+    }
+    /**
+     * Recursively collect category names from the <Categories> XML section.
+     */
+    collectCategories(xmlContent, parentName, result) {
+        const topLevel = this.extractTopLevelCategories(xmlContent);
+        for (const { attrs, content } of topLevel) {
+            const hidden = this.extractAttribute(attrs, 'hidden');
+            if (hidden === 'true')
+                continue;
+            const name = this.extractAttribute(attrs, 'name');
+            if (!name)
+                continue;
+            result.push({ name, parentCategory: parentName });
+            // Recurse into sub-categories
+            if (/<Category\s/i.test(content)) {
+                this.collectCategories(content, name, result);
+            }
+        }
+    }
     async restartSoundpadOnly() {
-        // Gracefully close Soundpad, then relaunch it
-        await new Promise((resolve) => {
-            const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
-            gracefulKill.on('close', () => {
-                setTimeout(resolve, 2000);
-            });
-            gracefulKill.on('error', () => {
-                setTimeout(resolve, 500);
-            });
-        });
+        // Kill Soundpad and wait until it is fully gone, then relaunch it
+        await this.killSoundpadAndWait();
         this.cachedConnectionState = false;
         this.lastConnectionCheck = 0;
         const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
         (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        // Wait for Soundpad to become available via its named pipe
+        await this.waitForSoundpadReady(15000, 500);
         return { success: true, data: 'Soundpad restarting' };
+    }
+    /**
+     * Poll the Soundpad named pipe until it responds, or until the timeout expires.
+     * This is used after relaunching Soundpad to ensure it is fully ready before
+     * the server returns a response to the client.
+     *
+     * @param timeoutMs  Maximum time to wait (default 15 000 ms)
+     * @param intervalMs Polling interval (default 500 ms)
+     */
+    async waitForSoundpadReady(timeoutMs = 15000, intervalMs = 500) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+            try {
+                const ready = await this.quickConnectionCheck();
+                if (ready) {
+                    // Reset connection cache so subsequent calls see the fresh state
+                    this.cachedConnectionState = true;
+                    this.lastConnectionCheck = Date.now();
+                    console.log(`[addSound] Soundpad ready after ${Date.now() - start}ms`);
+                    return;
+                }
+            }
+            catch {
+                // ignore – Soundpad not ready yet
+            }
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+        console.warn(`[addSound] Soundpad did not become ready within ${timeoutMs}ms`);
     }
     async isConnected() {
         const now = Date.now();

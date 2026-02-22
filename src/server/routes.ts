@@ -1,4 +1,5 @@
 import express, { Request, Response, Router } from 'express';
+import multer from 'multer';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -6,6 +7,24 @@ import SoundpadClient from './soundpad-client';
 
 const router: Router = express.Router();
 const soundpadClient = new SoundpadClient();
+
+// --- Multer setup for file uploads ---
+const ALLOWED_AUDIO_EXTENSIONS = [
+  '.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'
+];
+
+const upload = multer({
+  dest: path.join(os.tmpdir(), 'rage-pad-uploads'),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB max
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ALLOWED_AUDIO_EXTENSIONS.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Unsupported file type: ${ext}. Allowed: ${ALLOWED_AUDIO_EXTENSIONS.join(', ')}`));
+    }
+  }
+});
 
 // --- SSE config-watch setup ---
 const soundlistPath = path.join(
@@ -18,6 +37,18 @@ const soundlistPath = path.join(
 const sseClients = new Set<Response>();
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * When true, the file-system watcher will NOT broadcast SSE reload events.
+ * This is set during operations that kill Soundpad, edit soundlist.spl, and
+ * relaunch Soundpad.  Without this guard the watcher fires as soon as the
+ * file is written – before Soundpad is back up – causing the client to call
+ * GetSoundlist() against a dead pipe and receive an empty/error response.
+ *
+ * The operation that sets this flag is responsible for calling
+ * notifySseClients() explicitly once Soundpad is confirmed ready.
+ */
+let sseSuppressed = false;
 
 function notifySseClients(): void {
   for (const client of sseClients) {
@@ -32,6 +63,10 @@ if (fs.existsSync(soundlistPath)) {
       // Debounce: Soundpad may write the file multiple times in quick succession
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
+        if (sseSuppressed) {
+          console.log('[config-watch] soundlist.spl changed – SSE suppressed (operation in progress)');
+          return;
+        }
         console.log('[config-watch] soundlist.spl changed – notifying clients');
         notifySseClients();
       }, 300);
@@ -192,9 +227,15 @@ router.post('/restart', async (req: Request, res: Response) => {
       return;
     }
 
+    // Suppress SSE while Soundpad is being restarted
+    sseSuppressed = true;
+
     if (hasRename) {
       const result = await soundpadClient.restartSoundpad(index as number, (title as string).trim());
+      sseSuppressed = false;
       if (result.success) {
+        console.log('[restart] Soundpad restarted with rename – notifying SSE clients');
+        notifySseClients();
         res.json({ message: 'Sound renamed and Soundpad restarting', data: result.data });
       } else {
         res.status(500).json({ error: result.error });
@@ -202,13 +243,17 @@ router.post('/restart', async (req: Request, res: Response) => {
     } else {
       // Plain restart without rename
       const result = await soundpadClient.restartSoundpadOnly();
+      sseSuppressed = false;
       if (result.success) {
+        console.log('[restart] Soundpad restarted – notifying SSE clients');
+        notifySseClients();
         res.json({ message: 'Soundpad restarting', data: result.data });
       } else {
         res.status(500).json({ error: result.error });
       }
     }
   } catch (error) {
+    sseSuppressed = false;
     res.status(500).json({ error: 'Failed to restart Soundpad' });
   }
 });
@@ -269,6 +314,87 @@ router.get('/category-icons', async (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(500).json({ error: 'Failed to get category icons' });
+  }
+});
+
+// Get categories list (for add-sound modal dropdown)
+router.get('/categories', async (req: Request, res: Response) => {
+  try {
+    const categories = soundpadClient.getCategoriesList();
+    res.json(categories);
+  } catch (error) {
+    console.error('Error getting categories:', error);
+    res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+// Add a new sound file to Soundpad
+router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ error: 'No sound file uploaded' });
+      return;
+    }
+
+    const categoryName = req.body.category as string;
+    if (!categoryName) {
+      // Clean up temp file
+      try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+      res.status(400).json({ error: 'Category name is required' });
+      return;
+    }
+
+    // Optional custom display name provided by the user
+    const displayName = (req.body.displayName as string | undefined)?.trim() || undefined;
+
+    // Suppress SSE notifications while we kill/restart Soundpad.
+    // The file watcher would otherwise fire before Soundpad is back up,
+    // causing the client to hit a dead pipe and get an empty sound list.
+    sseSuppressed = true;
+
+    const result = await soundpadClient.addSound(
+      req.file.path,
+      req.file.originalname,
+      categoryName,
+      displayName
+    );
+
+    // Re-enable SSE and notify clients now that Soundpad is ready
+    sseSuppressed = false;
+
+    if (result.success) {
+      // Notify all SSE clients so they refresh their sound list
+      console.log('[sounds/add] Sound added successfully – notifying SSE clients');
+      notifySseClients();
+      res.json({ message: result.data });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    // Always re-enable SSE on error
+    sseSuppressed = false;
+
+    // Clean up temp file on error
+    if (req.file) {
+      try { fs.unlinkSync(req.file.path); } catch { /* ignore */ }
+    }
+
+    // Handle multer errors specifically
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        res.status(413).json({ error: 'File too large. Maximum size is 100 MB.' });
+        return;
+      }
+      res.status(400).json({ error: `Upload error: ${error.message}` });
+      return;
+    }
+
+    if (error instanceof Error) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    res.status(500).json({ error: 'Failed to add sound' });
   }
 });
 

@@ -1,0 +1,111 @@
+<main class="main-content" #mainContent>
+  <!-- Category Nav -->
+  <nav class="category-nav" *ngIf="!isLoading && categories.length > 0">
+    <ul class="category-nav-list" #categoryNavList>
+      <li
+        *ngFor="let category of categories; trackBy: trackByCategory"
+        class="category-nav-item"
+        [class.active]="activeCategory === category.name"
+        (click)="scrollToCategory(category.name)"
+      >
+        {{ category.name }}
+      </li>
+    </ul>
+  </nav>
+
+  <div class="main-content-inner">
+
+    <!-- Sound Grid -->
+    <section class="sounds-section">
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="isLoading">
+      <div class="spinner"></div>
+      <p>Loading sounds...</p>
+    </div>
+
+    <!-- Empty State -->
+    <div class="empty-state" *ngIf="!isLoading && filteredSounds.length === 0 && !searchQuery">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+      </svg>
+      <h2>No Sounds Found</h2>
+      <p>Make sure Soundpad is running and has sounds loaded.</p>
+    </div>
+
+    <!-- No Results State -->
+    <div class="empty-state" *ngIf="!isLoading && filteredSounds.length === 0 && searchQuery">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <circle cx="11" cy="11" r="8" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M21 21l-4.35-4.35" fill="none" stroke="currentColor" stroke-width="2"/>
+      </svg>
+      <h2>No Results</h2>
+      <p>No sounds match "{{ searchQuery }}"</p>
+    </div>
+
+    <!-- Sound Grid - Centered -->
+    <div class="sounds-grid-wrapper" *ngIf="!isLoading && filteredSounds.length > 0">
+      <div class="categories-container" #categoriesContainer>
+        <div class="category-section"
+             *ngFor="let category of categories; trackBy: trackByCategory"
+             [attr.data-category]="category.name"
+             #categoryElement>
+          <!-- Category Divider -->
+          <div class="category-divider">
+            <div class="category-icon" [class.has-image]="category.image">
+              <img *ngIf="category.image" [src]="category.image" alt="{{ category.name }}" (error)="category.image = ''" />
+              <svg *ngIf="!category.image" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+              </svg>
+            </div>
+            <h2 class="category-title">{{ category.name }}</h2>
+            <span class="category-count">{{ getTotalSoundCount(category) }} sounds</span>
+            <div class="category-line"></div>
+          </div>
+
+          <!-- Direct sounds in this category (not in sub-categories) -->
+          <div class="sounds-grid" *ngIf="category.sounds.length > 0">
+            <app-sound-card
+              *ngFor="let sound of category.sounds; trackBy: trackByIndex"
+              [sound]="sound"
+              [isPlaying]="currentlyPlayingIndex === sound.index"
+              [isRenameMode]="isRenameMode"
+              (play)="onPlaySound($event)"
+              (rename)="onOpenRenameModal($event)"
+            ></app-sound-card>
+          </div>
+
+          <!-- Sub-categories -->
+          <div class="sub-categories-container" *ngIf="category.subCategories.length > 0">
+            <div class="sub-category-section"
+                 *ngFor="let subCategory of category.subCategories; trackBy: trackByCategory">
+              <!-- Sub-category Divider -->
+              <div class="sub-category-divider">
+                <div class="sub-category-icon has-image" *ngIf="subCategory.image">
+                  <img [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="subCategory.image = ''" />
+                </div>
+                <h3 class="sub-category-title">{{ subCategory.name }}</h3>
+                <span class="sub-category-count">{{ subCategory.sounds.length }} sounds</span>
+                <div class="sub-category-line"></div>
+              </div>
+
+              <!-- Sounds Grid for this sub-category -->
+              <div class="sounds-grid">
+                <app-sound-card
+                  *ngFor="let sound of subCategory.sounds; trackBy: trackByIndex"
+                  [sound]="sound"
+                  [isPlaying]="currentlyPlayingIndex === sound.index"
+                  [isRenameMode]="isRenameMode"
+                  (play)="onPlaySound($event)"
+                  (rename)="onOpenRenameModal($event)"
+                ></app-sound-card>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Spacer to allow last category to scroll to top -->
+        <div class="scroll-end-spacer" #scrollEndSpacer></div>
+      </div>
+    </div>
+  </section>
+  </div>
+</main>

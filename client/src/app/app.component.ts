@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/co
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
-import { Subject, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin } from 'rxjs';
+import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin } from 'rxjs';
 import { SoundpadService } from './services/soundpad.service';
 import { Sound, ConnectionStatus, Category, CategoryIcon } from './models/sound.model';
 import { HeaderComponent } from './components/header/header.component';
@@ -18,7 +18,7 @@ import { ContentComponent } from './components/content/content.component';
     HttpClientModule,
     HeaderComponent,
     FooterComponent,
-    ContentComponent
+    ContentComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -42,6 +42,20 @@ export class AppComponent implements OnInit, OnDestroy {
   isRenaming = false;
   soundToRename: Sound | null = null;
   renameValue = '';
+
+  // Add Sound modal state
+  isAddSoundModalOpen = false;
+  isAddingSound = false;
+  addSoundFile: File | null = null;
+  addSoundName = '';
+  addSoundCategory = '';
+  addSoundCategories: { name: string; parentCategory: string }[] = [];
+  addSoundError = '';
+  isDragOver = false;
+
+  // Config-watch (soundlist.spl change detection) toggle
+  configWatchEnabled: boolean;
+  private configWatchSub: Subscription | null = null;
 
   // Playback progress tracking
   playbackProgress = 0;
@@ -68,7 +82,11 @@ export class AppComponent implements OnInit, OnDestroy {
   private searchSubject$ = new Subject<string>();
   private playbackTimer: any = null;
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundpadService: SoundpadService) {
+    // Restore config-watch preference from localStorage (default: disabled)
+    const stored = localStorage.getItem('configWatchEnabled');
+    this.configWatchEnabled = stored === 'true';
+  }
 
   ngOnInit(): void {
     // Subscribe to connection status
@@ -90,8 +108,16 @@ export class AppComponent implements OnInit, OnDestroy {
     // Initial load only once
     this.loadSounds();
 
-    // Reload sounds automatically whenever soundlist.spl changes on disk.
-    this.soundpadService.listenForConfigChanges()
+    // Start config-watch if enabled
+    if (this.configWatchEnabled) {
+      this.startConfigWatch();
+    }
+  }
+
+  /** Subscribe to SSE config-watch so the sound list auto-reloads on soundlist.spl changes. */
+  private startConfigWatch(): void {
+    this.stopConfigWatch();
+    this.configWatchSub = this.soundpadService.listenForConfigChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         console.log('[config-watch] soundlist.spl changed – reloading sounds');
@@ -99,7 +125,28 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
 
+  /** Tear down the SSE config-watch subscription. */
+  private stopConfigWatch(): void {
+    if (this.configWatchSub) {
+      this.configWatchSub.unsubscribe();
+      this.configWatchSub = null;
+    }
+  }
+
+  /** Toggle soundlist.spl change detection on/off and persist the preference. */
+  toggleConfigWatch(): void {
+    this.configWatchEnabled = !this.configWatchEnabled;
+    localStorage.setItem('configWatchEnabled', String(this.configWatchEnabled));
+
+    if (this.configWatchEnabled) {
+      this.startConfigWatch();
+    } else {
+      this.stopConfigWatch();
+    }
+  }
+
   ngOnDestroy(): void {
+    this.stopConfigWatch();
     this.destroy$.next();
     this.destroy$.complete();
     if (this.playbackTimer) {
@@ -419,6 +466,145 @@ export class AppComponent implements OnInit, OnDestroy {
         error: (err) => {
           console.error('Failed to restart Soundpad:', err);
           this.isRestarting = false;
+        }
+      });
+  }
+
+  // ── Add Sound Modal ──────────────────────────────────────────────────────
+
+  private readonly ALLOWED_AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|wma|m4a|opus|aiff|ape)$/i;
+
+  openAddSoundModal(): void {
+    this.isAddSoundModalOpen = true;
+    this.addSoundFile = null;
+    this.addSoundName = '';
+    this.addSoundCategory = '';
+    this.addSoundError = '';
+    this.isDragOver = false;
+    this.isAddingSound = false;
+
+    // Fetch categories from the server so the dropdown is always fresh
+    this.soundpadService.getCategories()
+      .pipe(take(1))
+      .subscribe({
+        next: (cats) => {
+          this.addSoundCategories = cats;
+          // Default to the first category if available
+          if (cats.length > 0) {
+            this.addSoundCategory = cats[0].name;
+          }
+        },
+        error: () => {
+          this.addSoundCategories = [];
+        }
+      });
+  }
+
+  closeAddSoundModal(): void {
+    if (this.isAddingSound) return; // prevent closing while upload is in progress
+    this.isAddSoundModalOpen = false;
+    this.addSoundFile = null;
+    this.addSoundName = '';
+    this.addSoundCategory = '';
+    this.addSoundError = '';
+    this.isDragOver = false;
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = true;
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = false;
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = false;
+    this.addSoundError = '';
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!this.ALLOWED_AUDIO_EXTENSIONS.test(file.name)) {
+      this.addSoundError = 'Only audio files are accepted (MP3, WAV, OGG, FLAC, AAC, WMA, M4A, OPUS, AIFF, APE).';
+      return;
+    }
+    this.addSoundFile = file;
+    this.addSoundName = this.fileNameWithoutExtension(file.name);
+  }
+
+  onFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    this.addSoundError = '';
+
+    if (!this.ALLOWED_AUDIO_EXTENSIONS.test(file.name)) {
+      this.addSoundError = 'Only audio files are accepted (MP3, WAV, OGG, FLAC, AAC, WMA, M4A, OPUS, AIFF, APE).';
+      return;
+    }
+    this.addSoundFile = file;
+    this.addSoundName = this.fileNameWithoutExtension(file.name);
+  }
+
+  private fileNameWithoutExtension(name: string): string {
+    const lastDot = name.lastIndexOf('.');
+    return lastDot > 0 ? name.substring(0, lastDot) : name;
+  }
+
+  removeFile(event: Event): void {
+    event.stopPropagation();
+    this.addSoundFile = null;
+    this.addSoundName = '';
+  }
+
+  formatFileSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  confirmAddSound(): void {
+    if (!this.addSoundFile || this.isAddingSound) return;
+
+    // Default to first category if none selected
+    const category = this.addSoundCategory.trim() ||
+      (this.addSoundCategories.length > 0 ? this.addSoundCategories[0].name : '');
+
+    if (!category) {
+      this.addSoundError = 'No categories available. Please create a category in Soundpad first.';
+      return;
+    }
+
+    const displayName = this.addSoundName.trim() || this.fileNameWithoutExtension(this.addSoundFile.name);
+
+    this.isAddingSound = true;
+    this.addSoundError = '';
+
+    this.soundpadService.addSound(this.addSoundFile, category, displayName)
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          this.isAddingSound = false;
+          this.isAddSoundModalOpen = false;
+          this.addSoundFile = null;
+          this.addSoundName = '';
+          this.addSoundCategory = '';
+          // Refresh the sound list immediately so the grid updates
+          this.loadSounds(true);
+        },
+        error: (err) => {
+          console.error('Failed to add sound:', err);
+          this.addSoundError = err?.error?.error || 'Failed to add sound. Please try again.';
+          this.isAddingSound = false;
         }
       });
   }

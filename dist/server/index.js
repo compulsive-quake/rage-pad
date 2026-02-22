@@ -7,6 +7,8 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const path_1 = __importDefault(require("path"));
 const routes_1 = __importDefault(require("./routes"));
+console.log(`MMMHMM`);
+console.log(`MMMHMM`);
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 // Middleware

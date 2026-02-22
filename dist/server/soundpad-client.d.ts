@@ -37,6 +37,21 @@ export declare class SoundpadClient {
     setVolume(volume: number): Promise<SoundpadResponse>;
     searchSounds(query: string): Promise<SoundpadResponse>;
     renameSound(index: number, newTitle: string): Promise<SoundpadResponse>;
+    /**
+     * Reliably kill Soundpad and wait until the process is fully gone.
+     *
+     * Strategy:
+     *   1. Send a graceful WM_CLOSE via `taskkill /IM Soundpad.exe` (no /F).
+     *   2. Poll `tasklist` every 250 ms to check whether the process is still
+     *      running.  Give it up to `gracefulTimeoutMs` (default 6 s) to exit on
+     *      its own.
+     *   3. If it is still alive after the graceful window, force-kill it with
+     *      `taskkill /F /IM Soundpad.exe` and wait another 3 s for the OS to
+     *      clean up the process entry.
+     *   4. Return only once `tasklist` confirms the process is gone (or after the
+     *      combined timeout).
+     */
+    private killSoundpadAndWait;
     restartSoundpad(index: number, newTitle: string): Promise<SoundpadResponse>;
     /**
      * Update the customTag attribute of the Nth <Sound> element (1-based index) in the
@@ -50,7 +65,47 @@ export declare class SoundpadClient {
      *         { success: false, error: message } on failure.
      */
     private updateSoundCustomTag;
+    /**
+     * Add a new sound file to Soundpad.
+     * Since Soundpad has no API for adding files, we must:
+     *   1. Close Soundpad so it releases the soundlist.spl file
+     *   2. Copy the uploaded file to a permanent location
+     *   3. Edit soundlist.spl to add a <Sound> entry in the correct category
+     *   4. Relaunch Soundpad
+     *
+     * @param tempFilePath  Path to the uploaded temp file
+     * @param originalName  Original filename (used as display label fallback)
+     * @param categoryName  Category (or sub-category) name to place the sound in
+     * @param displayName   Optional custom display name provided by the user
+     */
+    addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string): Promise<SoundpadResponse>;
+    /**
+     * Get the 0-based sound IDs that belong to a given category in the <Categories> section.
+     * This looks at <Sound id="N"/> references inside the matching <Category> element.
+     */
+    private getSoundIdsForCategory;
+    /**
+     * Get the list of categories and sub-categories from soundlist.spl.
+     * Returns a flat list of { name, parentCategory } objects.
+     */
+    getCategoriesList(): {
+        name: string;
+        parentCategory: string;
+    }[];
+    /**
+     * Recursively collect category names from the <Categories> XML section.
+     */
+    private collectCategories;
     restartSoundpadOnly(): Promise<SoundpadResponse>;
+    /**
+     * Poll the Soundpad named pipe until it responds, or until the timeout expires.
+     * This is used after relaunching Soundpad to ensure it is fully ready before
+     * the server returns a response to the client.
+     *
+     * @param timeoutMs  Maximum time to wait (default 15 000 ms)
+     * @param intervalMs Polling interval (default 500 ms)
+     */
+    private waitForSoundpadReady;
     isConnected(): Promise<boolean>;
     private quickConnectionCheck;
     private parseSoundList;

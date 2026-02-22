@@ -3,6 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import soundpadRoutes from './routes';
 
+console.log(`MMMHMM`);
+console.log(`MMMHMM`);
 const app: Application = express();
 const PORT = process.env.PORT || 3000;
 
@@ -40,7 +42,7 @@ app.get('*', (req: Request, res: Response) => {
 // Error handling middleware
 app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
   console.error('Server error:', err);
-  res.status(500).json({ 
+  res.status(500).json({
     error: 'Internal server error',
     message: process.env.NODE_ENV === 'development' ? err.message : undefined
   });

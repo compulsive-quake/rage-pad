@@ -721,6 +721,86 @@ app-sound-card {
     color: rgba(255, 255, 255, 0.6);
     line-height: 1.4;
   }
+
+  & + .settings-section {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+// Toggle row inside settings
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.settings-toggle-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.settings-toggle-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.settings-toggle-description {
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.3;
+}
+
+// iOS-style toggle switch
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+
+  input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+}
+
+.toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  transition: background 0.25s ease;
+
+  &::before {
+    content: '';
+    position: absolute;
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.25s ease;
+  }
+
+  input:checked + & {
+    background: #9b59b6;
+  }
+
+  input:checked + &::before {
+    transform: translateX(20px);
+  }
+
+  input:focus-visible + & {
+    box-shadow: 0 0 0 2px rgba(155, 89, 182, 0.5);
+  }
 }
 
 .restart-btn {
@@ -979,5 +1059,253 @@ app-sound-card {
   .progress-section {
     width: 100%;
     justify-content: center;
+  }
+}
+
+// ── Add Sound Modal ─────────────────────────────────────────────────────────
+
+.add-sound-modal-content {
+  max-width: 480px;
+}
+
+.drop-zone {
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 1.25rem;
+
+  &:hover {
+    border-color: rgba(46, 204, 113, 0.5);
+    background: rgba(46, 204, 113, 0.05);
+  }
+
+  &.drag-over {
+    border-color: #2ecc71;
+    background: rgba(46, 204, 113, 0.1);
+    box-shadow: 0 0 20px rgba(46, 204, 113, 0.15);
+  }
+
+  &.has-file {
+    border-color: rgba(46, 204, 113, 0.4);
+    background: rgba(46, 204, 113, 0.06);
+    padding: 1rem 1.25rem;
+  }
+}
+
+.drop-zone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.drop-zone-icon {
+  width: 48px;
+  height: 48px;
+  color: rgba(255, 255, 255, 0.3);
+  margin-bottom: 0.25rem;
+
+  .drag-over & {
+    color: #2ecc71;
+  }
+}
+
+.drop-zone-text {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.drop-zone-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.drop-zone-formats {
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.5px;
+}
+
+.drop-zone-file {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.file-icon {
+  width: 36px;
+  height: 36px;
+  color: #2ecc71;
+  flex-shrink: 0;
+}
+
+.file-info {
+  flex: 1;
+  text-align: left;
+  min-width: 0;
+}
+
+.file-name {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.remove-file-btn {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    color: rgba(231, 76, 60, 0.8);
+  }
+
+  &:hover {
+    background: rgba(231, 76, 60, 0.25);
+    border-color: rgba(231, 76, 60, 0.6);
+
+    svg {
+      color: #e74c3c;
+    }
+  }
+}
+
+.category-select-section {
+  margin-bottom: 1.25rem;
+}
+
+.sound-name-section {
+  margin-bottom: 1.25rem;
+}
+
+.sound-name-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  &:focus {
+    border-color: rgba(46, 204, 113, 0.6);
+    box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.12);
+  }
+}
+
+.category-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.category-select {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='rgba(255,255,255,0.5)'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2rem;
+
+  &:focus {
+    border-color: rgba(46, 204, 113, 0.6);
+    box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.12);
+  }
+
+  option {
+    background: #1a1a2e;
+    color: #fff;
+  }
+}
+
+.add-sound-error {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  color: #e74c3c;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.add-sound-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.add-sound-confirm-btn {
+  padding: 0.6rem 1.25rem;
+  background: #2ecc71;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: #27ae60;
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 }
