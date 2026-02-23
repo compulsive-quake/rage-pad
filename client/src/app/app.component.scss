@@ -1,5 +1,6 @@
 .app-container {
-  height: 100vh;
+  height: 100vh; // fallback for browsers without dvh support
+  height: 100dvh; // dynamic viewport height: accounts for mobile browser chrome (address bar, nav bar)
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);

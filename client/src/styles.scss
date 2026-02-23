@@ -18,6 +18,14 @@ html, body {
   overflow: hidden;
 }
 
+// Ensure the Angular root element fills the full dynamic viewport height
+// so the flex layout (header / content / footer) works correctly on mobile
+// browsers where 100vh can exceed the actual visible area.
+app-root {
+  display: block;
+  height: 100%;
+}
+
 body {
   background: #0f0f1a;
   color: #fff;

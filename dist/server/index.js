@@ -34,7 +34,7 @@ catch { /* ignore */ }
 console.log(`Server running on port ${PORT}`);
 // Middleware
 app.use((0, cors_1.default)({
-    origin: ['http://localhost:4200', 'http://localhost:3000'],
+    origin: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }));

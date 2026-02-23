@@ -180,6 +180,11 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
     }
   }
 
+  onImageError(category: Category): void {
+    category.image = '';
+    this.cdr.markForCheck();
+  }
+
   onDragStarted(_event: CdkDragStart): void {
     this.isDragging = true;
     this.dragStateChange.emit(true);

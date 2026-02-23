@@ -52,7 +52,7 @@
           <!-- Category Divider -->
           <div class="category-divider">
             <div class="category-icon" [class.has-image]="category.image">
-              <img *ngIf="category.image" [src]="category.image" alt="{{ category.name }}" (error)="category.image = ''" />
+              <img *ngIf="category.image" [src]="category.image" alt="{{ category.name }}" (error)="onImageError(category)" />
               <svg *ngIf="!category.image" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
               </svg>
@@ -112,7 +112,7 @@
               <!-- Sub-category Divider -->
               <div class="sub-category-divider">
                 <div class="sub-category-icon has-image" *ngIf="subCategory.image">
-                  <img [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="subCategory.image = ''" />
+                  <img [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="onImageError(subCategory)" />
                 </div>
                 <h3 class="sub-category-title">{{ subCategory.name }}</h3>
                 <span class="sub-category-count">{{ subCategory.sounds.length }} sounds</span>

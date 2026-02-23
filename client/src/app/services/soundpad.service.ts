@@ -8,7 +8,7 @@ import { Sound, ConnectionStatus, CategoryIcon } from '../models/sound.model';
   providedIn: 'root'
 })
 export class SoundpadService implements OnDestroy {
-  private apiUrl = 'http://localhost:3000/api';
+  private apiUrl = `http://${window.location.hostname}:3000/api`;
   private connectionStatus$ = new BehaviorSubject<ConnectionStatus>({ connected: false });
   private sounds$ = new BehaviorSubject<Sound[]>([]);
   private destroy$ = new Subject<void>();
