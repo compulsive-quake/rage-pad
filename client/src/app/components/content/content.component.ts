@@ -8,18 +8,23 @@ import {
   OnDestroy,
   ViewChild,
   ElementRef,
-  SimpleChanges
+  SimpleChanges,
+  ChangeDetectorRef,
+  ChangeDetectionStrategy,
+  NgZone
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { CdkDragDrop, CdkDragStart, DragDropModule, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { Category, Sound } from '../../models/sound.model';
 import { SoundCardComponent } from '../sound-card/sound-card.component';
 
 @Component({
   selector: 'app-content',
   standalone: true,
-  imports: [CommonModule, SoundCardComponent],
+  imports: [CommonModule, SoundCardComponent, DragDropModule],
   templateUrl: './content.component.html',
-  styleUrls: ['./content.component.scss']
+  styleUrls: ['./content.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() categories: Category[] = [];
@@ -28,15 +33,20 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() searchQuery = '';
   @Input() currentlyPlayingIndex: number | null = null;
   @Input() isRenameMode = false;
+  @Input() isReorderMode = false;
   @Input() activeCategory = '';
 
   @Output() playSound = new EventEmitter<Sound>();
   @Output() openRenameModal = new EventEmitter<Sound>();
   @Output() activeCategoryChange = new EventEmitter<string>();
+  @Output() reorderSound = new EventEmitter<{ soundIndex: number; targetCategory: string; targetPosition: number }>();
+  @Output() dragStateChange = new EventEmitter<boolean>();
 
   @ViewChild('mainContent') mainContent!: ElementRef;
   @ViewChild('categoryNavList') categoryNavList!: ElementRef;
   @ViewChild('scrollEndSpacer') scrollEndSpacer!: ElementRef<HTMLElement>;
+
+  isDragging = false;
 
   private scrollListener: (() => void) | null = null;
   private snapWheelListener: ((e: WheelEvent) => void) | null = null;
@@ -45,10 +55,24 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   private snapScrollDebounceTimer: any = null;
   private isSnapping = false;
   private lastWheelDeltaY = 0;
+  private dragSettleTimer: any = null;
+
+  /** Listeners added outside Angular zone for drag performance */
+  private dragOverListener: ((e: DragEvent) => void) | null = null;
+  private dragEnterListener: ((e: DragEvent) => void) | null = null;
+  private dragLeaveListener: ((e: DragEvent) => void) | null = null;
+
+  constructor(
+    private ngZone: NgZone,
+    private cdr: ChangeDetectorRef
+  ) {}
 
   ngAfterViewInit(): void {
     this.setupScrollFade();
     this.setupScrollSnap();
+    if (this.isReorderMode) {
+      this.setupDragListenersOutsideZone();
+    }
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -60,6 +84,14 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
           this.activeCategoryChange.emit(this.categories[0].name);
         }
       }, 0);
+    }
+    // Set up or tear down native drag listeners when reorder mode changes
+    if (changes['isReorderMode']) {
+      if (this.isReorderMode) {
+        this.setupDragListenersOutsideZone();
+      } else {
+        this.teardownDragListeners();
+      }
     }
   }
 
@@ -84,13 +116,139 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       clearTimeout(this.snapScrollDebounceTimer);
       this.snapScrollDebounceTimer = null;
     }
+    if (this.dragSettleTimer) {
+      clearTimeout(this.dragSettleTimer);
+      this.dragSettleTimer = null;
+    }
+    this.teardownDragListeners();
+  }
+
+  /**
+   * Register native dragover / dragenter / dragleave listeners outside
+   * Angular's zone so that the frequent pointer-tracking events do NOT
+   * trigger change detection on every frame.
+   */
+  private setupDragListenersOutsideZone(): void {
+    const container = this.mainContent?.nativeElement as HTMLElement | undefined;
+    if (!container) return;
+
+    // Avoid double-binding
+    this.teardownDragListeners();
+
+    this.ngZone.runOutsideAngular(() => {
+      this.dragOverListener = (e: DragEvent) => {
+        e.preventDefault(); // required to allow drop
+      };
+
+      this.dragEnterListener = (e: DragEvent) => {
+        e.preventDefault();
+        const target = (e.target as HTMLElement).closest('.reorder-grid');
+        if (target) {
+          target.classList.add('drag-over');
+        }
+      };
+
+      this.dragLeaveListener = (e: DragEvent) => {
+        const target = (e.target as HTMLElement).closest('.reorder-grid');
+        if (target) {
+          target.classList.remove('drag-over');
+        }
+      };
+
+      container.addEventListener('dragover', this.dragOverListener, { passive: false });
+      container.addEventListener('dragenter', this.dragEnterListener, { passive: false });
+      container.addEventListener('dragleave', this.dragLeaveListener, { passive: true });
+    });
+  }
+
+  /** Remove native drag listeners when leaving reorder mode or on destroy. */
+  private teardownDragListeners(): void {
+    const container = this.mainContent?.nativeElement as HTMLElement | undefined;
+    if (!container) return;
+
+    if (this.dragOverListener) {
+      container.removeEventListener('dragover', this.dragOverListener);
+      this.dragOverListener = null;
+    }
+    if (this.dragEnterListener) {
+      container.removeEventListener('dragenter', this.dragEnterListener);
+      this.dragEnterListener = null;
+    }
+    if (this.dragLeaveListener) {
+      container.removeEventListener('dragleave', this.dragLeaveListener);
+      this.dragLeaveListener = null;
+    }
+  }
+
+  onDragStarted(_event: CdkDragStart): void {
+    this.isDragging = true;
+    this.dragStateChange.emit(true);
+    this.cdr.markForCheck();
+  }
+
+  onDrop(event: CdkDragDrop<{ category: string; sounds: Sound[] }>): void {
+    // Re-enter Angular zone to ensure model updates trigger change detection
+    this.ngZone.run(() => {
+      const sound: Sound = event.item.data;
+
+      if (event.previousContainer === event.container) {
+        // Reorder within the same category
+        if (event.previousIndex === event.currentIndex) {
+          this.endDrag();
+          return;
+        }
+        moveItemInArray(event.container.data.sounds, event.previousIndex, event.currentIndex);
+      } else {
+        // Move to a different category
+        transferArrayItem(
+          event.previousContainer.data.sounds,
+          event.container.data.sounds,
+          event.previousIndex,
+          event.currentIndex
+        );
+      }
+
+      // Emit the reorder event to persist the change
+      const targetCategory = event.container.data.category;
+      const targetPosition = event.currentIndex;
+      this.reorderSound.emit({
+        soundIndex: sound.index,
+        targetCategory,
+        targetPosition
+      });
+
+      // Allow the CDK drop animation to finish before signaling drag end
+      this.scheduleDragEnd();
+      this.cdr.markForCheck();
+    });
+  }
+
+  /** Signal drag end after the CDK animation settles (300ms). */
+  private scheduleDragEnd(): void {
+    if (this.dragSettleTimer) {
+      clearTimeout(this.dragSettleTimer);
+    }
+    this.dragSettleTimer = setTimeout(() => {
+      this.dragSettleTimer = null;
+      this.endDrag();
+    }, 350);
+  }
+
+  private endDrag(): void {
+    this.isDragging = false;
+    this.dragStateChange.emit(false);
+    this.cdr.markForCheck();
   }
 
   setupScrollFade(): void {
     const container = this.mainContent?.nativeElement;
     if (!container) return;
 
+    // Run scroll fade outside Angular zone to avoid change detection on every scroll
     this.scrollListener = () => {
+      // Skip expensive DOM queries during drag to avoid jank
+      if (this.isDragging) return;
+
       const containerRect = container.getBoundingClientRect();
       const fadeZone = 80;
 
@@ -126,7 +284,9 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       this.updateActiveCategory(container, containerRect);
     };
 
-    container.addEventListener('scroll', this.scrollListener, { passive: true });
+    this.ngZone.runOutsideAngular(() => {
+      container.addEventListener('scroll', this.scrollListener!, { passive: true });
+    });
     this.scrollListener();
   }
 
@@ -201,8 +361,9 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
     const container = this.mainContent?.nativeElement;
     if (!container) return;
 
+    this.ngZone.runOutsideAngular(() => {
     this.snapWheelListener = (e: WheelEvent) => {
-      if (this.isSnapping) return;
+      if (this.isSnapping || this.isDragging) return;
 
       this.lastWheelDeltaY += e.deltaY;
 
@@ -250,10 +411,12 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       }, 80);
     };
 
-    container.addEventListener('wheel', this.snapWheelListener, { passive: true });
+    container.addEventListener('wheel', this.snapWheelListener!, { passive: true });
+    }); // end runOutsideAngular for wheel
 
+    this.ngZone.runOutsideAngular(() => {
     this.snapScrollListener = () => {
-      if (this.isSnapping) return;
+      if (this.isSnapping || this.isDragging) return;
 
       if (this.snapScrollDebounceTimer) {
         clearTimeout(this.snapScrollDebounceTimer);
@@ -286,7 +449,8 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       }, 150);
     };
 
-    container.addEventListener('scroll', this.snapScrollListener, { passive: true });
+    container.addEventListener('scroll', this.snapScrollListener!, { passive: true });
+    }); // end runOutsideAngular for scroll snap
   }
 
   updateActiveCategory(container: HTMLElement, containerRect: DOMRect): void {
@@ -299,9 +463,16 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       }
     });
     if (current && current !== this.activeCategory) {
-      this.activeCategoryChange.emit(current);
+      // Re-enter Angular zone to emit the active category change
+      this.ngZone.run(() => {
+        this.activeCategoryChange.emit(current);
+        this.cdr.markForCheck();
+      });
     } else if (!current && this.categories.length > 0 && !this.activeCategory) {
-      this.activeCategoryChange.emit(this.categories[0].name);
+      this.ngZone.run(() => {
+        this.activeCategoryChange.emit(this.categories[0].name);
+        this.cdr.markForCheck();
+      });
     }
   }
 

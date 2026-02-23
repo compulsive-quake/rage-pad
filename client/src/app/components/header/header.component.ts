@@ -12,11 +12,13 @@ import { SearchBarComponent } from '../search-bar/search-bar.component';
 export class HeaderComponent {
   @Input() isLoading = false;
   @Input() isRenameMode = false;
+  @Input() isReorderMode = false;
   @Input() playbackProgress = 0;
 
   @Output() search = new EventEmitter<string>();
   @Output() refresh = new EventEmitter<void>();
   @Output() toggleRenameMode = new EventEmitter<void>();
+  @Output() toggleReorderMode = new EventEmitter<void>();
   @Output() toggleSettings = new EventEmitter<void>();
   @Output() addSound = new EventEmitter<void>();
 
@@ -30,6 +32,10 @@ export class HeaderComponent {
 
   onToggleRenameMode(): void {
     this.toggleRenameMode.emit();
+  }
+
+  onToggleReorderMode(): void {
+    this.toggleReorderMode.emit();
   }
 
   onToggleSettings(): void {

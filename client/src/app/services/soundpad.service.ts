@@ -111,6 +111,19 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  reorderSound(soundIndex: number, targetCategory: string, targetPosition: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/reorder`, {
+      soundIndex,
+      targetCategory,
+      targetPosition
+    }).pipe(
+      catchError(error => {
+        console.error('Failed to reorder sound:', error);
+        return of({ error: 'Failed to reorder sound' });
+      })
+    );
+  }
+
   restartSoundpad(index?: number, title?: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/restart`, { index, title }).pipe(
       catchError(error => {

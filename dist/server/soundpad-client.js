@@ -323,6 +323,183 @@ class SoundpadClient {
         }
         console.warn('[killSoundpad] Soundpad process may still be running after force-kill');
     }
+    /**
+     * Reorder a sound by moving it to a target category at a specific position.
+     * This edits the soundlist.spl <Categories> section:
+     *   1. Removes the <Sound id="N"/> reference from its current location
+     *   2. Inserts it at the target position in the target category
+     *   3. Restarts Soundpad to apply changes
+     *
+     * @param soundIndex 1-based sound index (from Soundpad API)
+     * @param targetCategory Name of the target category (or sub-category)
+     * @param targetPosition 0-based position within the target category's sound list
+     */
+    async reorderSound(soundIndex, targetCategory, targetPosition) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
+            const splId = soundIndex - 1;
+            const soundTag = `<Sound id="${splId}"/>`;
+            // Also match with varying whitespace
+            const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
+            // Step 1: Kill Soundpad
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Read and edit soundlist.spl
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            // Find the Categories section
+            const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+            if (!categoriesMatch) {
+                // Relaunch Soundpad before returning error
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: 'No Categories section found in soundlist.spl' };
+            }
+            let categoriesContent = categoriesMatch[1];
+            // Remove the sound reference from wherever it currently is in the Categories section
+            const originalLength = categoriesContent.length;
+            categoriesContent = categoriesContent.replace(soundTagRegex, '');
+            // Clean up any leftover blank lines from removal
+            categoriesContent = categoriesContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+            if (categoriesContent.length === originalLength) {
+                console.warn(`Sound id="${splId}" not found in Categories section, it may be uncategorized`);
+            }
+            // Find the target category and insert the sound at the target position
+            const insertResult = this.insertSoundInCategory(categoriesContent, targetCategory, splId, targetPosition);
+            if (!insertResult.success) {
+                // Relaunch Soundpad before returning error
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: insertResult.error || 'Failed to insert sound in target category' };
+            }
+            // Replace the Categories section in the full SPL content
+            splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${insertResult.content}</Categories>`);
+            // Step 3: Write the updated file
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Reordered sound index ${soundIndex} to category "${targetCategory}" at position ${targetPosition}`);
+            // Step 4: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 5: Wait for Soundpad to become available
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound moved to "${targetCategory}" at position ${targetPosition}` };
+        }
+        catch (error) {
+            console.error('reorderSound error:', error);
+            // Try to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to reorder sound'
+            };
+        }
+    }
+    /**
+     * Insert a <Sound id="N"/> reference into a specific category at a given position
+     * within the Categories XML content.
+     */
+    insertSoundInCategory(categoriesContent, targetCategoryName, splId, targetPosition) {
+        const soundTag = `<Sound id="${splId}"/>`;
+        // Find the target category by name - search for <Category ... name="targetCategoryName" ...>
+        // We need to handle both top-level and nested categories
+        const escapedName = targetCategoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const categoryOpenRegex = new RegExp(`(<Category\\s[^>]*name="${escapedName}"[^>]*>)`, 'i');
+        const categoryMatch = categoryOpenRegex.exec(categoriesContent);
+        if (!categoryMatch) {
+            return { success: false, error: `Target category "${targetCategoryName}" not found` };
+        }
+        const categoryOpenEnd = categoryMatch.index + categoryMatch[0].length;
+        // Find the matching </Category> for this opening tag
+        // We need to handle nested categories, so count depth
+        let depth = 1;
+        let searchPos = categoryOpenEnd;
+        let closingPos = -1;
+        while (depth > 0 && searchPos < categoriesContent.length) {
+            const nextOpen = categoriesContent.indexOf('<Category ', searchPos);
+            const nextClose = categoriesContent.indexOf('</Category>', searchPos);
+            if (nextClose === -1)
+                break;
+            if (nextOpen !== -1 && nextOpen < nextClose) {
+                // Check if it's a self-closing tag
+                const tagEnd = categoriesContent.indexOf('>', nextOpen);
+                if (tagEnd !== -1 && categoriesContent[tagEnd - 1] === '/') {
+                    // Self-closing, don't increase depth
+                    searchPos = tagEnd + 1;
+                }
+                else {
+                    depth++;
+                    searchPos = nextOpen + 10;
+                }
+            }
+            else {
+                depth--;
+                if (depth === 0) {
+                    closingPos = nextClose;
+                }
+                searchPos = nextClose + 11;
+            }
+        }
+        if (closingPos === -1) {
+            return { success: false, error: `Could not find closing tag for category "${targetCategoryName}"` };
+        }
+        // Get the content between the opening and closing category tags
+        const categoryInnerContent = categoriesContent.substring(categoryOpenEnd, closingPos);
+        // Find all existing <Sound id="N"/> references in this category (not in sub-categories)
+        const contentWithoutSubs = this.removeNestedCategories(categoryInnerContent);
+        const existingSoundRefs = [];
+        const soundRefRegex = /<Sound\s+id="(\d+)"\s*\/>/gi;
+        let m;
+        while ((m = soundRefRegex.exec(contentWithoutSubs)) !== null) {
+            existingSoundRefs.push({ id: m[1], fullMatch: m[0] });
+        }
+        // Determine where to insert the new sound tag
+        if (existingSoundRefs.length === 0 || targetPosition === 0) {
+            // Insert at the beginning of the category content (after the opening tag)
+            // Find the first non-whitespace position or insert right after opening tag
+            const insertPos = categoryOpenEnd;
+            const newContent = categoriesContent.substring(0, insertPos) +
+                '\n      ' + soundTag +
+                categoriesContent.substring(insertPos);
+            return { success: true, content: newContent };
+        }
+        if (targetPosition >= existingSoundRefs.length) {
+            // Insert after the last sound reference
+            const lastRef = existingSoundRefs[existingSoundRefs.length - 1];
+            // Find the actual position of this reference in the full category content (not the stripped version)
+            const lastRefPos = categoryInnerContent.indexOf(lastRef.fullMatch);
+            if (lastRefPos !== -1) {
+                const absolutePos = categoryOpenEnd + lastRefPos + lastRef.fullMatch.length;
+                const newContent = categoriesContent.substring(0, absolutePos) +
+                    '\n      ' + soundTag +
+                    categoriesContent.substring(absolutePos);
+                return { success: true, content: newContent };
+            }
+        }
+        else {
+            // Insert before the sound at targetPosition
+            const targetRef = existingSoundRefs[targetPosition];
+            const targetRefPos = categoryInnerContent.indexOf(targetRef.fullMatch);
+            if (targetRefPos !== -1) {
+                const absolutePos = categoryOpenEnd + targetRefPos;
+                const newContent = categoriesContent.substring(0, absolutePos) +
+                    soundTag + '\n      ' +
+                    categoriesContent.substring(absolutePos);
+                return { success: true, content: newContent };
+            }
+        }
+        // Fallback: insert at the end of the category content
+        const newContent = categoriesContent.substring(0, closingPos) +
+            '\n      ' + soundTag + '\n    ' +
+            categoriesContent.substring(closingPos);
+        return { success: true, content: newContent };
+    }
     async restartSoundpad(index, newTitle) {
         if (!fs.existsSync(this.soundlistPath)) {
             return { success: false, error: 'Soundlist file not found' };

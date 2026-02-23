@@ -260,6 +260,40 @@ router.post('/sounds/:index/rename', async (req, res) => {
         res.status(500).json({ error: 'Failed to rename sound' });
     }
 });
+// Reorder a sound (move to a different category/position)
+router.post('/sounds/reorder', async (req, res) => {
+    try {
+        const { soundIndex, targetCategory, targetPosition } = req.body;
+        if (typeof soundIndex !== 'number' || isNaN(soundIndex)) {
+            res.status(400).json({ error: 'soundIndex must be a valid number' });
+            return;
+        }
+        if (typeof targetCategory !== 'string' || !targetCategory.trim()) {
+            res.status(400).json({ error: 'targetCategory must be a non-empty string' });
+            return;
+        }
+        if (typeof targetPosition !== 'number' || isNaN(targetPosition) || targetPosition < 0) {
+            res.status(400).json({ error: 'targetPosition must be a non-negative number' });
+            return;
+        }
+        // Suppress SSE while Soundpad is being restarted
+        sseSuppressed = true;
+        const result = await soundpadClient.reorderSound(soundIndex, targetCategory.trim(), targetPosition);
+        // Re-enable SSE and notify clients
+        sseSuppressed = false;
+        if (result.success) {
+            notifySseClients();
+            res.json({ message: 'Sound reordered', data: result.data });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (error) {
+        sseSuppressed = false;
+        res.status(500).json({ error: 'Failed to reorder sound' });
+    }
+});
 // Launch Soundpad if it is not already running
 router.post('/launch-soundpad', async (req, res) => {
     try {

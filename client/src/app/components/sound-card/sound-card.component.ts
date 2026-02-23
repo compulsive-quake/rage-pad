@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Sound } from '../../models/sound.model';
 
@@ -6,6 +6,7 @@ import { Sound } from '../../models/sound.model';
   selector: 'app-sound-card',
   standalone: true,
   imports: [CommonModule],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <button
       class="sound-button"
@@ -33,7 +34,7 @@ import { Sound } from '../../models/sound.model';
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.1);
       cursor: pointer;
-      transition: all 0.3s ease;
+      transition: box-shadow 0.3s ease, border-color 0.3s ease, background 0.3s ease;
       position: relative;
     }
 

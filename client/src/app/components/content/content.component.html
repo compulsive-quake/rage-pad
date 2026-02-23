@@ -44,7 +44,7 @@
 
     <!-- Sound Grid - Centered -->
     <div class="sounds-grid-wrapper" *ngIf="!isLoading && filteredSounds.length > 0">
-      <div class="categories-container" #categoriesContainer>
+      <div class="categories-container" #categoriesContainer cdkDropListGroup>
         <div class="category-section"
              *ngFor="let category of categories; trackBy: trackByCategory"
              [attr.data-category]="category.name"
@@ -62,8 +62,8 @@
             <div class="category-line"></div>
           </div>
 
-          <!-- Direct sounds in this category (not in sub-categories) -->
-          <div class="sounds-grid" *ngIf="category.sounds.length > 0">
+          <!-- Direct sounds in this category (not in sub-categories) - Normal mode -->
+          <div class="sounds-grid" *ngIf="category.sounds.length > 0 && !isReorderMode">
             <app-sound-card
               *ngFor="let sound of category.sounds; trackBy: trackByIndex"
               [sound]="sound"
@@ -72,6 +72,37 @@
               (play)="onPlaySound($event)"
               (rename)="onOpenRenameModal($event)"
             ></app-sound-card>
+          </div>
+
+          <!-- Direct sounds in this category - Reorder mode with drag-and-drop -->
+          <!-- Always render the single drop list in reorder mode so CDK never
+               loses the container reference when the last item is dragged out -->
+          <div class="sounds-grid reorder-grid"
+               *ngIf="isReorderMode"
+               [class.empty-drop-zone]="category.sounds.length === 0 && category.subCategories.length === 0"
+               cdkDropList
+               cdkDropListOrientation="mixed"
+               [cdkDropListData]="{ category: category.name, sounds: category.sounds }"
+               (cdkDropListDropped)="onDrop($event)">
+            <div class="drag-card-wrapper"
+                 *ngFor="let sound of category.sounds; trackBy: trackByIndex"
+                 cdkDrag
+                 [cdkDragData]="sound"
+                 (cdkDragStarted)="onDragStarted($event)">
+              <div class="drag-placeholder" *cdkDragPlaceholder></div>
+              <app-sound-card
+                [sound]="sound"
+                [isPlaying]="currentlyPlayingIndex === sound.index"
+                [isRenameMode]="false"
+                class="reorder-card"
+              ></app-sound-card>
+              <div class="drag-handle">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                </svg>
+              </div>
+            </div>
+            <div class="empty-drop-hint" *ngIf="category.sounds.length === 0 && category.subCategories.length === 0">Drop sounds here</div>
           </div>
 
           <!-- Sub-categories -->
@@ -88,8 +119,8 @@
                 <div class="sub-category-line"></div>
               </div>
 
-              <!-- Sounds Grid for this sub-category -->
-              <div class="sounds-grid">
+              <!-- Sounds Grid for this sub-category - Normal mode -->
+              <div class="sounds-grid" *ngIf="!isReorderMode">
                 <app-sound-card
                   *ngFor="let sound of subCategory.sounds; trackBy: trackByIndex"
                   [sound]="sound"
@@ -98,6 +129,35 @@
                   (play)="onPlaySound($event)"
                   (rename)="onOpenRenameModal($event)"
                 ></app-sound-card>
+              </div>
+
+              <!-- Sounds Grid for this sub-category - Reorder mode -->
+              <div class="sounds-grid reorder-grid"
+                   *ngIf="isReorderMode"
+                   cdkDropList
+                   cdkDropListOrientation="mixed"
+                   [cdkDropListData]="{ category: subCategory.name, sounds: subCategory.sounds }"
+                   (cdkDropListDropped)="onDrop($event)">
+                <div class="drag-card-wrapper"
+                     *ngFor="let sound of subCategory.sounds; trackBy: trackByIndex"
+                     cdkDrag
+                     [cdkDragData]="sound"
+                     (cdkDragStarted)="onDragStarted($event)">
+                  <div class="drag-placeholder" *cdkDragPlaceholder></div>
+                  <app-sound-card
+                    [sound]="sound"
+                    [isPlaying]="currentlyPlayingIndex === sound.index"
+                    [isRenameMode]="false"
+                    class="reorder-card"
+                  ></app-sound-card>
+                  <div class="drag-handle">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+                    </svg>
+                  </div>
+                </div>
+                <!-- Empty state for sub-category -->
+                <div class="empty-drop-hint" *ngIf="subCategory.sounds.length === 0">Drop sounds here</div>
               </div>
             </div>
           </div>

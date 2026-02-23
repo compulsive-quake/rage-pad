@@ -52,6 +52,23 @@ export declare class SoundpadClient {
      *      combined timeout).
      */
     private killSoundpadAndWait;
+    /**
+     * Reorder a sound by moving it to a target category at a specific position.
+     * This edits the soundlist.spl <Categories> section:
+     *   1. Removes the <Sound id="N"/> reference from its current location
+     *   2. Inserts it at the target position in the target category
+     *   3. Restarts Soundpad to apply changes
+     *
+     * @param soundIndex 1-based sound index (from Soundpad API)
+     * @param targetCategory Name of the target category (or sub-category)
+     * @param targetPosition 0-based position within the target category's sound list
+     */
+    reorderSound(soundIndex: number, targetCategory: string, targetPosition: number): Promise<SoundpadResponse>;
+    /**
+     * Insert a <Sound id="N"/> reference into a specific category at a given position
+     * within the Categories XML content.
+     */
+    private insertSoundInCategory;
     restartSoundpad(index: number, newTitle: string): Promise<SoundpadResponse>;
     /**
      * Update the customTag attribute of the Nth <Sound> element (1-based index) in the

@@ -3,10 +3,12 @@
   <app-header
     [isLoading]="isLoading"
     [isRenameMode]="isRenameMode"
+    [isReorderMode]="isReorderMode"
     [playbackProgress]="playbackProgress"
     (search)="onSearch($event)"
     (refresh)="refreshSounds()"
     (toggleRenameMode)="toggleRenameMode()"
+    (toggleReorderMode)="toggleReorderMode()"
     (toggleSettings)="toggleSettingsModal()"
     (addSound)="openAddSoundModal()"
   ></app-header>
@@ -19,10 +21,13 @@
     [searchQuery]="searchQuery"
     [currentlyPlayingIndex]="currentlyPlayingIndex"
     [isRenameMode]="isRenameMode"
+    [isReorderMode]="isReorderMode"
     [activeCategory]="activeCategory"
     (playSound)="playSound($event)"
     (openRenameModal)="openRenameModal($event)"
     (activeCategoryChange)="activeCategory = $event"
+    (reorderSound)="onReorderSound($event)"
+    (dragStateChange)="onDragStateChange($event)"
   ></app-content>
 
   <!-- Footer with Playback Controls -->

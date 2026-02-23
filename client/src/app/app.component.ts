@@ -38,6 +38,7 @@ export class AppComponent implements OnInit, OnDestroy {
   isSettingsModalOpen = false;
   isRestarting = false;
   isRenameMode = false;
+  isReorderMode = false;
   isRenameModalOpen = false;
   isRenaming = false;
   soundToRename: Sound | null = null;
@@ -95,6 +96,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // Active category for nav highlight
   activeCategory: string = '';
+
+  // Drag-and-drop state – suppresses reloads while a drag animation is settling
+  private isDragActive = false;
+  private pendingReload = false;
 
   // Category icons mapping (SVG paths for fallback)
   categoryIcons: { [key: string]: string } = {
@@ -198,7 +203,12 @@ export class AppComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
         console.log('[config-watch] soundlist.spl changed – reloading sounds');
-        this.loadSounds(true);
+        if (this.isDragActive) {
+          // Defer the reload until the drag animation settles
+          this.pendingReload = true;
+        } else {
+          this.loadSounds(true);
+        }
       });
   }
 
@@ -603,10 +613,60 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleRenameMode(): void {
     this.isRenameMode = !this.isRenameMode;
+    if (this.isRenameMode) {
+      this.isReorderMode = false;
+    }
     if (!this.isRenameMode) {
       this.isRenameModalOpen = false;
       this.soundToRename = null;
       this.renameValue = '';
+    }
+  }
+
+  toggleReorderMode(): void {
+    this.isReorderMode = !this.isReorderMode;
+    if (this.isReorderMode) {
+      this.isRenameMode = false;
+      this.isRenameModalOpen = false;
+      this.soundToRename = null;
+      this.renameValue = '';
+    }
+  }
+
+  onReorderSound(event: { soundIndex: number; targetCategory: string; targetPosition: number }): void {
+    // The CDK drag-drop has already moved the item in the local arrays via
+    // moveItemInArray / transferArrayItem, so the UI is already correct.
+    // We only need to persist the change on the server. We intentionally do NOT
+    // call loadSounds() here to avoid rebuilding the DOM and causing stutter.
+    // The config-watch SSE will eventually trigger a silent reload once the
+    // drag animation has settled (see onDragStateChange).
+    this.soundpadService.reorderSound(event.soundIndex, event.targetCategory, event.targetPosition)
+      .pipe(take(1))
+      .subscribe({
+        next: (result: any) => {
+          if (result?.error) {
+            console.error('Failed to reorder sound:', result.error);
+            // On error, force a reload to restore correct state
+            this.loadSounds(true);
+          }
+          // On success: do NOT reload here. The config-watch SSE or the
+          // dragStateChange handler will pick up the pending reload.
+        },
+        error: (err: any) => {
+          console.error('Failed to reorder sound:', err);
+          // On error, force a reload to restore correct state
+          this.loadSounds(true);
+        }
+      });
+  }
+
+  /** Called by the content component when a drag starts or the drop animation finishes. */
+  onDragStateChange(isDragging: boolean): void {
+    this.isDragActive = isDragging;
+    if (!isDragging && this.pendingReload) {
+      // The drag animation has settled – now it's safe to reload
+      this.pendingReload = false;
+      this.loadSounds(true);
     }
   }
 
