@@ -1,4 +1,4 @@
-<div class="app-container">
+<div class="app-container" [class.wake-blur]="isWakeDialogOpen" [class.wake-dimmed]="isUiDimmed">
   <!-- Header -->
   <app-header
     [isLoading]="isLoading"
@@ -135,7 +135,65 @@
             {{ isRestarting ? 'Restarting...' : 'Restart Soundpad' }}
           </button>
         </div>
+        <div class="settings-section">
+          <h3>Keep Screen Awake</h3>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Prevent screen from sleeping</span>
+              <span class="settings-toggle-description">Uses the Wake Lock API to keep the screen on while you're using the app</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="keepAwakeEnabled" (change)="toggleKeepAwake()" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="wake-minutes-field" *ngIf="keepAwakeEnabled">
+            <label class="wake-minutes-label" for="wakeMinutesInput">Minutes before sleep is allowed</label>
+            <input
+              id="wakeMinutesInput"
+              type="number"
+              class="wake-minutes-input"
+              [(ngModel)]="wakeMinutes"
+              (ngModelChange)="onWakeMinutesChange($event)"
+              min="1"
+              max="480"
+              step="1"
+            />
+            <p class="wake-minutes-warning">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="warning-icon">
+                <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+              </svg>
+              Your device may take longer than this to actually sleep, depending on OS and power settings.
+            </p>
+          </div>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Are You Still There? Dialog -->
+  <div class="wake-dialog-overlay" *ngIf="isWakeDialogOpen" [class.dimmed]="isUiDimmed">
+    <div class="wake-dialog" (click)="$event.stopPropagation()">
+      <div class="wake-dialog-icon">
+        <svg *ngIf="!isUiDimmed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+        </svg>
+        <svg *ngIf="isUiDimmed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+        </svg>
+      </div>
+      <h2 class="wake-dialog-title" *ngIf="!isUiDimmed">Are you still there?</h2>
+      <h2 class="wake-dialog-title" *ngIf="isUiDimmed">Device may now sleep</h2>
+      <p class="wake-dialog-message" *ngIf="!isUiDimmed">
+        The screen will be allowed to sleep in
+        <strong class="wake-countdown">{{ formatWakeCountdown(wakeCountdownSeconds) }}</strong>
+      </p>
+      <p class="wake-dialog-message" *ngIf="isUiDimmed">
+        The wake lock has been released. Tap anywhere to re-enable.
+      </p>
+      <button class="wake-dialog-btn" (click)="dismissWakeDialog()">
+        {{ isUiDimmed ? 'Wake Up' : 'I\'m still here' }}
+      </button>
     </div>
   </div>
 
@@ -507,3 +565,4 @@
     </div>
   </div>
 </div>
+

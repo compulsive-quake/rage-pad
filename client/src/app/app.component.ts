@@ -88,6 +88,17 @@ export class AppComponent implements OnInit, OnDestroy {
   private launchRetryTimer: any = null;
   private launchCountdownTimer: any = null;
 
+  // ── Keep Screen Awake (Wake Lock) ──────────────────────────────────────────
+  keepAwakeEnabled: boolean = false;
+  wakeMinutes: number = 30;
+  isWakeDialogOpen = false;
+  isUiDimmed = false;
+  wakeCountdownSeconds = 300; // 5-minute countdown
+  private wakeLockSentinel: WakeLockSentinel | null = null;
+  private wakeTimer: any = null;          // timer that fires after wakeMinutes
+  private wakeCountdownTimer: any = null; // 1-second countdown interval
+  private wakeDimTimer: any = null;       // timer that fires after countdown expires
+
   // Playback progress tracking
   playbackProgress = 0;
   playbackTimeRemaining = 0;
@@ -159,6 +170,12 @@ export class AppComponent implements OnInit, OnDestroy {
     // Restore auto-launch preference from localStorage (default: enabled)
     const storedAutoLaunch = localStorage.getItem('autoLaunchEnabled');
     this.autoLaunchEnabled = storedAutoLaunch === null ? true : storedAutoLaunch === 'true';
+
+    // Restore keep-awake preferences from localStorage
+    const storedKeepAwake = localStorage.getItem('keepAwakeEnabled');
+    this.keepAwakeEnabled = storedKeepAwake === 'true';
+    const storedWakeMinutes = localStorage.getItem('wakeMinutes');
+    this.wakeMinutes = storedWakeMinutes ? parseInt(storedWakeMinutes, 10) || 30 : 30;
   }
 
   ngOnInit(): void {
@@ -193,6 +210,11 @@ export class AppComponent implements OnInit, OnDestroy {
     // Start config-watch if enabled
     if (this.configWatchEnabled) {
       this.startConfigWatch();
+    }
+
+    // Start wake lock if it was previously enabled
+    if (this.keepAwakeEnabled) {
+      this.acquireWakeLock();
     }
   }
 
@@ -343,6 +365,8 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.stopConfigWatch();
     this.clearLaunchRetry();
+    this.releaseWakeLock();
+    this.clearWakeTimers();
     this.destroy$.next();
     this.destroy$.complete();
     if (this.playbackTimer) {
@@ -1660,6 +1684,140 @@ export class AppComponent implements OnInit, OnDestroy {
         this.focusedCropHandle = 'end';
       }
     }
+  }
+
+  // ── Keep Screen Awake (Wake Lock) ──────────────────────────────────────────
+
+  /** Toggle the keep-awake feature on/off. */
+  toggleKeepAwake(): void {
+    this.keepAwakeEnabled = !this.keepAwakeEnabled;
+    localStorage.setItem('keepAwakeEnabled', String(this.keepAwakeEnabled));
+
+    if (this.keepAwakeEnabled) {
+      this.acquireWakeLock();
+    } else {
+      this.releaseWakeLock();
+      this.clearWakeTimers();
+      this.isWakeDialogOpen = false;
+      this.isUiDimmed = false;
+    }
+  }
+
+  /** Called when the wake-minutes input changes. */
+  onWakeMinutesChange(value: number): void {
+    this.wakeMinutes = Math.max(1, Math.min(480, value || 30));
+    localStorage.setItem('wakeMinutes', String(this.wakeMinutes));
+
+    // Restart the wake timer if currently active
+    if (this.keepAwakeEnabled && this.wakeLockSentinel && !this.isWakeDialogOpen) {
+      this.startWakeTimer();
+    }
+  }
+
+  /** Acquire the Wake Lock and start the inactivity timer. */
+  private async acquireWakeLock(): Promise<void> {
+    try {
+      if ('wakeLock' in navigator) {
+        this.wakeLockSentinel = await navigator.wakeLock.request('screen');
+        this.wakeLockSentinel.addEventListener('release', () => {
+          // The wake lock was released (e.g. tab became hidden)
+          // Re-acquire when the tab becomes visible again
+          if (this.keepAwakeEnabled && !this.isWakeDialogOpen) {
+            document.addEventListener('visibilitychange', this.onVisibilityChange);
+          }
+        });
+        this.startWakeTimer();
+      }
+    } catch (err) {
+      console.warn('[WakeLock] Failed to acquire wake lock:', err);
+    }
+  }
+
+  /** Visibility change handler – re-acquires wake lock when tab becomes visible. */
+  private onVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible' && this.keepAwakeEnabled && !this.isWakeDialogOpen) {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
+      this.acquireWakeLock();
+    }
+  };
+
+  /** Release the Wake Lock sentinel. */
+  private async releaseWakeLock(): Promise<void> {
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+    if (this.wakeLockSentinel) {
+      try {
+        await this.wakeLockSentinel.release();
+      } catch { /* already released */ }
+      this.wakeLockSentinel = null;
+    }
+  }
+
+  /** Start (or restart) the timer that triggers the "are you still there?" dialog. */
+  private startWakeTimer(): void {
+    this.clearWakeTimers();
+    const ms = this.wakeMinutes * 60 * 1000;
+    this.wakeTimer = setTimeout(() => {
+      this.ngZone.run(() => {
+        this.showWakeDialog();
+      });
+    }, ms);
+  }
+
+  /** Clear all wake-related timers. */
+  private clearWakeTimers(): void {
+    if (this.wakeTimer) {
+      clearTimeout(this.wakeTimer);
+      this.wakeTimer = null;
+    }
+    if (this.wakeCountdownTimer) {
+      clearInterval(this.wakeCountdownTimer);
+      this.wakeCountdownTimer = null;
+    }
+    if (this.wakeDimTimer) {
+      clearTimeout(this.wakeDimTimer);
+      this.wakeDimTimer = null;
+    }
+  }
+
+  /** Show the "Are you still there?" dialog with a 5-minute countdown. */
+  private showWakeDialog(): void {
+    this.isWakeDialogOpen = true;
+    this.isUiDimmed = false;
+    this.wakeCountdownSeconds = 300; // 5 minutes
+
+    this.wakeCountdownTimer = setInterval(() => {
+      this.wakeCountdownSeconds = Math.max(0, this.wakeCountdownSeconds - 1);
+      this.cdr.detectChanges();
+
+      if (this.wakeCountdownSeconds <= 0) {
+        // Countdown expired – dim the UI and release the wake lock
+        if (this.wakeCountdownTimer) {
+          clearInterval(this.wakeCountdownTimer);
+          this.wakeCountdownTimer = null;
+        }
+        this.isUiDimmed = true;
+        this.releaseWakeLock();
+        this.cdr.detectChanges();
+      }
+    }, 1000);
+  }
+
+  /** Dismiss the wake dialog – re-acquire the wake lock and restart the timer. */
+  dismissWakeDialog(): void {
+    this.isWakeDialogOpen = false;
+    this.isUiDimmed = false;
+    this.clearWakeTimers();
+
+    if (this.keepAwakeEnabled) {
+      this.acquireWakeLock();
+    }
+  }
+
+  /** Format seconds into MM:SS for the countdown display. */
+  formatWakeCountdown(seconds: number): string {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   // ── Utility ──────────────────────────────────────────────────────────────

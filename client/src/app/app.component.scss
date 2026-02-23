@@ -2165,3 +2165,197 @@ app-sound-card {
   line-height: 1.3;
   margin-top: 0.1rem;
 }
+
+// ── Wake Lock / Keep Screen Awake ───────────────────────────────────────────
+
+// Blur + depth-of-field effect on the main UI when the wake dialog is visible
+.app-container.wake-blur {
+  > app-header,
+  > app-content,
+  > app-footer,
+  > .modal-overlay {
+    filter: blur(6px) brightness(0.7);
+    transition: filter 0.4s ease;
+    pointer-events: none;
+  }
+}
+
+// Dimmed state – lower brightness to save battery
+.app-container.wake-dimmed {
+  > app-header,
+  > app-content,
+  > app-footer,
+  > .modal-overlay {
+    filter: blur(6px) brightness(0.15);
+    transition: filter 0.8s ease;
+    pointer-events: none;
+  }
+}
+
+// Wake minutes field (shown when keep-awake is toggled on)
+.wake-minutes-field {
+  margin-top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.wake-minutes-label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.wake-minutes-input {
+  width: 100px;
+  padding: 0.5rem 0.65rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  -moz-appearance: textfield;
+
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  &:focus {
+    border-color: rgba(155, 89, 182, 0.6);
+    box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.15);
+  }
+}
+
+.wake-minutes-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.5rem 0.65rem;
+  background: rgba(241, 196, 15, 0.08);
+  border: 1px solid rgba(241, 196, 15, 0.2);
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: rgba(241, 196, 15, 0.85);
+  line-height: 1.4;
+
+  .warning-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 1px;
+    fill: rgba(241, 196, 15, 0.85);
+  }
+}
+
+// "Are you still there?" dialog overlay
+.wake-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  animation: wakeOverlayIn 0.4s ease;
+  transition: background 0.8s ease;
+
+  &.dimmed {
+    background: rgba(0, 0, 0, 0.85);
+  }
+}
+
+@keyframes wakeOverlayIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.wake-dialog {
+  background: rgba(26, 26, 46, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2.5rem 2rem 2rem;
+  max-width: 380px;
+  width: 90%;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 40px rgba(155, 89, 182, 0.1);
+  animation: wakeDialogIn 0.4s ease;
+}
+
+@keyframes wakeDialogIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.wake-dialog-icon {
+  margin-bottom: 1rem;
+
+  svg {
+    width: 48px;
+    height: 48px;
+    fill: #9b59b6;
+    opacity: 0.8;
+  }
+}
+
+.wake-dialog-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.wake-dialog-message {
+  margin: 0 0 1.5rem;
+  font-size: 0.95rem;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
+.wake-countdown {
+  display: inline-block;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #e74c3c;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  margin-top: 0.25rem;
+}
+
+.wake-dialog-btn {
+  width: 100%;
+  padding: 0.85rem 1.5rem;
+  background: #9b59b6;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: #8e44ad;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(155, 89, 182, 0.4);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+}
