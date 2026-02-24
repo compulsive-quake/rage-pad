@@ -1,0 +1,125 @@
+<div class="settings-page">
+  <div class="settings-header">
+    <h2>Settings</h2>
+    <div class="settings-header-actions">
+      <button
+        class="save-btn"
+        [class.save-btn-disabled]="!hasChanges"
+        [disabled]="!hasChanges"
+        (click)="onSave()"
+      >
+        Save
+      </button>
+      <button class="close-btn" (click)="onClose()" title="Close settings">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="settings-body">
+    <div class="settings-content-wrapper">
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Soundlist change detection</span>
+            <span class="settings-toggle-description">Automatically reload sounds when soundlist.spl changes on disk</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" [checked]="draftConfigWatch" (change)="onToggleConfigWatch()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Automatically start Soundpad</span>
+            <span class="settings-toggle-description">Launch Soundpad automatically when it is not detected. Retries with increasing delays on failure.</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" [checked]="draftAutoLaunch" (change)="onToggleAutoLaunch()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Restart Soundpad</span>
+            <span class="settings-toggle-description">If Soundpad is unresponsive or needs to be reloaded, you can restart it here.</span>
+          </div>
+          <button
+            class="restart-btn"
+            (click)="onRestartSoundpad()"
+            [disabled]="isRestarting"
+          >
+            <svg *ngIf="isRestarting" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 18px; height: 18px;">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            <span *ngIf="!isRestarting">Restart</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Prevent screen from sleeping</span>
+            <span class="settings-toggle-description">Keeps the screen on so it doesn't turn off while you're using the app</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" [checked]="draftKeepAwake" (change)="onToggleKeepAwake()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-toggle-row" [class.keep-awake-expanded]="draftIdleTimeout" *ngIf="draftKeepAwake">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Idle timeout</span>
+            <span class="settings-toggle-description">Show an "Are you still there?" prompt after inactivity, then allow the screen to sleep</span>
+          </div>
+          <div class="keep-awake-controls">
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="draftIdleTimeout" (change)="onToggleIdleTimeout()" />
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="wake-minutes-field" *ngIf="draftIdleTimeout">
+              <label class="wake-minutes-label" for="wakeMinutesInput">Minutes before sleep is allowed</label>
+              <input
+                id="wakeMinutesInput"
+                type="number"
+                class="wake-minutes-input"
+                [ngModel]="draftWakeMinutes"
+                (ngModelChange)="onWakeMinutesChange($event)"
+                min="1"
+                max="480"
+                step="1"
+              />
+              <p class="wake-minutes-warning">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="warning-icon">
+                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                </svg>
+                Your device may take longer than this to actually sleep, depending on OS and power settings.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Discard unsaved changes confirmation dialog -->
+  <div class="discard-overlay" *ngIf="showDiscardDialog" (click)="onDiscardCancel()">
+    <div class="discard-dialog" (click)="$event.stopPropagation()">
+      <h3>Unsaved Changes</h3>
+      <p>You have unsaved changes. Do you want to discard them?</p>
+      <div class="discard-actions">
+        <button class="discard-cancel-btn" (click)="onDiscardCancel()">Keep Editing</button>
+        <button class="discard-confirm-btn" (click)="onDiscardConfirm()">Discard</button>
+      </div>
+    </div>
+  </div>
+</div>

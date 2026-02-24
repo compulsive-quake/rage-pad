@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rage Pad",
+  "version": "1.0.0",
+  "identifier": "com.ragepads.app",
+  "build": {
+    "frontendDist": "http://localhost:3000"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Rage Pad",
+        "width": 1400,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 600,
+        "visible": false,
+        "resizable": true,
+        "decorations": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "nsis",
+    "publisher": "Rage Pad",
+    "externalBin": ["binaries/server"],
+    "resources": {
+      "../client/dist/rage-pad-client/browser/*": "client-dist/",
+      "binaries/server-bundle.js": "server-bundle.js"
+    }
+  }
+}

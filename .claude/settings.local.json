@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm install --save-dev @tauri-apps/cli @yao-pkg/pkg 2>&1)"
+    ]
+  }
+}

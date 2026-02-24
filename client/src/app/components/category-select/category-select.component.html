@@ -1,0 +1,44 @@
+<div class="custom-category-select" [class.open]="isDropdownOpen">
+  <!-- Trigger button -->
+  <button
+    type="button"
+    class="custom-category-trigger"
+    (click)="toggleDropdown()"
+    (blur)="onBlur()"
+  >
+    <span class="custom-category-selected">
+      <span class="custom-category-icon-wrap" *ngIf="getCategoryImageUrl(selected)">
+        <img [src]="getCategoryImageUrl(selected)" alt="" class="custom-category-icon-img" #selCatImg (error)="selCatImg.style.display='none'; selCatImgFallback.style.display='inline-flex'" />
+        <span #selCatImgFallback class="cat-img-fallback" style="display:none">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </span>
+      </span>
+      <span class="custom-category-icon-wrap default-icon" *ngIf="!getCategoryImageUrl(selected)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+      </span>
+      <span class="custom-category-name">{{ selected || 'Select category...' }}</span>
+    </span>
+    <svg class="custom-category-chevron" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg>
+  </button>
+  <!-- Dropdown list -->
+  <ul class="custom-category-list" *ngIf="isDropdownOpen">
+    <li
+      *ngFor="let cat of categories"
+      class="custom-category-option"
+      [class.selected]="selected === cat.name"
+      [class.is-sub]="!!cat.parentCategory"
+      (mousedown)="selectCategory(cat.name)"
+    >
+      <span class="custom-category-icon-wrap" *ngIf="getCategoryImageUrl(cat.name)">
+        <img [src]="getCategoryImageUrl(cat.name)" alt="" class="custom-category-icon-img" #catImg (error)="catImg.style.display='none'; catImgFallback.style.display='inline-flex'" />
+        <span #catImgFallback class="cat-img-fallback" style="display:none">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+        </span>
+      </span>
+      <span class="custom-category-icon-wrap default-icon" *ngIf="!getCategoryImageUrl(cat.name)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
+      </span>
+      <span class="custom-category-name">{{ cat.parentCategory ? '└ ' + cat.name : cat.name }}</span>
+    </li>
+  </ul>
+</div>
