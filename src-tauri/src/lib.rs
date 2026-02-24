@@ -1,9 +1,12 @@
 use std::{
+    fs,
+    io::Write,
     net::TcpStream,
     thread,
     time::{Duration, Instant},
 };
 use tauri::Manager;
+use tauri_plugin_shell::process::CommandEvent;
 use tauri_plugin_shell::ShellExt;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -25,13 +28,50 @@ pub fn run() {
             // binary (e.g. server-x86_64-pc-windows-msvc.exe) from the bundle.
             let data_dir = resource_dir.join("data");
 
-            app.shell()
+            // Ensure data directory exists before spawning (needed for log file).
+            fs::create_dir_all(&data_dir).ok();
+
+            let (mut rx, _child) = app
+                .shell()
                 .sidecar("server")?
                 .args([server_bundle.to_str().unwrap_or("")])
                 .env("RAGE_PAD_CLIENT_DIST", client_dist.to_str().unwrap_or(""))
                 .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
                 .env("RAGE_PAD_DATA_DIR", data_dir.to_str().unwrap_or(""))
                 .spawn()?;
+
+            // Drain sidecar stdout/stderr into a log file for debugging.
+            let log_path = data_dir.join("server.log");
+            tauri::async_runtime::spawn(async move {
+                let mut file = fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_path)
+                    .ok();
+                while let Some(event) = rx.recv().await {
+                    if let Some(ref mut f) = file {
+                        match &event {
+                            CommandEvent::Stdout(line) => {
+                                let _ = writeln!(f, "[stdout] {}", String::from_utf8_lossy(line));
+                            }
+                            CommandEvent::Stderr(line) => {
+                                let _ = writeln!(f, "[stderr] {}", String::from_utf8_lossy(line));
+                            }
+                            CommandEvent::Terminated(payload) => {
+                                let _ = writeln!(
+                                    f,
+                                    "[terminated] code={:?} signal={:?}",
+                                    payload.code, payload.signal
+                                );
+                            }
+                            CommandEvent::Error(err) => {
+                                let _ = writeln!(f, "[error] {}", err);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            });
 
             // Wait for the server to be reachable before showing the window,
             // so users never see an error page on startup.

@@ -35,7 +35,14 @@ if (!fs.existsSync(dataDir)) {
 }
 
 const dbPath = path.join(dataDir, 'settings.db');
-const db = new Database(dbPath);
+
+// In release builds, tell better-sqlite3 exactly where the native addon lives
+// so it skips the `bindings` package lookup (which isn't bundled).
+const nativeBinding = process.env['RAGE_PAD_DATA_DIR']
+  ? path.resolve(process.env['RAGE_PAD_DATA_DIR'], '..', 'better_sqlite3.node')
+  : undefined;
+
+const db = new Database(dbPath, nativeBinding ? { nativeBinding } : undefined);
 
 db.pragma('journal_mode = WAL');
 
