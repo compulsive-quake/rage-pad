@@ -1,0 +1,24 @@
+<div class="wake-dialog-overlay" *ngIf="isOpen" [class.dimmed]="isUiDimmed">
+  <div class="wake-dialog" (click)="$event.stopPropagation()">
+    <div class="wake-dialog-icon">
+      <svg *ngIf="!isUiDimmed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+      </svg>
+      <svg *ngIf="isUiDimmed" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+      </svg>
+    </div>
+    <h2 class="wake-dialog-title" *ngIf="!isUiDimmed">Are you still there?</h2>
+    <h2 class="wake-dialog-title" *ngIf="isUiDimmed">Device may now sleep</h2>
+    <p class="wake-dialog-message" *ngIf="!isUiDimmed">
+      The screen will be allowed to sleep in
+      <strong class="wake-countdown">{{ formatWakeCountdown(countdownSeconds) }}</strong>
+    </p>
+    <p class="wake-dialog-message" *ngIf="isUiDimmed">
+      The wake lock has been released. Tap anywhere to re-enable.
+    </p>
+    <button class="wake-dialog-btn" (click)="onDismiss()">
+      {{ isUiDimmed ? 'Wake Up' : "I'm still here" }}
+    </button>
+  </div>
+</div>
