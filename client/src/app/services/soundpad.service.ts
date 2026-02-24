@@ -13,11 +13,39 @@ export interface UpdateInfo {
 }
 import { Sound, ConnectionStatus, CategoryIcon } from '../models/sound.model';
 
+export interface AppSettings {
+  configWatchEnabled: boolean;
+  autoLaunchEnabled: boolean;
+  keepAwakeEnabled: boolean;
+  idleTimeoutEnabled: boolean;
+  wakeMinutes: number;
+  autoUpdateCheckEnabled: boolean;
+  serverPort: number;
+}
+
+const DEFAULT_SETTINGS: AppSettings = {
+  configWatchEnabled: false,
+  autoLaunchEnabled: true,
+  keepAwakeEnabled: false,
+  idleTimeoutEnabled: false,
+  wakeMinutes: 30,
+  autoUpdateCheckEnabled: true,
+  serverPort: 3000,
+};
+
 @Injectable({
   providedIn: 'root'
 })
 export class SoundpadService implements OnDestroy {
-  private apiUrl = `http://${window.location.hostname}:3000/api`;
+  /**
+   * API base URL.  The UI and API are co-hosted on the same Express
+   * server, so `window.location.origin` is always the correct base.
+   * After a port-change redirect, origin automatically reflects the new port.
+   */
+  private get apiUrl(): string {
+    return `${window.location.origin}/api`;
+  }
+
   private connectionStatus$ = new BehaviorSubject<ConnectionStatus>({ connected: false });
   private sounds$ = new BehaviorSubject<Sound[]>([]);
   private destroy$ = new Subject<void>();
@@ -25,6 +53,42 @@ export class SoundpadService implements OnDestroy {
   constructor(private http: HttpClient, private ngZone: NgZone) {
     // Check connection status periodically
     this.startConnectionCheck();
+  }
+
+  /** The port the page (and therefore the API) is currently served from. */
+  get port(): number {
+    return Number(window.location.port) || 3000;
+  }
+
+  /** Ask the server (on its current port) to move to a new port. */
+  changeServerPort(newPort: number): Observable<{ port: number; message: string }> {
+    return this.http.post<{ port: number; message: string }>(`${this.apiUrl}/change-port`, { port: newPort });
+  }
+
+  /** Verify that the server is reachable on the given port. */
+  verifyNewPort(port: number): Observable<boolean> {
+    const url = `http://${window.location.hostname}:${port}/api/status`;
+    return this.http.get<ConnectionStatus>(url).pipe(
+      map(s => s.connected),
+      catchError(() => of(false))
+    );
+  }
+
+  /** Build a category-image URL using the current origin. */
+  getCategoryImageUrl(path: string): string {
+    return `${window.location.origin}/api/category-image?path=${encodeURIComponent(path)}`;
+  }
+
+  getSettings(): Observable<AppSettings> {
+    return this.http.get<AppSettings>(`${this.apiUrl}/settings`).pipe(
+      catchError(() => of(DEFAULT_SETTINGS))
+    );
+  }
+
+  saveSettings(partial: Partial<AppSettings>): Observable<AppSettings> {
+    return this.http.put<AppSettings>(`${this.apiUrl}/settings`, partial).pipe(
+      catchError(() => of({ ...DEFAULT_SETTINGS, ...partial }))
+    );
   }
 
   ngOnDestroy(): void {

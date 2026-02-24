@@ -10,6 +10,7 @@ export interface SettingsPayload {
   idleTimeoutEnabled: boolean;
   wakeMinutes: number;
   autoUpdateCheckEnabled: boolean;
+  serverPort: number;
 }
 
 @Component({
@@ -27,6 +28,9 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() idleTimeoutEnabled = false;
   @Input() wakeMinutes = 30;
   @Input() autoUpdateCheckEnabled = true;
+  @Input() serverPort = 3000;
+  @Input() isPortChanging = false;
+  @Input() portChangeError = '';
   @Input() isRestarting = false;
   @Input() isCheckingForUpdate = false;
   @Input() latestVersion = '';
@@ -45,6 +49,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftIdleTimeout = false;
   draftWakeMinutes = 30;
   draftAutoUpdateCheck = true;
+  draftServerPort = 3000;
 
   // Version
   readonly appVersion = APP_VERSION;
@@ -63,7 +68,7 @@ export class SettingsComponent implements OnInit, OnChanges {
     // When parent updates inputs (e.g. after a save), re-snapshot
     if (changes['configWatchEnabled'] || changes['autoLaunchEnabled'] ||
         changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes'] ||
-        changes['autoUpdateCheckEnabled']) {
+        changes['autoUpdateCheckEnabled'] || changes['serverPort']) {
       this.snapshotDraft();
     }
 
@@ -82,6 +87,7 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftIdleTimeout = this.idleTimeoutEnabled;
     this.draftWakeMinutes = this.wakeMinutes;
     this.draftAutoUpdateCheck = this.autoUpdateCheckEnabled;
+    this.draftServerPort = this.serverPort;
   }
 
   /** Whether any draft value differs from the committed value */
@@ -91,7 +97,8 @@ export class SettingsComponent implements OnInit, OnChanges {
            this.draftKeepAwake !== this.keepAwakeEnabled ||
            this.draftIdleTimeout !== this.idleTimeoutEnabled ||
            this.draftWakeMinutes !== this.wakeMinutes ||
-           this.draftAutoUpdateCheck !== this.autoUpdateCheckEnabled;
+           this.draftAutoUpdateCheck !== this.autoUpdateCheckEnabled ||
+           this.draftServerPort !== this.serverPort;
   }
 
   // ── Draft change handlers ──────────────────────────────────────────────
@@ -120,6 +127,10 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftAutoUpdateCheck = !this.draftAutoUpdateCheck;
   }
 
+  onServerPortChange(value: number): void {
+    this.draftServerPort = value;
+  }
+
   onCheckForUpdates(): void {
     this.checkForUpdates.emit();
   }
@@ -137,7 +148,8 @@ export class SettingsComponent implements OnInit, OnChanges {
       keepAwakeEnabled: this.draftKeepAwake,
       idleTimeoutEnabled: this.draftIdleTimeout,
       wakeMinutes: this.draftWakeMinutes,
-      autoUpdateCheckEnabled: this.draftAutoUpdateCheck
+      autoUpdateCheckEnabled: this.draftAutoUpdateCheck,
+      serverPort: this.draftServerPort
     });
   }
 

@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
-import { SoundpadService } from './services/soundpad.service';
+import { SoundpadService, AppSettings } from './services/soundpad.service';
 import { Sound, ConnectionStatus, Category, CategoryIcon } from './models/sound.model';
 import { HeaderComponent } from './components/header/header.component';
 import { FooterComponent } from './components/footer/footer.component';
@@ -81,6 +81,11 @@ export class AppComponent implements OnInit, OnDestroy {
   private wakeCountdownTimer: any = null;
   private wakeDimTimer: any = null;
 
+  // Server port
+  serverPort: number = 3000;
+  isPortChanging = false;
+  portChangeError = '';
+
   // Update check
   autoUpdateCheckEnabled: boolean;
   updateAvailable = false;
@@ -115,34 +120,25 @@ export class AppComponent implements OnInit, OnDestroy {
   private playbackTimer: any = null;
 
   constructor(private soundpadService: SoundpadService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
-    const stored = localStorage.getItem('configWatchEnabled');
-    this.configWatchEnabled = stored === 'true';
-
-    const storedAutoLaunch = localStorage.getItem('autoLaunchEnabled');
-    this.autoLaunchEnabled = storedAutoLaunch === null ? true : storedAutoLaunch === 'true';
-
-    const storedKeepAwake = localStorage.getItem('keepAwakeEnabled');
-    this.keepAwakeEnabled = storedKeepAwake === 'true';
-    const storedIdleTimeout = localStorage.getItem('idleTimeoutEnabled');
-    this.idleTimeoutEnabled = storedIdleTimeout === 'true';
-    const storedWakeMinutes = localStorage.getItem('wakeMinutes');
-    this.wakeMinutes = storedWakeMinutes ? parseInt(storedWakeMinutes, 10) || 30 : 30;
-
-    const storedAutoUpdateCheck = localStorage.getItem('autoUpdateCheckEnabled');
-    this.autoUpdateCheckEnabled = storedAutoUpdateCheck === null ? true : storedAutoUpdateCheck === 'true';
+    this.configWatchEnabled = false;
+    this.autoLaunchEnabled = true;
+    this.autoUpdateCheckEnabled = true;
+    this.serverPort = Number(window.location.port) || 3000;
   }
 
   ngOnInit(): void {
-    this.soundpadService.getConnectionStatus()
-      .pipe(takeUntil(this.destroy$))
-      .subscribe((status: ConnectionStatus) => {
-        this.isConnected = status.connected;
-
-        if (status.connected) {
-          this.clearLaunchRetry();
-        } else if (!status.connected && this.autoLaunchEnabled && !this.isLaunching && !this.launchRetryTimer) {
-          this.attemptAutoLaunch();
-        }
+    // Load settings from the server DB, then initialise features
+    this.soundpadService.getSettings()
+      .pipe(take(1))
+      .subscribe((settings: AppSettings) => {
+        this.configWatchEnabled = settings.configWatchEnabled;
+        this.autoLaunchEnabled = settings.autoLaunchEnabled;
+        this.keepAwakeEnabled = settings.keepAwakeEnabled;
+        this.idleTimeoutEnabled = settings.idleTimeoutEnabled;
+        this.wakeMinutes = settings.wakeMinutes;
+        this.autoUpdateCheckEnabled = settings.autoUpdateCheckEnabled;
+        // serverPort stays from window.location — that's where we actually are
+        this.initializeAfterSettingsLoad();
       });
 
     this.searchSubject$.pipe(
@@ -154,6 +150,20 @@ export class AppComponent implements OnInit, OnDestroy {
     });
 
     this.loadSounds();
+  }
+
+  private initializeAfterSettingsLoad(): void {
+    this.soundpadService.getConnectionStatus()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe((status: ConnectionStatus) => {
+        this.isConnected = status.connected;
+
+        if (status.connected) {
+          this.clearLaunchRetry();
+        } else if (!status.connected && this.autoLaunchEnabled && !this.isLaunching && !this.launchRetryTimer) {
+          this.attemptAutoLaunch();
+        }
+      });
 
     if (this.configWatchEnabled) {
       this.startConfigWatch();
@@ -191,7 +201,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleConfigWatch(): void {
     this.configWatchEnabled = !this.configWatchEnabled;
-    localStorage.setItem('configWatchEnabled', String(this.configWatchEnabled));
     if (this.configWatchEnabled) {
       this.startConfigWatch();
     } else {
@@ -203,7 +212,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleAutoLaunch(): void {
     this.autoLaunchEnabled = !this.autoLaunchEnabled;
-    localStorage.setItem('autoLaunchEnabled', String(this.autoLaunchEnabled));
     if (!this.autoLaunchEnabled) {
       this.clearLaunchRetry();
     } else if (!this.isConnected && !this.isLaunching) {
@@ -412,7 +420,7 @@ export class AppComponent implements OnInit, OnDestroy {
       return `data:image/png;base64,${categoryIcon.icon}`;
     }
     if (!categoryIcon.icon.startsWith('stock_')) {
-      return `http://localhost:3000/api/category-image?path=${encodeURIComponent(categoryIcon.icon)}`;
+      return this.soundpadService.getCategoryImageUrl(categoryIcon.icon);
     }
     return '';
   }
@@ -606,9 +614,18 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onSaveSettings(payload: SettingsPayload): void {
+    // Persist non-port settings to the server DB
+    const { serverPort: _port, ...settingsToSave } = payload;
+    this.soundpadService.saveSettings(settingsToSave)
+      .pipe(take(1))
+      .subscribe(() => {
+        this.applySettingsSideEffects(payload);
+      });
+  }
+
+  private applySettingsSideEffects(payload: SettingsPayload): void {
     if (payload.configWatchEnabled !== this.configWatchEnabled) {
       this.configWatchEnabled = payload.configWatchEnabled;
-      localStorage.setItem('configWatchEnabled', String(this.configWatchEnabled));
       if (this.configWatchEnabled) {
         this.startConfigWatch();
       } else {
@@ -618,7 +635,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (payload.autoLaunchEnabled !== this.autoLaunchEnabled) {
       this.autoLaunchEnabled = payload.autoLaunchEnabled;
-      localStorage.setItem('autoLaunchEnabled', String(this.autoLaunchEnabled));
       if (!this.autoLaunchEnabled) {
         this.clearLaunchRetry();
       } else if (!this.isConnected && !this.isLaunching) {
@@ -628,7 +644,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (payload.keepAwakeEnabled !== this.keepAwakeEnabled) {
       this.keepAwakeEnabled = payload.keepAwakeEnabled;
-      localStorage.setItem('keepAwakeEnabled', String(this.keepAwakeEnabled));
       if (this.keepAwakeEnabled) {
         this.acquireWakeLock();
       } else {
@@ -641,7 +656,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (payload.idleTimeoutEnabled !== this.idleTimeoutEnabled) {
       this.idleTimeoutEnabled = payload.idleTimeoutEnabled;
-      localStorage.setItem('idleTimeoutEnabled', String(this.idleTimeoutEnabled));
       if (this.keepAwakeEnabled && this.wakeLockSentinel) {
         if (this.idleTimeoutEnabled) {
           this.startWakeTimer();
@@ -655,7 +669,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (payload.wakeMinutes !== this.wakeMinutes) {
       this.wakeMinutes = Math.max(1, Math.min(480, payload.wakeMinutes || 30));
-      localStorage.setItem('wakeMinutes', String(this.wakeMinutes));
       if (this.keepAwakeEnabled && this.idleTimeoutEnabled && this.wakeLockSentinel && !this.isWakeDialogOpen) {
         this.startWakeTimer();
       }
@@ -663,7 +676,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (payload.autoUpdateCheckEnabled !== this.autoUpdateCheckEnabled) {
       this.autoUpdateCheckEnabled = payload.autoUpdateCheckEnabled;
-      localStorage.setItem('autoUpdateCheckEnabled', String(this.autoUpdateCheckEnabled));
       if (this.autoUpdateCheckEnabled) {
         this.startUpdateCheck();
       } else {
@@ -671,6 +683,58 @@ export class AppComponent implements OnInit, OnDestroy {
         this.updateAvailable = false;
       }
     }
+
+    if (payload.serverPort !== this.serverPort) {
+      this.migrateServerPort(payload.serverPort);
+    }
+  }
+
+  /**
+   * Ask the server to move to a new port, poll until it confirms, then
+   * redirect the browser so both the UI *and* API are on the new port.
+   * The server persists the new port to the settings DB via /api/change-port.
+   */
+  private migrateServerPort(newPort: number): void {
+    this.isPortChanging = true;
+    this.portChangeError = '';
+
+    this.soundpadService.changeServerPort(newPort)
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          // Poll the new port to confirm the server is hosting there
+          let attempts = 0;
+          const poll = () => {
+            attempts++;
+            this.soundpadService.verifyNewPort(newPort)
+              .pipe(take(1))
+              .subscribe(ok => {
+                if (ok) {
+                  this.isPortChanging = false;
+
+                  // Redirect the browser so the page (and therefore all API
+                  // calls via window.location.origin) uses the new port.
+                  const url = new URL(window.location.href);
+                  url.port = String(newPort);
+                  window.location.href = url.toString();
+                } else if (attempts < 8) {
+                  setTimeout(poll, 500);
+                } else {
+                  this.isPortChanging = false;
+                  this.portChangeError = `Server not reachable on port ${newPort}`;
+                  console.error(`[port-change] Server not reachable on port ${newPort}`);
+                }
+              });
+          };
+          // Give the server a moment to spin up on the new port
+          setTimeout(poll, 600);
+        },
+        error: (err: any) => {
+          this.isPortChanging = false;
+          this.portChangeError = err?.error?.error || `Failed to change port`;
+          console.error('[port-change] Failed:', this.portChangeError);
+        }
+      });
   }
 
   toggleRenameMode(): void {
@@ -802,7 +866,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleKeepAwake(): void {
     this.keepAwakeEnabled = !this.keepAwakeEnabled;
-    localStorage.setItem('keepAwakeEnabled', String(this.keepAwakeEnabled));
     if (this.keepAwakeEnabled) {
       this.acquireWakeLock();
     } else {
@@ -815,7 +878,6 @@ export class AppComponent implements OnInit, OnDestroy {
 
   onWakeMinutesChange(value: number): void {
     this.wakeMinutes = Math.max(1, Math.min(480, value || 30));
-    localStorage.setItem('wakeMinutes', String(this.wakeMinutes));
     if (this.keepAwakeEnabled && this.wakeLockSentinel && !this.isWakeDialogOpen) {
       this.startWakeTimer();
     }

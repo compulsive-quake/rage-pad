@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CategoryIcon } from '../../models/sound.model';
+import { SoundpadService } from '../../services/soundpad.service';
 
 @Component({
   selector: 'app-category-select',
@@ -16,6 +17,8 @@ export class CategorySelectComponent {
   @Output() selectionChange = new EventEmitter<string>();
 
   isDropdownOpen = false;
+
+  constructor(private soundpadService: SoundpadService) {}
 
   toggleDropdown(): void {
     this.isDropdownOpen = !this.isDropdownOpen;
@@ -39,7 +42,7 @@ export class CategorySelectComponent {
       return `data:image/png;base64,${icon.icon}`;
     }
     if (!icon.icon.startsWith('stock_')) {
-      return `http://localhost:3000/api/category-image?path=${encodeURIComponent(icon.icon)}`;
+      return this.soundpadService.getCategoryImageUrl(icon.icon);
     }
     return '';
   }
