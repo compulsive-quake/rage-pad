@@ -40,9 +40,14 @@
     [idleTimeoutEnabled]="idleTimeoutEnabled"
     [wakeMinutes]="wakeMinutes"
     [isRestarting]="isRestarting"
+    [autoUpdateCheckEnabled]="autoUpdateCheckEnabled"
+    [isCheckingForUpdate]="isCheckingForUpdate"
+    [latestVersion]="latestVersion"
+    [updateAvailable]="updateAvailable"
     (saveSettings)="onSaveSettings($event)"
     (restartSoundpad)="restartSoundpad()"
     (closeSettings)="toggleSettingsModal()"
+    (checkForUpdates)="manualUpdateCheck()"
   ></app-settings>
 
   <!-- Footer with Playback Controls -->
@@ -58,11 +63,15 @@
     [isLaunching]="isLaunching"
     [launchErrorMessage]="launchErrorMessage"
     [launchRetryCountdown]="launchRetryCountdown"
+    [updateAvailable]="updateAvailable && !updateDismissed"
+    [latestVersion]="latestVersion"
+    [downloadUrl]="downloadUrl"
     (stop)="stopSound()"
     (togglePause)="togglePause()"
     (volumeChange)="setVolume($event)"
     (playbackModeChange)="setPlaybackMode($event)"
     (manualLaunch)="manualLaunchSoundpad()"
+    (dismissUpdate)="dismissUpdate()"
   ></app-footer>
 
   <!-- Rename Modal -->

@@ -1,6 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { APP_VERSION } from '../../services/soundpad.service';
 
 export interface SettingsPayload {
   configWatchEnabled: boolean;
@@ -8,6 +9,7 @@ export interface SettingsPayload {
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
   wakeMinutes: number;
+  autoUpdateCheckEnabled: boolean;
 }
 
 @Component({
@@ -24,12 +26,17 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() keepAwakeEnabled = false;
   @Input() idleTimeoutEnabled = false;
   @Input() wakeMinutes = 30;
+  @Input() autoUpdateCheckEnabled = true;
   @Input() isRestarting = false;
+  @Input() isCheckingForUpdate = false;
+  @Input() latestVersion = '';
+  @Input() updateAvailable = false;
 
   // Events
   @Output() saveSettings = new EventEmitter<SettingsPayload>();
   @Output() restartSoundpad = new EventEmitter<void>();
   @Output() closeSettings = new EventEmitter<void>();
+  @Output() checkForUpdates = new EventEmitter<void>();
 
   // Draft (pending) values – user edits these
   draftConfigWatch = false;
@@ -37,6 +44,13 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftKeepAwake = false;
   draftIdleTimeout = false;
   draftWakeMinutes = 30;
+  draftAutoUpdateCheck = true;
+
+  // Version
+  readonly appVersion = APP_VERSION;
+
+  // Version info dialog
+  showVersionDialog = false;
 
   // Discard confirmation dialog
   showDiscardDialog = false;
@@ -48,8 +62,15 @@ export class SettingsComponent implements OnInit, OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     // When parent updates inputs (e.g. after a save), re-snapshot
     if (changes['configWatchEnabled'] || changes['autoLaunchEnabled'] ||
-        changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes']) {
+        changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes'] ||
+        changes['autoUpdateCheckEnabled']) {
       this.snapshotDraft();
+    }
+
+    // When a manual update check finishes (isCheckingForUpdate goes true→false), show dialog if up to date
+    const checkChange = changes['isCheckingForUpdate'];
+    if (checkChange && checkChange.previousValue === true && checkChange.currentValue === false && !this.updateAvailable) {
+      this.showVersionDialog = true;
     }
   }
 
@@ -60,6 +81,7 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftKeepAwake = this.keepAwakeEnabled;
     this.draftIdleTimeout = this.idleTimeoutEnabled;
     this.draftWakeMinutes = this.wakeMinutes;
+    this.draftAutoUpdateCheck = this.autoUpdateCheckEnabled;
   }
 
   /** Whether any draft value differs from the committed value */
@@ -68,7 +90,8 @@ export class SettingsComponent implements OnInit, OnChanges {
            this.draftAutoLaunch !== this.autoLaunchEnabled ||
            this.draftKeepAwake !== this.keepAwakeEnabled ||
            this.draftIdleTimeout !== this.idleTimeoutEnabled ||
-           this.draftWakeMinutes !== this.wakeMinutes;
+           this.draftWakeMinutes !== this.wakeMinutes ||
+           this.draftAutoUpdateCheck !== this.autoUpdateCheckEnabled;
   }
 
   // ── Draft change handlers ──────────────────────────────────────────────
@@ -93,6 +116,18 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftWakeMinutes = value;
   }
 
+  onToggleAutoUpdateCheck(): void {
+    this.draftAutoUpdateCheck = !this.draftAutoUpdateCheck;
+  }
+
+  onCheckForUpdates(): void {
+    this.checkForUpdates.emit();
+  }
+
+  closeVersionDialog(): void {
+    this.showVersionDialog = false;
+  }
+
   // ── Save ───────────────────────────────────────────────────────────────
 
   onSave(): void {
@@ -101,7 +136,8 @@ export class SettingsComponent implements OnInit, OnChanges {
       autoLaunchEnabled: this.draftAutoLaunch,
       keepAwakeEnabled: this.draftKeepAwake,
       idleTimeoutEnabled: this.draftIdleTimeout,
-      wakeMinutes: this.draftWakeMinutes
+      wakeMinutes: this.draftWakeMinutes,
+      autoUpdateCheckEnabled: this.draftAutoUpdateCheck
     });
   }
 

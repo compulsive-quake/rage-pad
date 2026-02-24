@@ -3,6 +3,10 @@
   "version": "1.0.1",
   "description": "Soundpad integration with Angular frontend",
   "main": "dist/server/index.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/compulsive-quake/rage-pad/releases"
+  },
   "scripts": {
     "build:server": "tsc -p tsconfig.server.json",
     "build:server:watch": "tsc -p tsconfig.server.json --watch",

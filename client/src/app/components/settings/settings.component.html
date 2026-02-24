@@ -108,6 +108,55 @@
           </div>
         </div>
       </div>
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Check for updates</span>
+            <span class="settings-toggle-description">Periodically check GitHub for a newer release</span>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" [checked]="draftAutoUpdateCheck" (change)="onToggleAutoUpdateCheck()" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-toggle-row version-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Version</span>
+            <span class="settings-toggle-description">v{{ appVersion }}</span>
+          </div>
+          <button
+            class="check-update-btn"
+            (click)="onCheckForUpdates()"
+            [disabled]="isCheckingForUpdate"
+          >
+            <svg *ngIf="isCheckingForUpdate" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            <span *ngIf="!isCheckingForUpdate">Check for updates</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Version info dialog (up to date) -->
+  <div class="discard-overlay" *ngIf="showVersionDialog" (click)="closeVersionDialog()">
+    <div class="discard-dialog version-dialog" (click)="$event.stopPropagation()">
+      <h3>Version Info</h3>
+      <div class="version-info-rows">
+        <div class="version-info-row">
+          <span class="version-info-label">Current</span>
+          <span class="version-info-value">v{{ appVersion }}</span>
+        </div>
+        <div class="version-info-row">
+          <span class="version-info-label">Latest</span>
+          <span class="version-info-value">v{{ latestVersion || appVersion }}</span>
+        </div>
+      </div>
+      <p class="version-up-to-date">You're up to date!</p>
+      <div class="discard-actions">
+        <button class="discard-cancel-btn" (click)="closeVersionDialog()">Close</button>
+      </div>
     </div>
   </div>
 
