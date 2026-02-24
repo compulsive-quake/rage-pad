@@ -58,7 +58,9 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
 
 # ── Check for uncommitted changes ──────────────────────────────────────────
 
+$ErrorActionPreference = "Continue"
 git diff --quiet HEAD 2>&1 | Out-Null
+$ErrorActionPreference = "Stop"
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: You have uncommitted changes. Commit or stash them before releasing." -ForegroundColor Red
     exit 1
@@ -66,7 +68,9 @@ if ($LASTEXITCODE -ne 0) {
 
 # ── Check that the tag doesn't already exist ───────────────────────────────
 
+$ErrorActionPreference = "Continue"
 git rev-parse $Tag 2>&1 | Out-Null
+$ErrorActionPreference = "Stop"
 if ($LASTEXITCODE -eq 0) {
     Write-Host "ERROR: Tag $Tag already exists. Bump the version or delete the tag first." -ForegroundColor Red
     exit 1
