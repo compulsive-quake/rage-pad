@@ -467,15 +467,11 @@ router.post('/sounds/add', upload.single('soundFile'), async (req, res) => {
         // Optional artist and title metadata
         const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
         const title = typeof req.body.title === 'string' ? req.body.title : '';
-        // Optional duration in seconds (provided when the audio was fetched from YouTube)
-        const durationSeconds = req.body.durationSeconds !== undefined
-            ? parseInt(req.body.durationSeconds, 10) || 0
-            : 0;
         // Suppress SSE notifications while we kill/restart Soundpad.
         // The file watcher would otherwise fire before Soundpad is back up,
         // causing the client to hit a dead pipe and get an empty sound list.
         sseSuppressed = true;
-        const result = await soundpadClient.addSound(req.file.path, req.file.originalname, categoryName, displayName, artist, title, durationSeconds);
+        const result = await soundpadClient.addSound(req.file.path, req.file.originalname, categoryName, displayName, artist, title);
         // Re-enable SSE and notify clients now that Soundpad is ready
         sseSuppressed = false;
         if (result.success) {

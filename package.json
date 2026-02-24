@@ -1,6 +1,6 @@
 {
   "name": "rage-pad",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Soundpad integration with Angular frontend",
   "main": "dist/server/index.js",
   "scripts": {
@@ -15,7 +15,7 @@
     "dev": "concurrently \"npm run build:server:watch\" \"npm run start:server:watch\" \"npm run dev:server\" \"npm run start:client\"",
     "bundle:server": "node -e \"require('fs').mkdirSync('src-tauri/binaries', {recursive: true})\" && esbuild dist/server/index.js --bundle --platform=node --target=node20 --outfile=src-tauri/binaries/server-bundle.js",
     "download:node": "node -e \"require('fs').mkdirSync('src-tauri/binaries', {recursive: true})\" && curl -Lo src-tauri/binaries/server-x86_64-pc-windows-msvc.exe https://nodejs.org/dist/v20.18.3/win-x64/node.exe",
-    "build:windows": "npm run build:server && npm run build:client && npm run bundle:server && tauri build"
+    "build:windows": "npm run build:server && npm run build:client && npm run bundle:server && npm run download:node && tauri build"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",

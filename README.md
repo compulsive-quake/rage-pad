@@ -15,11 +15,28 @@ A Node.js application with an Angular frontend that integrates with Soundpad sof
 
 ## Prerequisites
 
-- **Node.js** (v18 or higher)
 - **Soundpad** software installed and running on Windows
 - Soundpad's Remote Control feature must be enabled
 
-## Project Structure
+## Installation (Windows)
+
+1. Download the latest `.exe` installer from the [Releases](https://github.com/AceOfRage/rage-pad/releases) page.
+2. Run the installer and follow the on-screen prompts.
+3. Launch **Rage Pad** from the Start Menu or desktop shortcut.
+
+That's it — the bundled app includes everything it needs to run.
+
+## Development Setup
+
+If you want to build from source or contribute to the project, follow the steps below.
+
+### Development Prerequisites
+
+- **Node.js** (v18 or higher)
+- **Rust** toolchain (for Tauri)
+- **Tauri CLI** (`npm install -g @tauri-apps/cli`)
+
+### Project Structure
 
 ```
 rage-pad/
@@ -34,12 +51,13 @@ rage-pad/
 │           ├── components/     # UI components
 │           ├── models/         # TypeScript interfaces
 │           └── services/       # Angular services
+├── src-tauri/             # Tauri desktop wrapper
 ├── package.json
 ├── tsconfig.server.json
 └── README.md
 ```
 
-## Installation
+### Install Dependencies
 
 1. **Install root dependencies:**
    ```bash
@@ -53,9 +71,7 @@ rage-pad/
    cd ..
    ```
 
-## Running the Application
-
-### Development Mode
+### Running in Development Mode
 
 Run both the backend server and Angular dev server concurrently:
 
@@ -67,7 +83,17 @@ This will start:
 - Backend server at `http://localhost:3000`
 - Angular dev server at `http://localhost:4200`
 
-### Production Mode
+### Building for Production
+
+**Build the standalone Windows installer:**
+
+```bash
+npm run build:windows
+```
+
+This will compile the server, build the Angular client, bundle everything with a portable Node.js runtime, and produce an NSIS installer in `src-tauri/target/release/bundle/nsis/`.
+
+**Or run production mode without Tauri:**
 
 1. **Build the Angular client:**
    ```bash
