@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm install --save-dev @tauri-apps/cli @yao-pkg/pkg 2>&1)",
       "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad && npm run build:server 2>&1)",
-      "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad/client && npx ng build 2>&1)"
+      "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad/client && npx ng build 2>&1)",
+      "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad && npx tsc --noEmit --project tsconfig.server.json 2>&1)"
     ]
   }
 }

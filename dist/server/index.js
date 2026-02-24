@@ -9,6 +9,46 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const routes_1 = __importDefault(require("./routes"));
 const database_1 = require("./database");
+// ── File logging for release builds ─────────────────────────────────────────
+function setupLogging() {
+    const dataDir = process.env['RAGE_PAD_DATA_DIR'];
+    if (!dataDir)
+        return; // dev mode — keep default console behaviour
+    const logPath = path_1.default.join(dataDir, 'server.log');
+    if (!fs_1.default.existsSync(dataDir)) {
+        fs_1.default.mkdirSync(dataDir, { recursive: true });
+    }
+    const logStream = fs_1.default.createWriteStream(logPath, { flags: 'a' });
+    const origLog = console.log.bind(console);
+    const origError = console.error.bind(console);
+    const origWarn = console.warn.bind(console);
+    const timestamp = () => new Date().toISOString();
+    console.log = (...args) => {
+        logStream.write(`[${timestamp()}] [LOG] ${args.join(' ')}\n`);
+        origLog(...args);
+    };
+    console.error = (...args) => {
+        logStream.write(`[${timestamp()}] [ERROR] ${args.join(' ')}\n`);
+        origError(...args);
+    };
+    console.warn = (...args) => {
+        logStream.write(`[${timestamp()}] [WARN] ${args.join(' ')}\n`);
+        origWarn(...args);
+    };
+    process.on('uncaughtException', (err) => {
+        const msg = `[${timestamp()}] [FATAL] Uncaught exception: ${err.stack || err.message}\n`;
+        logStream.write(msg);
+        origError(msg);
+        process.exit(1);
+    });
+    process.on('unhandledRejection', (reason) => {
+        const msg = `[${timestamp()}] [FATAL] Unhandled rejection: ${reason}\n`;
+        logStream.write(msg);
+        origError(msg);
+        process.exit(1);
+    });
+}
+setupLogging();
 const app = (0, express_1.default)();
 const startupPort = Number(process.env.PORT) || (0, database_1.getSetting)('serverPort');
 let currentPort = startupPort;
