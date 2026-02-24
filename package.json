@@ -19,7 +19,8 @@
     "dev": "concurrently \"npm run build:server:watch\" \"npm run start:server:watch\" \"npm run dev:server\" \"npm run start:client\"",
     "bundle:server": "node -e \"require('fs').mkdirSync('src-tauri/binaries', {recursive: true})\" && esbuild dist/server/index.js --bundle --platform=node --target=node20 --outfile=src-tauri/binaries/server-bundle.js",
     "download:node": "node -e \"require('fs').mkdirSync('src-tauri/binaries', {recursive: true})\" && curl -Lo src-tauri/binaries/server-x86_64-pc-windows-msvc.exe https://nodejs.org/dist/v20.18.3/win-x64/node.exe",
-    "build:windows": "npm run build:server && npm run build:client && npm run bundle:server && npm run download:node && tauri build && node -e \"const fs=require('fs'),p=require('./package.json'),g=require('path').join.bind(require('path'));fs.mkdirSync('builds',{recursive:true});fs.cpSync(g('src-tauri','target','release','bundle','nsis'),g('builds'),{recursive:true,force:true})\""
+    "build:windows": "npm run build:server && npm run build:client && npm run bundle:server && npm run download:node && tauri build && node -e \"const fs=require('fs'),p=require('./package.json'),g=require('path').join.bind(require('path'));fs.mkdirSync('builds',{recursive:true});fs.cpSync(g('src-tauri','target','release','bundle','nsis'),g('builds'),{recursive:true,force:true})\"",
+    "release:windows": "powershell -ExecutionPolicy Bypass -File scripts/release.ps1"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
