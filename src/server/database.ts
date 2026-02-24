@@ -1,4 +1,3 @@
-import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
@@ -24,7 +23,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   serverPort: 3000,
 };
 
-// ── DB initialisation ────────────────────────────────────────────────────────
+// ── Data dir & file path ─────────────────────────────────────────────────────
 
 const dataDir = process.env['RAGE_PAD_DATA_DIR']
   ? path.resolve(process.env['RAGE_PAD_DATA_DIR'])
@@ -34,77 +33,57 @@ if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.join(dataDir, 'settings.db');
-
-// In release builds, tell better-sqlite3 exactly where the native addon lives
-// so it skips the `bindings` package lookup (which isn't bundled).
-const nativeBinding = process.env['RAGE_PAD_DATA_DIR']
-  ? path.resolve(process.env['RAGE_PAD_DATA_DIR'], '..', 'better_sqlite3.node')
-  : undefined;
-
-const db = new Database(dbPath, nativeBinding ? { nativeBinding } : undefined);
-
-db.pragma('journal_mode = WAL');
-
-db.exec(`
-  CREATE TABLE IF NOT EXISTS settings (
-    key   TEXT PRIMARY KEY,
-    value TEXT NOT NULL
-  )
-`);
-
-// Seed defaults (INSERT OR IGNORE keeps existing values untouched)
-const seed = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
-  seed.run(key, String(value));
-}
+const settingsPath = path.join(dataDir, 'settings.json');
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function deserialize(key: string, raw: string): boolean | number {
-  const def = DEFAULT_SETTINGS[key as keyof AppSettings];
-  if (typeof def === 'boolean') return raw === 'true';
-  return Number(raw) || (def as number);
+function readSettings(): AppSettings {
+  try {
+    const raw = fs.readFileSync(settingsPath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function writeSettings(settings: AppSettings): void {
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+}
+
+// Seed defaults on first load
+if (!fs.existsSync(settingsPath)) {
+  writeSettings(DEFAULT_SETTINGS);
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function getSetting<K extends keyof AppSettings>(key: K): AppSettings[K] {
-  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
-  if (!row) return DEFAULT_SETTINGS[key];
-  return deserialize(key, row.value) as AppSettings[K];
+  const settings = readSettings();
+  return settings[key];
 }
 
 export function getAllSettings(): AppSettings {
-  const rows = db.prepare('SELECT key, value FROM settings').all() as { key: string; value: string }[];
-  const result = { ...DEFAULT_SETTINGS };
-  for (const row of rows) {
-    if (row.key in DEFAULT_SETTINGS) {
-      (result as any)[row.key] = deserialize(row.key, row.value);
-    }
-  }
-  return result;
+  return readSettings();
 }
 
 export function setSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void {
-  db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run(key, String(value));
+  const settings = readSettings();
+  settings[key] = value;
+  writeSettings(settings);
 }
 
 export function updateSettings(partial: Partial<AppSettings>): AppSettings {
-  const update = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-  const batch = db.transaction((entries: [string, string][]) => {
-    for (const [k, v] of entries) update.run(k, v);
-  });
-  const entries: [string, string][] = [];
+  const settings = readSettings();
   for (const [key, value] of Object.entries(partial)) {
     if (key in DEFAULT_SETTINGS) {
-      entries.push([key, String(value)]);
+      (settings as any)[key] = value;
     }
   }
-  if (entries.length) batch(entries);
-  return getAllSettings();
+  writeSettings(settings);
+  return settings;
 }
 
 export function closeDb(): void {
-  db.close();
+  // no-op – kept for API compatibility
 }
