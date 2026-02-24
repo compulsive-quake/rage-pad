@@ -312,6 +312,39 @@
   }
 }
 
+// ── Port field ──────────────────────────────────────────────────────────
+
+.port-field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.port-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.port-spinner {
+  width: 18px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.6);
+  flex-shrink: 0;
+}
+
+.port-change-error {
+  margin: 0 !important;
+  padding: 0.4rem 0.65rem;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  font-size: 0.78rem !important;
+  color: rgba(231, 76, 60, 0.9) !important;
+  line-height: 1.3;
+}
+
 // ── Version row + check-for-updates button ──────────────────────────────
 
 .version-row {

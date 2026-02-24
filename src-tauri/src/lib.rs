@@ -23,11 +23,14 @@ pub fn run() {
             // Spawn portable node.exe (the sidecar) with the bundled JS as its argument.
             // Tauri automatically resolves "server" to the target-triple-suffixed
             // binary (e.g. server-x86_64-pc-windows-msvc.exe) from the bundle.
+            let data_dir = resource_dir.join("data");
+
             app.shell()
                 .sidecar("server")?
                 .args([server_bundle.to_str().unwrap_or("")])
                 .env("RAGE_PAD_CLIENT_DIST", client_dist.to_str().unwrap_or(""))
                 .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
+                .env("RAGE_PAD_DATA_DIR", data_dir.to_str().unwrap_or(""))
                 .spawn()?;
 
             // Wait for the server to be reachable before showing the window,
