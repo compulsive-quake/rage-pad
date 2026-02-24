@@ -67,7 +67,7 @@ app.get('*', (req, res) => {
     }
 });
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
     console.error('Server error:', err);
     res.status(500).json({
         error: 'Internal server error',

@@ -112,13 +112,9 @@ export declare class SoundpadClient {
      * @param displayName   Optional custom display name provided by the user
      * @param artist        Optional artist metadata to write into the SPL tag
      * @param title         Optional title metadata to write into the SPL tag
+     * @param durationSeconds
      */
     addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist?: string, title?: string, durationSeconds?: number): Promise<SoundpadResponse>;
-    /**
-     * Get the 0-based sound IDs that belong to a given category in the <Categories> section.
-     * This looks at <Sound id="N"/> references inside the matching <Category> element.
-     */
-    private getSoundIdsForCategory;
     /**
      * Get the list of categories and sub-categories from soundlist.spl.
      * Returns a flat list of { name, parentCategory } objects.

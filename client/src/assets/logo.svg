@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Background gradient -->
+    <radialGradient id="bgGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2a1538"/>
+      <stop offset="100%" stop-color="#0f0f1a"/>
+    </radialGradient>
+    <!-- Fire gradient orange-red -->
+    <linearGradient id="fireGrad" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#e74c3c"/>
+      <stop offset="40%" stop-color="#e67e22"/>
+      <stop offset="80%" stop-color="#f1c40f"/>
+      <stop offset="100%" stop-color="#fff5cc"/>
+    </linearGradient>
+    <!-- Inner fire gradient -->
+    <linearGradient id="fireInner" x1="0" y1="1" x2="0" y2="0">
+      <stop offset="0%" stop-color="#c0392b"/>
+      <stop offset="50%" stop-color="#e74c3c"/>
+      <stop offset="100%" stop-color="#e67e22"/>
+    </linearGradient>
+    <!-- Note gradient purple-to-white -->
+    <linearGradient id="noteGrad" x1="0" y1="1" x2="0.3" y2="0">
+      <stop offset="0%" stop-color="#8e44ad"/>
+      <stop offset="100%" stop-color="#d5a6e6"/>
+    </linearGradient>
+    <!-- Outer ring gradient -->
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#9b59b6"/>
+      <stop offset="50%" stop-color="#e74c3c"/>
+      <stop offset="100%" stop-color="#e67e22"/>
+    </linearGradient>
+    <!-- Glow filter -->
+    <filter id="fireGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="outerGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <!-- Outer glow -->
+  <circle cx="256" cy="256" r="230" fill="none" stroke="#9b59b6" stroke-width="8" filter="url(#outerGlow)" opacity="0.4"/>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="230" fill="url(#bgGrad)"/>
+
+  <!-- Ring border -->
+  <circle cx="256" cy="256" r="230" fill="none" stroke="url(#ringGrad)" stroke-width="12"/>
+
+  <!-- Inner subtle ring -->
+  <circle cx="256" cy="256" r="210" fill="none" stroke="rgba(155,89,182,0.15)" stroke-width="1"/>
+
+  <!-- Outer fire flames (behind the note) -->
+  <g filter="url(#fireGlow)" opacity="0.9">
+    <!-- Large center flame -->
+    <path d="M256 100 C240 160, 200 180, 210 220 C215 245, 235 250, 240 230 C245 215, 230 200, 240 170 C250 145, 256 130, 262 145 C272 170, 258 200, 265 220 C270 235, 285 240, 290 220 C300 180, 270 165, 256 100Z" fill="url(#fireGrad)"/>
+    <!-- Left flame -->
+    <path d="M200 180 C190 155, 175 150, 180 135 C184 125, 196 130, 195 145 C194 155, 202 160, 200 180Z" fill="url(#fireGrad)" opacity="0.7"/>
+    <!-- Right flame -->
+    <path d="M312 180 C322 155, 337 150, 332 135 C328 125, 316 130, 317 145 C318 155, 310 160, 312 180Z" fill="url(#fireGrad)" opacity="0.7"/>
+    <!-- Extra left flicker -->
+    <path d="M218 155 C210 130, 200 128, 205 115 C208 108, 218 112, 216 125 C215 135, 222 140, 218 155Z" fill="url(#fireGrad)" opacity="0.5"/>
+    <!-- Extra right flicker -->
+    <path d="M294 155 C302 130, 312 128, 307 115 C304 108, 294 112, 296 125 C297 135, 290 140, 294 155Z" fill="url(#fireGrad)" opacity="0.5"/>
+  </g>
+
+  <!-- Inner fire (hotter, in front, behind note) -->
+  <g filter="url(#fireGlow)" opacity="0.7">
+    <path d="M256 140 C248 175, 228 190, 235 210 C238 220, 250 218, 248 208 C245 195, 250 185, 256 170 C262 185, 268 195, 265 208 C263 218, 275 220, 278 210 C285 190, 264 175, 256 140Z" fill="url(#fireInner)"/>
+  </g>
+
+  <!-- Musical note - single eighth note -->
+  <g>
+    <!-- Note head (oval) -->
+    <ellipse cx="222" cy="340" rx="52" ry="40" transform="rotate(-15, 222, 340)" fill="url(#noteGrad)"/>
+    <!-- Stem -->
+    <rect x="268" y="148" width="14" height="205" rx="7" fill="url(#noteGrad)"/>
+    <!-- Flag -->
+    <path d="M282 148 C282 148, 330 170, 330 210 C330 240, 300 245, 290 230 C310 225, 318 205, 282 185Z" fill="url(#noteGrad)"/>
+    <!-- Highlight on note head -->
+    <ellipse cx="215" cy="332" rx="22" ry="16" transform="rotate(-15, 215, 332)" fill="rgba(255,255,255,0.15)"/>
+  </g>
+
+  <!-- Small ember particles -->
+  <circle cx="195" cy="135" r="3" fill="#f39c12" opacity="0.8"/>
+  <circle cx="320" cy="128" r="2.5" fill="#e74c3c" opacity="0.7"/>
+  <circle cx="240" cy="108" r="2" fill="#f1c40f" opacity="0.9"/>
+  <circle cx="275" cy="112" r="2.5" fill="#e67e22" opacity="0.8"/>
+  <circle cx="178" cy="152" r="2" fill="#f39c12" opacity="0.6"/>
+  <circle cx="335" cy="148" r="1.8" fill="#f1c40f" opacity="0.7"/>
+</svg>

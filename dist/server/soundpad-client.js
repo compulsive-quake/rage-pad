@@ -341,7 +341,6 @@ class SoundpadClient {
         try {
             // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
             const splId = soundIndex - 1;
-            const soundTag = `<Sound id="${splId}"/>`;
             // Also match with varying whitespace
             const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
             // Step 1: Kill Soundpad
@@ -717,6 +716,7 @@ class SoundpadClient {
      * @param displayName   Optional custom display name provided by the user
      * @param artist        Optional artist metadata to write into the SPL tag
      * @param title         Optional title metadata to write into the SPL tag
+     * @param durationSeconds
      */
     async addSound(tempFilePath, originalName, categoryName, displayName, artist = '', title = '', durationSeconds = 0) {
         try {
@@ -898,63 +898,6 @@ class SoundpadClient {
                 error: error instanceof Error ? error.message : 'Failed to add sound'
             };
         }
-    }
-    /**
-     * Get the 0-based sound IDs that belong to a given category in the <Categories> section.
-     * This looks at <Sound id="N"/> references inside the matching <Category> element.
-     */
-    getSoundIdsForCategory(splContent, categoryName) {
-        const ids = [];
-        const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-        if (!categoriesMatch)
-            return ids;
-        const escapedCatName = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        // Find the category by name
-        const catOpenRegex = new RegExp(`<Category\\s[^>]*name="${escapedCatName}"[^>]*>`, 'gi');
-        let lastCatMatch = null;
-        let catMatch;
-        while ((catMatch = catOpenRegex.exec(splContent)) !== null) {
-            lastCatMatch = catMatch;
-        }
-        if (!lastCatMatch)
-            return ids;
-        // Find the matching </Category> for this opening tag
-        const afterOpen = lastCatMatch.index + lastCatMatch[0].length;
-        let depth = 1;
-        let j = afterOpen;
-        let closingIdx = -1;
-        while (j < splContent.length && depth > 0) {
-            const nextOpen = splContent.indexOf('<Category', j);
-            const nextClose = splContent.indexOf('</Category>', j);
-            if (nextClose === -1)
-                break;
-            if (nextOpen !== -1 && nextOpen < nextClose) {
-                const tagEnd = splContent.indexOf('>', nextOpen);
-                if (tagEnd !== -1 && splContent[tagEnd - 1] !== '/') {
-                    depth++;
-                }
-                j = tagEnd + 1;
-            }
-            else {
-                depth--;
-                if (depth === 0) {
-                    closingIdx = nextClose;
-                }
-                j = nextClose + '</Category>'.length;
-            }
-        }
-        if (closingIdx === -1)
-            return ids;
-        // Extract the content of this category (excluding nested sub-categories)
-        const categoryContent = splContent.slice(afterOpen, closingIdx);
-        const contentWithoutSubCategories = this.removeNestedCategories(categoryContent);
-        // Find all <Sound id="N"/> references
-        const soundIdRegex = /<Sound\s+id="(\d+)"\s*\/>/gi;
-        let m;
-        while ((m = soundIdRegex.exec(contentWithoutSubCategories)) !== null) {
-            ids.push(parseInt(m[1], 10));
-        }
-        return ids;
     }
     /**
      * Get the list of categories and sub-categories from soundlist.spl.
@@ -1149,7 +1092,7 @@ class SoundpadClient {
         const hasCategories = this.parseCategoryRecursive(xmlResponse, '', sounds);
         // If no categories found, fall back to parsing sounds directly
         if (!hasCategories) {
-            const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
+            const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>[\s\S]*?<\/Sound>)/gi;
             let match;
             while ((match = soundRegex.exec(xmlResponse)) !== null) {
                 const attrs = match[1] || match[0];
@@ -1298,7 +1241,7 @@ class SoundpadClient {
      * Parse <Sound> elements from content and add them to the sounds array.
      */
     parseSoundsInContent(content, categoryName, parentCategoryName, categoryImage, sounds) {
-        const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
+        const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>[\s\S]*?<\/Sound>)/gi;
         let soundMatch;
         while ((soundMatch = soundRegex.exec(content)) !== null) {
             const attrs = soundMatch[1] || soundMatch[0];
