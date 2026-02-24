@@ -2,6 +2,15 @@ import { Injectable, NgZone, OnDestroy } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, BehaviorSubject, interval, switchMap, catchError, of, Subject, takeUntil, take } from 'rxjs';
 import { map } from 'rxjs/operators';
+import packageJson from '../../../../package.json';
+
+export const APP_VERSION: string = packageJson.version;
+
+export interface UpdateInfo {
+  updateAvailable: boolean;
+  latestVersion: string;
+  downloadUrl: string;
+}
 import { Sound, ConnectionStatus, CategoryIcon } from '../models/sound.model';
 
 @Injectable({
@@ -220,6 +229,33 @@ export class SoundpadService implements OnDestroy {
       // Teardown: close the EventSource when the subscriber unsubscribes
       return () => es.close();
     });
+  }
+
+  checkForUpdate(): Observable<UpdateInfo> {
+    return this.http.get<any>('https://api.github.com/repos/compulsive-quake/rage-pad/releases/latest').pipe(
+      map(release => {
+        const latestTag = (release.tag_name || '').replace(/^v/, '');
+        const updateAvailable = this.isNewerVersion(latestTag, APP_VERSION);
+        return {
+          updateAvailable,
+          latestVersion: latestTag,
+          downloadUrl: release.html_url || ''
+        };
+      }),
+      catchError(() => of({ updateAvailable: false, latestVersion: APP_VERSION, downloadUrl: '' }))
+    );
+  }
+
+  private isNewerVersion(latest: string, current: string): boolean {
+    const latestParts = latest.split('.').map(Number);
+    const currentParts = current.split('.').map(Number);
+    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
+      const l = latestParts[i] || 0;
+      const c = currentParts[i] || 0;
+      if (l > c) return true;
+      if (l < c) return false;
+    }
+    return false;
   }
 
   /**

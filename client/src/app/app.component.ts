@@ -2,7 +2,8 @@ import { Component, OnInit, OnDestroy, NgZone, ChangeDetectorRef } from '@angula
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
-import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin } from 'rxjs';
+import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer } from 'rxjs';
+import { switchMap } from 'rxjs/operators';
 import { SoundpadService } from './services/soundpad.service';
 import { Sound, ConnectionStatus, Category, CategoryIcon } from './models/sound.model';
 import { HeaderComponent } from './components/header/header.component';
@@ -80,6 +81,15 @@ export class AppComponent implements OnInit, OnDestroy {
   private wakeCountdownTimer: any = null;
   private wakeDimTimer: any = null;
 
+  // Update check
+  autoUpdateCheckEnabled: boolean;
+  updateAvailable = false;
+  latestVersion = '';
+  downloadUrl = '';
+  updateDismissed = false;
+  isCheckingForUpdate = false;
+  private updateCheckSub: Subscription | null = null;
+
   // Playback progress tracking
   playbackProgress = 0;
   playbackTimeRemaining = 0;
@@ -117,6 +127,9 @@ export class AppComponent implements OnInit, OnDestroy {
     this.idleTimeoutEnabled = storedIdleTimeout === 'true';
     const storedWakeMinutes = localStorage.getItem('wakeMinutes');
     this.wakeMinutes = storedWakeMinutes ? parseInt(storedWakeMinutes, 10) || 30 : 30;
+
+    const storedAutoUpdateCheck = localStorage.getItem('autoUpdateCheckEnabled');
+    this.autoUpdateCheckEnabled = storedAutoUpdateCheck === null ? true : storedAutoUpdateCheck === 'true';
   }
 
   ngOnInit(): void {
@@ -148,6 +161,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (this.keepAwakeEnabled) {
       this.acquireWakeLock();
+    }
+
+    if (this.autoUpdateCheckEnabled) {
+      this.startUpdateCheck();
     }
   }
 
@@ -273,9 +290,54 @@ export class AppComponent implements OnInit, OnDestroy {
     this.attemptAutoLaunch();
   }
 
+  // ── Update check ────────────────────────────────────────────────────────
+
+  private startUpdateCheck(): void {
+    this.stopUpdateCheck();
+    // Check immediately then every 30 minutes
+    this.updateCheckSub = timer(0, 30 * 60 * 1000).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.soundpadService.checkForUpdate())
+    ).subscribe(info => {
+      if (info.updateAvailable && info.latestVersion !== this.latestVersion) {
+        this.updateDismissed = false;
+      }
+      this.updateAvailable = info.updateAvailable;
+      this.latestVersion = info.latestVersion;
+      this.downloadUrl = info.downloadUrl;
+    });
+  }
+
+  private stopUpdateCheck(): void {
+    if (this.updateCheckSub) {
+      this.updateCheckSub.unsubscribe();
+      this.updateCheckSub = null;
+    }
+  }
+
+  dismissUpdate(): void {
+    this.updateDismissed = true;
+  }
+
+  manualUpdateCheck(): void {
+    this.isCheckingForUpdate = true;
+    this.soundpadService.checkForUpdate()
+      .pipe(take(1))
+      .subscribe(info => {
+        this.isCheckingForUpdate = false;
+        this.latestVersion = info.latestVersion;
+        this.downloadUrl = info.downloadUrl;
+        if (info.updateAvailable) {
+          this.updateAvailable = true;
+          this.updateDismissed = false;
+        }
+      });
+  }
+
   ngOnDestroy(): void {
     this.stopConfigWatch();
     this.clearLaunchRetry();
+    this.stopUpdateCheck();
     this.releaseWakeLock();
     this.clearWakeTimers();
     this.destroy$.next();
@@ -596,6 +658,17 @@ export class AppComponent implements OnInit, OnDestroy {
       localStorage.setItem('wakeMinutes', String(this.wakeMinutes));
       if (this.keepAwakeEnabled && this.idleTimeoutEnabled && this.wakeLockSentinel && !this.isWakeDialogOpen) {
         this.startWakeTimer();
+      }
+    }
+
+    if (payload.autoUpdateCheckEnabled !== this.autoUpdateCheckEnabled) {
+      this.autoUpdateCheckEnabled = payload.autoUpdateCheckEnabled;
+      localStorage.setItem('autoUpdateCheckEnabled', String(this.autoUpdateCheckEnabled));
+      if (this.autoUpdateCheckEnabled) {
+        this.startUpdateCheck();
+      } else {
+        this.stopUpdateCheck();
+        this.updateAvailable = false;
       }
     }
   }

@@ -28,12 +28,19 @@ export class FooterComponent {
   /** Seconds remaining until the next auto-launch retry */
   @Input() launchRetryCountdown = 0;
 
+  /** Update notification inputs */
+  @Input() updateAvailable = false;
+  @Input() latestVersion = '';
+  @Input() downloadUrl = '';
+
   @Output() stop = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
   @Output() volumeChange = new EventEmitter<number>();
   @Output() playbackModeChange = new EventEmitter<'both' | 'mic' | 'speakers'>();
   /** Emitted when the user clicks the manual "Start Soundpad" button */
   @Output() manualLaunch = new EventEmitter<void>();
+  /** Emitted when the user dismisses the update banner */
+  @Output() dismissUpdate = new EventEmitter<void>();
 
   onStop(): void {
     this.stop.emit();
@@ -53,6 +60,10 @@ export class FooterComponent {
 
   onManualLaunch(): void {
     this.manualLaunch.emit();
+  }
+
+  onDismissUpdate(): void {
+    this.dismissUpdate.emit();
   }
 
   formatTime(seconds: number): string {
