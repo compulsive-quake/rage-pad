@@ -16,20 +16,19 @@ pub fn run() {
         .setup(|app| {
             let resource_dir = app.path().resource_dir()?;
 
-            // Paths passed to the server sidecar so it can serve the right files.
+            // Read-only bundled assets live in the install / resource directory.
             let client_dist = resource_dir.join("client-dist");
-            let tmp_dir = resource_dir.join("tmp");
-
-            // Path to the esbuild-bundled server JS file shipped as a Tauri resource.
             let server_bundle = resource_dir.join("server-bundle.js");
 
-            // Spawn portable node.exe (the sidecar) with the bundled JS as its argument.
-            // Tauri automatically resolves "server" to the target-triple-suffixed
-            // binary (e.g. server-x86_64-pc-windows-msvc.exe) from the bundle.
-            let data_dir = resource_dir.join("data");
+            // Writable directories go under %APPDATA% (app_data_dir) so we don't
+            // need admin rights when installed to Program Files.
+            let app_data = app.path().app_data_dir()?;
+            let data_dir = app_data.join("data");
+            let tmp_dir = app_data.join("tmp");
 
-            // Ensure data directory exists before spawning (needed for log file).
-            fs::create_dir_all(&data_dir).ok();
+            // Ensure writable directories exist before spawning.
+            fs::create_dir_all(&data_dir)?;
+            fs::create_dir_all(&tmp_dir)?;
 
             let (mut rx, _child) = app
                 .shell()
