@@ -1,6 +1,6 @@
 {
   "name": "ragepad",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Soundpad integration with Angular frontend",
   "main": "dist/server/index.js",
   "repository": {
