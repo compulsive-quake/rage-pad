@@ -28,7 +28,7 @@ if (-not $Version) {
 }
 
 $Tag = "v$Version"
-$InstallerName = "Rage.Pad_${Version}_x64-setup.exe"
+$InstallerName = "Ragepad_${Version}_x64-setup.exe"
 $InstallerPath = Join-Path "builds" $InstallerName
 
 Write-Host "==> Preparing release $Tag" -ForegroundColor Cyan
