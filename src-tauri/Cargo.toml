@@ -1,15 +1,15 @@
 [package]
-name = "rage-pad"
+name = "ragepad"
 version = "0.1.0"
 description = "Soundpad controller with Angular frontend"
 edition = "2021"
 
 [lib]
-name = "rage_pad_lib"
+name = "ragepad_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [[bin]]
-name = "rage-pad"
+name = "ragepad"
 path = "src/main.rs"
 
 [build-dependencies]

@@ -1,5 +1,5 @@
 {
-  "name": "rage-pad",
+  "name": "ragepad",
   "version": "1.0.2",
   "description": "Soundpad integration with Angular frontend",
   "main": "dist/server/index.js",
