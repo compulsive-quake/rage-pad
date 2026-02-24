@@ -65,6 +65,22 @@ export declare class SoundpadClient {
      */
     reorderSound(soundIndex: number, targetCategory: string, targetPosition: number): Promise<SoundpadResponse>;
     /**
+     * Move a top-level category to a new position in soundlist.spl.
+     * @param categoryName Name of the category to move
+     * @param targetPosition 0-based index in the visible (non-hidden) category list
+     */
+    reorderCategory(categoryName: string, targetPosition: number): Promise<SoundpadResponse>;
+    /**
+     * Find all top-level <Category> elements in the given XML content, returning
+     * their string positions alongside name and hidden flag.
+     */
+    private findTopLevelCategoryRanges;
+    /**
+     * Reorder a named category within the Categories XML string.
+     * Only non-hidden, named top-level categories participate in the ordering.
+     */
+    private reorderCategoryInContent;
+    /**
      * Insert a <Sound id="N"/> reference into a specific category at a given position
      * within the Categories XML content.
      */

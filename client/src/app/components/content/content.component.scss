@@ -31,6 +31,7 @@
 }
 
 .category-nav-item {
+  position: relative;
   padding: 0.65rem 1rem;
   font-size: 0.95rem;
   font-weight: 500;
@@ -55,6 +56,61 @@
     border-left-color: #9b59b6;
     background: rgba(155, 89, 182, 0.15);
     font-weight: 600;
+  }
+
+  // Drop target highlight while a sound is being dragged over this nav item
+  &.cdk-drop-list-receiving {
+    color: rgba(230, 126, 34, 0.95);
+    border-left-color: rgba(230, 126, 34, 0.8);
+    background: rgba(230, 126, 34, 0.15);
+  }
+
+  // In reorder mode: make room for the drag handle
+  &.category-reorder-mode {
+    padding-right: 2rem;
+  }
+
+  // The item currently being dragged (faded)
+  &.category-dragging {
+    opacity: 0.35;
+  }
+
+  // The item that would receive the dragged category (insertion highlight)
+  &.category-drag-target {
+    color: rgba(230, 126, 34, 0.95);
+    border-left-color: rgba(230, 126, 34, 0.8);
+    background: rgba(230, 126, 34, 0.15);
+  }
+}
+
+// Drag handle shown on nav items in reorder mode
+.category-nav-drag-handle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: grab;
+  touch-action: none;
+  transition: color 0.15s;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    pointer-events: none;
+  }
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  &:active {
+    cursor: grabbing;
   }
 }
 
@@ -296,23 +352,12 @@ app-sound-card {
   min-height: 60px;
   padding: 4px;
   border-radius: 8px;
-  transition: background 0.2s ease, border-color 0.2s ease;
-  border: 2px dashed transparent;
 
-  &.cdk-drop-list-dragging {
-    background: rgba(230, 126, 34, 0.05);
-    border-color: rgba(230, 126, 34, 0.3);
-
-    // Smoothly animate sibling items shifting out of the way during cross-container drag
-    .drag-card-wrapper:not(.cdk-drag-placeholder) {
-      transition: transform 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
-    }
-  }
-
-  // Receiving container highlight when a foreign item enters
-  &.cdk-drop-list-receiving {
-    background: rgba(230, 126, 34, 0.08);
-    border-color: rgba(230, 126, 34, 0.4);
+  // Items use FLIP animations driven by inline styles during drag.
+  // will-change: transform promotes each wrapper to its own compositor layer
+  // for smooth 60fps+ sliding.
+  .drag-card-wrapper:not(.cdk-drag-placeholder) {
+    will-change: transform;
   }
 }
 
@@ -364,8 +409,8 @@ app-sound-card {
 
 // CDK drag placeholder (the space left behind / insertion indicator)
 .drag-placeholder {
-  background: rgba(230, 126, 34, 0.15);
-  border: 2px dashed rgba(230, 126, 34, 0.5);
+  background: rgba(255, 255, 255, 0.04);
+  border: 2px dashed rgba(255, 255, 255, 0.15);
   border-radius: 12px;
   min-height: 80px;
   width: 160px;
@@ -379,11 +424,15 @@ app-sound-card {
   transition: transform 200ms cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
+// Suppress the "fly to nav item" animation when dropped on a category nav target
+.drag-card-wrapper.nav-drop-instant.cdk-drag-animating {
+  transition-duration: 0ms !important;
+}
+
 // Empty drop zone
 .empty-drop-zone {
-  border-color: rgba(230, 126, 34, 0.2);
-  background: rgba(230, 126, 34, 0.03);
-  transition: background 0.2s ease, border-color 0.2s ease, min-height 0.2s ease;
+  border: 2px dashed rgba(255, 255, 255, 0.1);
+  transition: min-height 0.2s ease;
 }
 
 .empty-drop-hint {
@@ -392,7 +441,7 @@ app-sound-card {
   justify-content: center;
   width: 100%;
   min-height: 60px;
-  color: rgba(230, 126, 34, 0.5);
+  color: rgba(255, 255, 255, 0.25);
   font-size: 0.85rem;
   font-style: italic;
 }

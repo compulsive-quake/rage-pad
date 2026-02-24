@@ -363,7 +363,6 @@ export class SoundpadClient {
     try {
       // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
       const splId = soundIndex - 1;
-      const soundTag = `<Sound id="${splId}"/>`;
       // Also match with varying whitespace
       const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
 
@@ -436,6 +435,164 @@ export class SoundpadClient {
         error: error instanceof Error ? error.message : 'Failed to reorder sound'
       };
     }
+  }
+
+  /**
+   * Move a top-level category to a new position in soundlist.spl.
+   * @param categoryName Name of the category to move
+   * @param targetPosition 0-based index in the visible (non-hidden) category list
+   */
+  async reorderCategory(categoryName: string, targetPosition: number): Promise<SoundpadResponse> {
+    if (!fs.existsSync(this.soundlistPath)) {
+      return { success: false, error: 'Soundlist file not found' };
+    }
+
+    try {
+      await this.killSoundpadAndWait();
+      this.cachedConnectionState = false;
+      this.lastConnectionCheck = 0;
+
+      let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+
+      const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+      if (!categoriesMatch) {
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        return { success: false, error: 'No Categories section found in soundlist.spl' };
+      }
+
+      const categoriesContent = categoriesMatch[1];
+      const result = this.reorderCategoryInContent(categoriesContent, categoryName, targetPosition);
+
+      if (!result.success) {
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        return { success: false, error: result.error };
+      }
+
+      splContent = splContent.replace(
+        /<Categories>[\s\S]*<\/Categories>/i,
+        `<Categories>${result.content}</Categories>`
+      );
+
+      fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+      console.log(`Reordered category "${categoryName}" to position ${targetPosition}`);
+
+      const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+      spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+
+      await this.waitForSoundpadReady(15000, 500);
+
+      return { success: true, data: `Category "${categoryName}" moved to position ${targetPosition}` };
+    } catch (error) {
+      console.error('reorderCategory error:', error);
+      try {
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+      } catch (e) { /* ignore */ }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to reorder category'
+      };
+    }
+  }
+
+  /**
+   * Find all top-level <Category> elements in the given XML content, returning
+   * their string positions alongside name and hidden flag.
+   */
+  private findTopLevelCategoryRanges(
+    content: string
+  ): Array<{ start: number; end: number; name: string; hidden: boolean }> {
+    const ranges: Array<{ start: number; end: number; name: string; hidden: boolean }> = [];
+    let i = 0;
+
+    while (i < content.length) {
+      const openIdx = content.indexOf('<Category ', i);
+      if (openIdx === -1) break;
+
+      const tagEnd = content.indexOf('>', openIdx);
+      if (tagEnd === -1) break;
+
+      const isSelfClosing = content[tagEnd - 1] === '/';
+      const attrs = content.substring(openIdx + 10, isSelfClosing ? tagEnd - 1 : tagEnd).trim();
+      const name = this.extractAttribute(attrs, 'name');
+      const hidden = this.extractAttribute(attrs, 'hidden') === 'true';
+
+      if (isSelfClosing) {
+        ranges.push({ start: openIdx, end: tagEnd + 1, name: name || '', hidden });
+        i = tagEnd + 1;
+        continue;
+      }
+
+      // Count depth to find the matching </Category>
+      let depth = 1;
+      let searchPos = tagEnd + 1;
+      let closingEnd = -1;
+
+      while (depth > 0 && searchPos < content.length) {
+        const nextOpen = content.indexOf('<Category ', searchPos);
+        const nextClose = content.indexOf('</Category>', searchPos);
+        if (nextClose === -1) break;
+
+        if (nextOpen !== -1 && nextOpen < nextClose) {
+          const innerTagEnd = content.indexOf('>', nextOpen);
+          if (innerTagEnd !== -1 && content[innerTagEnd - 1] !== '/') {
+            depth++;
+          }
+          searchPos = (innerTagEnd !== -1 ? innerTagEnd : nextOpen) + 1;
+        } else {
+          depth--;
+          if (depth === 0) closingEnd = nextClose + '</Category>'.length;
+          searchPos = nextClose + '</Category>'.length;
+        }
+      }
+
+      if (closingEnd === -1) { i = tagEnd + 1; continue; }
+
+      ranges.push({ start: openIdx, end: closingEnd, name: name || '', hidden });
+      i = closingEnd;
+    }
+
+    return ranges;
+  }
+
+  /**
+   * Reorder a named category within the Categories XML string.
+   * Only non-hidden, named top-level categories participate in the ordering.
+   */
+  private reorderCategoryInContent(
+    content: string,
+    categoryName: string,
+    targetPosition: number
+  ): { success: boolean; content?: string; error?: string } {
+    const allRanges = this.findTopLevelCategoryRanges(content);
+    const visibleRanges = allRanges.filter(r => !r.hidden && r.name);
+
+    const sourceIdx = visibleRanges.findIndex(r => r.name === categoryName);
+    if (sourceIdx === -1) {
+      return { success: false, error: `Category "${categoryName}" not found` };
+    }
+
+    const clampedTarget = Math.max(0, Math.min(targetPosition, visibleRanges.length - 1));
+    if (sourceIdx === clampedTarget) {
+      return { success: true, content };
+    }
+
+    // Build the new order
+    const reordered = [...visibleRanges];
+    const [moved] = reordered.splice(sourceIdx, 1);
+    reordered.splice(clampedTarget, 0, moved);
+
+    // Replace each visible slot in reverse order (preserves earlier positions)
+    let newContent = content;
+    for (let i = visibleRanges.length - 1; i >= 0; i--) {
+      const slot = visibleRanges[i];
+      const replacement = content.substring(reordered[i].start, reordered[i].end);
+      newContent = newContent.substring(0, slot.start) + replacement + newContent.substring(slot.end);
+    }
+
+    return { success: true, content: newContent };
   }
 
   /**
@@ -667,6 +824,7 @@ export class SoundpadClient {
    * @param displayName   Optional custom display name provided by the user
    * @param artist        Optional artist metadata to write into the SPL tag
    * @param title         Optional title metadata to write into the SPL tag
+   * @param durationSeconds
    */
   async addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist = '', title = '', durationSeconds = 0): Promise<SoundpadResponse> {
     try {
@@ -873,75 +1031,6 @@ export class SoundpadClient {
         error: error instanceof Error ? error.message : 'Failed to add sound'
       };
     }
-  }
-
-  /**
-   * Get the 0-based sound IDs that belong to a given category in the <Categories> section.
-   * This looks at <Sound id="N"/> references inside the matching <Category> element.
-   */
-  private getSoundIdsForCategory(splContent: string, categoryName: string): number[] {
-    const ids: number[] = [];
-
-    const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-    if (!categoriesMatch) return ids;
-
-    const escapedCatName = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-    // Find the category by name
-    const catOpenRegex = new RegExp(
-      `<Category\\s[^>]*name="${escapedCatName}"[^>]*>`,
-      'gi'
-    );
-
-    let lastCatMatch: RegExpExecArray | null = null;
-    let catMatch: RegExpExecArray | null;
-    while ((catMatch = catOpenRegex.exec(splContent)) !== null) {
-      lastCatMatch = catMatch;
-    }
-
-    if (!lastCatMatch) return ids;
-
-    // Find the matching </Category> for this opening tag
-    const afterOpen = lastCatMatch.index + lastCatMatch[0].length;
-    let depth = 1;
-    let j = afterOpen;
-    let closingIdx = -1;
-
-    while (j < splContent.length && depth > 0) {
-      const nextOpen = splContent.indexOf('<Category', j);
-      const nextClose = splContent.indexOf('</Category>', j);
-
-      if (nextClose === -1) break;
-
-      if (nextOpen !== -1 && nextOpen < nextClose) {
-        const tagEnd = splContent.indexOf('>', nextOpen);
-        if (tagEnd !== -1 && splContent[tagEnd - 1] !== '/') {
-          depth++;
-        }
-        j = tagEnd + 1;
-      } else {
-        depth--;
-        if (depth === 0) {
-          closingIdx = nextClose;
-        }
-        j = nextClose + '</Category>'.length;
-      }
-    }
-
-    if (closingIdx === -1) return ids;
-
-    // Extract the content of this category (excluding nested sub-categories)
-    const categoryContent = splContent.slice(afterOpen, closingIdx);
-    const contentWithoutSubCategories = this.removeNestedCategories(categoryContent);
-
-    // Find all <Sound id="N"/> references
-    const soundIdRegex = /<Sound\s+id="(\d+)"\s*\/>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = soundIdRegex.exec(contentWithoutSubCategories)) !== null) {
-      ids.push(parseInt(m[1], 10));
-    }
-
-    return ids;
   }
 
   /**
@@ -1171,7 +1260,7 @@ export class SoundpadClient {
 
     // If no categories found, fall back to parsing sounds directly
     if (!hasCategories) {
-      const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
+      const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>[\s\S]*?<\/Sound>)/gi;
       let match;
 
       while ((match = soundRegex.exec(xmlResponse)) !== null) {
@@ -1352,7 +1441,7 @@ export class SoundpadClient {
     categoryImage: string,
     sounds: Sound[]
   ): void {
-    const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>(?:[\s\S]*?)<\/Sound>)/gi;
+    const soundRegex = /<Sound\s+([^>]*?)(?:\/>|>[\s\S]*?<\/Sound>)/gi;
     let soundMatch;
 
     while ((soundMatch = soundRegex.exec(content)) !== null) {

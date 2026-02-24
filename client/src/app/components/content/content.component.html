@@ -1,14 +1,32 @@
-<main class="main-content" #mainContent>
+<main class="main-content" #mainContent cdkDropListGroup>
   <!-- Category Nav -->
   <nav class="category-nav" *ngIf="!isLoading && categories.length > 0">
     <ul class="category-nav-list" #categoryNavList>
       <li
-        *ngFor="let category of categories; trackBy: trackByCategory"
+        *ngFor="let category of categories; let i = index; trackBy: trackByCategory"
         class="category-nav-item"
-        [class.active]="activeCategory === category.name"
+        [class.active]="activeCategory === category.name && categoryDraggingIdx === -1"
+        [class.category-reorder-mode]="isReorderMode"
+        [class.category-dragging]="categoryDraggingIdx === i"
+        [class.category-drag-target]="categoryDragOverIdx === i && categoryDragOverIdx !== categoryDraggingIdx"
         (click)="scrollToCategory(category.name)"
+        cdkDropList
+        cdkDropListSortingDisabled
+        [cdkDropListDisabled]="!isReorderMode"
+        [cdkDropListData]="{ category: category.name, sounds: category.sounds }"
+        (cdkDropListDropped)="onNavDrop($event)"
       >
         {{ category.name }}
+        <div
+          *ngIf="isReorderMode"
+          class="category-nav-drag-handle"
+          (pointerdown)="onCategoryHandlePointerDown($event, i)"
+          (click)="$event.stopPropagation()"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+          </svg>
+        </div>
       </li>
     </ul>
   </nav>
@@ -44,16 +62,16 @@
 
     <!-- Sound Grid - Centered -->
     <div class="sounds-grid-wrapper" *ngIf="!isLoading && filteredSounds.length > 0">
-      <div class="categories-container" #categoriesContainer cdkDropListGroup>
+      <div class="categories-container" #categoriesContainer>
         <div class="category-section"
              *ngFor="let category of categories; trackBy: trackByCategory"
              [attr.data-category]="category.name"
              #categoryElement>
           <!-- Category Divider -->
           <div class="category-divider">
-            <div class="category-icon" [class.has-image]="category.image">
-              <img *ngIf="category.image" [src]="category.image" alt="{{ category.name }}" (error)="onImageError(category)" />
-              <svg *ngIf="!category.image" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <div class="category-icon" [class.has-image]="hasValidImage(category)">
+              <img *ngIf="hasValidImage(category)" [src]="category.image" alt="{{ category.name }}" (error)="onImageError(category)" />
+              <svg *ngIf="!hasValidImage(category)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
               </svg>
             </div>
@@ -83,6 +101,7 @@
                cdkDropList
                cdkDropListOrientation="mixed"
                [cdkDropListData]="{ category: category.name, sounds: category.sounds }"
+               [cdkDropListSortPredicate]="sortPredicate"
                (cdkDropListDropped)="onDrop($event)">
             <div class="drag-card-wrapper"
                  *ngFor="let sound of category.sounds; trackBy: trackByIndex"
@@ -111,8 +130,11 @@
                  *ngFor="let subCategory of category.subCategories; trackBy: trackByCategory">
               <!-- Sub-category Divider -->
               <div class="sub-category-divider">
-                <div class="sub-category-icon has-image" *ngIf="subCategory.image">
-                  <img [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="onImageError(subCategory)" />
+                <div class="sub-category-icon" [class.has-image]="hasValidImage(subCategory)">
+                  <img *ngIf="hasValidImage(subCategory)" [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="onImageError(subCategory)" />
+                  <svg *ngIf="!hasValidImage(subCategory)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+                  </svg>
                 </div>
                 <h3 class="sub-category-title">{{ subCategory.name }}</h3>
                 <span class="sub-category-count">{{ subCategory.sounds.length }} sounds</span>
@@ -137,6 +159,7 @@
                    cdkDropList
                    cdkDropListOrientation="mixed"
                    [cdkDropListData]="{ category: subCategory.name, sounds: subCategory.sounds }"
+                   [cdkDropListSortPredicate]="sortPredicate"
                    (cdkDropListDropped)="onDrop($event)">
                 <div class="drag-card-wrapper"
                      *ngFor="let sound of subCategory.sounds; trackBy: trackByIndex"

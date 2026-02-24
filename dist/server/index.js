@@ -12,7 +12,10 @@ const app = (0, express_1.default)();
 const PORT = process.env.PORT || 3000;
 // Redirect ytdl-core debug files (e.g. player-script.js) to ./tmp instead of
 // the project root.  The tmp directory is listed in .gitignore.
-const ytdlTmpDir = path_1.default.resolve(__dirname, '../../tmp');
+// When packaged as a Tauri sidecar, RAGE_PAD_TMP_DIR points to a writable location.
+const ytdlTmpDir = process.env['RAGE_PAD_TMP_DIR']
+    ? path_1.default.resolve(process.env['RAGE_PAD_TMP_DIR'])
+    : path_1.default.resolve(__dirname, '../../tmp');
 if (!fs_1.default.existsSync(ytdlTmpDir)) {
     fs_1.default.mkdirSync(ytdlTmpDir, { recursive: true });
 }
@@ -42,8 +45,12 @@ app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: true }));
 // API Routes
 app.use('/api', routes_1.default);
-// Serve Angular static files in production
-const clientDistPath = path_1.default.join(__dirname, '../../client/dist/rage-pad-client/browser');
+// Serve Angular static files in production.
+// When packaged as a Tauri sidecar, RAGE_PAD_CLIENT_DIST points to the
+// Angular build that Tauri bundles as resources alongside the installer.
+const clientDistPath = process.env['RAGE_PAD_CLIENT_DIST']
+    ? path_1.default.resolve(process.env['RAGE_PAD_CLIENT_DIST'])
+    : path_1.default.join(__dirname, '../../client/dist/rage-pad-client/browser');
 app.use(express_1.default.static(clientDistPath));
 // Health check endpoint
 app.get('/health', (req, res) => {

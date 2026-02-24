@@ -266,6 +266,38 @@ router.post('/sounds/reorder', async (req: Request, res: Response) => {
   }
 });
 
+// Reorder a category (move to a different position in the category list)
+router.post('/categories/reorder', async (req: Request, res: Response) => {
+  try {
+    const { categoryName, targetPosition } = req.body;
+
+    if (typeof categoryName !== 'string' || !categoryName.trim()) {
+      res.status(400).json({ error: 'categoryName must be a non-empty string' });
+      return;
+    }
+    if (typeof targetPosition !== 'number' || isNaN(targetPosition) || targetPosition < 0) {
+      res.status(400).json({ error: 'targetPosition must be a non-negative number' });
+      return;
+    }
+
+    sseSuppressed = true;
+
+    const result = await soundpadClient.reorderCategory(categoryName.trim(), targetPosition);
+
+    sseSuppressed = false;
+
+    if (result.success) {
+      notifySseClients();
+      res.json({ message: 'Category reordered', data: result.data });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    sseSuppressed = false;
+    res.status(500).json({ error: 'Failed to reorder category' });
+  }
+});
+
 // Launch Soundpad if it is not already running
 router.post('/launch-soundpad', async (req: Request, res: Response) => {
   try {
@@ -417,11 +449,6 @@ router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res:
     const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
     const title = typeof req.body.title === 'string' ? req.body.title : '';
 
-    // Optional duration in seconds (provided when the audio was fetched from YouTube)
-    const durationSeconds = req.body.durationSeconds !== undefined
-      ? parseInt(req.body.durationSeconds as string, 10) || 0
-      : 0;
-
     // Suppress SSE notifications while we kill/restart Soundpad.
     // The file watcher would otherwise fire before Soundpad is back up,
     // causing the client to hit a dead pipe and get an empty sound list.
@@ -433,8 +460,7 @@ router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res:
       categoryName,
       displayName,
       artist,
-      title,
-      durationSeconds
+      title
     );
 
     // Re-enable SSE and notify clients now that Soundpad is ready

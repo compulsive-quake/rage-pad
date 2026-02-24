@@ -1,4 +1,4 @@
-import express, { Application, Request, Response, NextFunction } from 'express';
+import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
@@ -9,7 +9,10 @@ const PORT = process.env.PORT || 3000;
 
 // Redirect ytdl-core debug files (e.g. player-script.js) to ./tmp instead of
 // the project root.  The tmp directory is listed in .gitignore.
-const ytdlTmpDir = path.resolve(__dirname, '../../tmp');
+// When packaged as a Tauri sidecar, RAGE_PAD_TMP_DIR points to a writable location.
+const ytdlTmpDir = process.env['RAGE_PAD_TMP_DIR']
+  ? path.resolve(process.env['RAGE_PAD_TMP_DIR'])
+  : path.resolve(__dirname, '../../tmp');
 if (!fs.existsSync(ytdlTmpDir)) {
   fs.mkdirSync(ytdlTmpDir, { recursive: true });
 }
@@ -40,8 +43,12 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use('/api', soundpadRoutes);
 
-// Serve Angular static files in production
-const clientDistPath = path.join(__dirname, '../../client/dist/rage-pad-client/browser');
+// Serve Angular static files in production.
+// When packaged as a Tauri sidecar, RAGE_PAD_CLIENT_DIST points to the
+// Angular build that Tauri bundles as resources alongside the installer.
+const clientDistPath = process.env['RAGE_PAD_CLIENT_DIST']
+  ? path.resolve(process.env['RAGE_PAD_CLIENT_DIST'])
+  : path.join(__dirname, '../../client/dist/rage-pad-client/browser');
 app.use(express.static(clientDistPath));
 
 // Health check endpoint
@@ -60,7 +67,7 @@ app.get('*', (req: Request, res: Response) => {
 });
 
 // Error handling middleware
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+app.use((err: Error, req: Request, res: Response) => {
   console.error('Server error:', err);
   res.status(500).json({
     error: 'Internal server error',

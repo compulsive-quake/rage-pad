@@ -294,6 +294,34 @@ router.post('/sounds/reorder', async (req, res) => {
         res.status(500).json({ error: 'Failed to reorder sound' });
     }
 });
+// Reorder a category (move to a different position in the category list)
+router.post('/categories/reorder', async (req, res) => {
+    try {
+        const { categoryName, targetPosition } = req.body;
+        if (typeof categoryName !== 'string' || !categoryName.trim()) {
+            res.status(400).json({ error: 'categoryName must be a non-empty string' });
+            return;
+        }
+        if (typeof targetPosition !== 'number' || isNaN(targetPosition) || targetPosition < 0) {
+            res.status(400).json({ error: 'targetPosition must be a non-negative number' });
+            return;
+        }
+        sseSuppressed = true;
+        const result = await soundpadClient.reorderCategory(categoryName.trim(), targetPosition);
+        sseSuppressed = false;
+        if (result.success) {
+            notifySseClients();
+            res.json({ message: 'Category reordered', data: result.data });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (error) {
+        sseSuppressed = false;
+        res.status(500).json({ error: 'Failed to reorder category' });
+    }
+});
 // Launch Soundpad if it is not already running
 router.post('/launch-soundpad', async (req, res) => {
     try {
