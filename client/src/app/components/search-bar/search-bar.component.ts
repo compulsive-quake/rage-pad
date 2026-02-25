@@ -1,4 +1,4 @@
-import { Component, Output, EventEmitter, ViewChild, ElementRef } from '@angular/core';
+import { Component, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
@@ -7,40 +7,24 @@ import { FormsModule } from '@angular/forms';
   standalone: true,
   imports: [CommonModule, FormsModule],
   template: `
-    <div class="search-container" [class.expanded]="isExpanded">
-      <!-- Collapsed: icon-only button -->
-      <button
-        *ngIf="!isExpanded"
-        class="search-icon-btn"
-        (click)="expand()"
-        title="Search sounds"
-      >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="11" cy="11" r="8"/>
-          <path d="M21 21l-4.35-4.35"/>
-        </svg>
-      </button>
-
-      <!-- Expanded: full search input -->
-      <div class="search-input-wrapper" *ngIf="isExpanded">
+    <div class="search-container">
+      <div class="search-input-wrapper">
         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/>
           <path d="M21 21l-4.35-4.35"/>
         </svg>
         <input
-          #searchInput
           type="text"
           class="search-input"
-          placeholder="Search sounds..."
+          placeholder="Search sounds and categories..."
           [(ngModel)]="searchQuery"
           (input)="onSearch()"
-          (keyup.enter)="onSearch()"
-          (keyup.escape)="collapse()"
-          (blur)="onBlur()"
+          (keyup.escape)="clearSearch()"
         />
         <button
           class="clear-btn"
-          (click)="collapse()"
+          *ngIf="searchQuery"
+          (click)="clearSearch()"
         >
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -53,36 +37,7 @@ import { FormsModule } from '@angular/forms';
     .search-container {
       display: flex;
       align-items: center;
-    }
-
-    .search-icon-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 40px;
-      height: 40px;
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.2);
-      border-radius: 50%;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      color: rgba(255, 255, 255, 0.7);
-    }
-
-    .search-icon-btn:hover {
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.4);
-      color: #fff;
-    }
-
-    .search-icon-btn svg {
-      width: 20px;
-      height: 20px;
-    }
-
-    .search-container.expanded {
       width: 100%;
-      max-width: 500px;
     }
 
     .search-input-wrapper {
@@ -103,8 +58,8 @@ import { FormsModule } from '@angular/forms';
 
     .search-input {
       width: 100%;
-      padding: 0.875rem 3rem;
-      font-size: 1rem;
+      padding: 0.75rem 3rem 0.75rem 3rem;
+      font-size: 0.95rem;
       color: #fff;
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid rgba(255, 255, 255, 0.2);
@@ -151,31 +106,7 @@ import { FormsModule } from '@angular/forms';
 })
 export class SearchBarComponent {
   searchQuery = '';
-  isExpanded = false;
   @Output() search = new EventEmitter<string>();
-  @ViewChild('searchInput') searchInputRef!: ElementRef<HTMLInputElement>;
-
-  expand(): void {
-    this.isExpanded = true;
-    setTimeout(() => {
-      this.searchInputRef?.nativeElement?.focus();
-    }, 0);
-  }
-
-  collapse(): void {
-    this.isExpanded = false;
-    if (this.searchQuery) {
-      this.searchQuery = '';
-      this.search.emit('');
-    }
-  }
-
-  onBlur(): void {
-    // Only collapse if there's no search query typed
-    if (!this.searchQuery) {
-      this.isExpanded = false;
-    }
-  }
 
   onSearch(): void {
     this.search.emit(this.searchQuery);

@@ -211,20 +211,14 @@ app.get('/api/download-update', (req: Request, res: Response) => {
   });
 });
 
-// Launch the downloaded installer and shut down the server
+// Launch the downloaded installer (the client will close the Tauri window)
 app.post('/api/launch-installer', (_req: Request, res: Response) => {
   if (!downloadedInstallerPath || !fs.existsSync(downloadedInstallerPath)) {
     res.status(400).json({ error: 'No downloaded installer found' });
     return;
   }
+  spawn(downloadedInstallerPath, [], { detached: true, stdio: 'ignore' }).unref();
   res.json({ ok: true });
-
-  // Give the response time to flush, then launch installer and exit
-  setTimeout(() => {
-    spawn(downloadedInstallerPath, [], { detached: true, stdio: 'ignore' }).unref();
-    closeDb();
-    process.exit(0);
-  }, 500);
 });
 
 // ── Settings API ─────────────────────────────────────────────────────────────

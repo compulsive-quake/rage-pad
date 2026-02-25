@@ -5,7 +5,7 @@
       <button class="close-btn" (click)="onClose()">&times;</button>
     </div>
     <div class="modal-body qr-body">
-      <p class="qr-instructions">Scan this QR code with your phone or tablet to open Rage Pad on the same network.</p>
+      <p class="qr-instructions">Scan this QR code with your phone or tablet to open RagePad on the same network.</p>
 
       <div class="qr-container" *ngIf="!isLoading && !error">
         <img [src]="qrDataUrl" alt="QR Code" class="qr-image" />

@@ -15,6 +15,8 @@ export class HeaderComponent {
   @Input() isReorderMode = false;
   @Input() playbackProgress = 0;
 
+  isFullscreen = false;
+
   @Output() search = new EventEmitter<string>();
   @Output() refresh = new EventEmitter<void>();
   @Output() toggleRenameMode = new EventEmitter<void>();
@@ -49,5 +51,15 @@ export class HeaderComponent {
 
   onShowQrCode(): void {
     this.showQrCode.emit();
+  }
+
+  toggleFullscreen(): void {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+      this.isFullscreen = false;
+    } else {
+      document.documentElement.requestFullscreen();
+      this.isFullscreen = true;
+    }
   }
 }
