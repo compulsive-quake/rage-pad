@@ -1,6 +1,6 @@
 {
   "name": "ragepad",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "Soundpad integration with Angular frontend",
   "main": "dist/server/index.js",
   "repository": {
@@ -25,12 +25,12 @@
   },
   "dependencies": {
     "@types/multer": "^2.0.0",
+    "@vreden/youtube_scraper": "^1.2.8",
     "cors": "^2.8.5",
     "express": "^4.18.2",
     "multer": "^2.0.2",
     "net": "^1.0.2",
-    "qrcode": "^1.5.4",
-    "youtubei.js": "^16.0.1"
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.0",
