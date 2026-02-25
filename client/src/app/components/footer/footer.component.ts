@@ -1,7 +1,9 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, NgZone } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { ConnectionStatusComponent } from '../connection-status/connection-status.component';
+import { SoundpadService } from '../../services/soundpad.service';
 
 @Component({
   selector: 'app-footer',
@@ -33,6 +35,12 @@ export class FooterComponent {
   @Input() latestVersion = '';
   @Input() downloadUrl = '';
 
+  /** Download state */
+  isDownloading = false;
+  downloadPercent = 0;
+  downloadDone = false;
+  downloadError = '';
+
   @Output() stop = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
   @Output() volumeChange = new EventEmitter<number>();
@@ -41,6 +49,8 @@ export class FooterComponent {
   @Output() manualLaunch = new EventEmitter<void>();
   /** Emitted when the user dismisses the update banner */
   @Output() dismissUpdate = new EventEmitter<void>();
+
+  constructor(private soundpadService: SoundpadService, private ngZone: NgZone) {}
 
   onStop(): void {
     this.stop.emit();
@@ -64,6 +74,57 @@ export class FooterComponent {
 
   onDismissUpdate(): void {
     this.dismissUpdate.emit();
+  }
+
+  onDownloadUpdate(): void {
+    if (this.isDownloading || this.downloadDone || !this.downloadUrl) return;
+    this.isDownloading = true;
+    this.downloadPercent = 0;
+    this.downloadError = '';
+
+    const apiUrl = `${window.location.origin}/api/download-update?url=${encodeURIComponent(this.downloadUrl)}`;
+    const es = new EventSource(apiUrl);
+
+    es.addEventListener('progress', (e: MessageEvent) => {
+      this.ngZone.run(() => {
+        const data = JSON.parse(e.data);
+        this.downloadPercent = data.percent;
+      });
+    });
+
+    es.addEventListener('done', () => {
+      this.ngZone.run(() => {
+        this.downloadDone = true;
+        this.isDownloading = false;
+        es.close();
+        // Auto-launch the installer
+        this.launchInstaller();
+      });
+    });
+
+    es.addEventListener('error', (e: any) => {
+      this.ngZone.run(() => {
+        // SSE 'error' can fire for both custom error events and connection loss
+        if (e.data) {
+          const data = JSON.parse(e.data);
+          this.downloadError = data.message || 'Download failed';
+        } else {
+          this.downloadError = 'Download connection lost';
+        }
+        this.isDownloading = false;
+        es.close();
+      });
+    });
+  }
+
+  private launchInstaller(): void {
+    this.soundpadService.launchInstaller()
+      .pipe(take(1))
+      .subscribe({
+        error: () => {
+          this.downloadError = 'Failed to launch installer';
+        }
+      });
   }
 
   formatTime(seconds: number): string {

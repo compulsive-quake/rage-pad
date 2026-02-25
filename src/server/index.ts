@@ -3,6 +3,8 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import os from 'os';
+import https from 'https';
+import { spawn } from 'child_process';
 import QRCode from 'qrcode';
 import soundpadRoutes from './routes';
 import { getSetting, getAllSettings, setSetting, updateSettings, closeDb } from './database';
@@ -133,6 +135,96 @@ app.get('/api/qr-code', async (_req: Request, res: Response) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate QR code' });
   }
+});
+
+// ── Update download & install ────────────────────────────────────────────────
+
+/** Follow redirects and stream the response, calling `onResponse` with the final response. */
+function httpsGetFollowRedirects(url: string, onResponse: (res: import('http').IncomingMessage) => void, onError: (err: Error) => void): void {
+  https.get(url, { headers: { 'User-Agent': 'RagePad' } }, (res) => {
+    if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+      httpsGetFollowRedirects(res.headers.location, onResponse, onError);
+    } else {
+      onResponse(res);
+    }
+  }).on('error', onError);
+}
+
+let downloadedInstallerPath = '';
+
+// SSE endpoint: downloads the installer and streams progress events
+app.get('/api/download-update', (req: Request, res: Response) => {
+  const downloadUrl = req.query['url'] as string;
+  if (!downloadUrl) {
+    res.status(400).json({ error: 'Missing url query parameter' });
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const send = (event: string, data: object) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const filename = path.basename(new URL(downloadUrl).pathname);
+  const destPath = path.join(os.tmpdir(), filename);
+
+  httpsGetFollowRedirects(downloadUrl, (dlRes) => {
+    if (dlRes.statusCode !== 200) {
+      send('error', { message: `HTTP ${dlRes.statusCode}` });
+      res.end();
+      return;
+    }
+
+    const totalBytes = parseInt(dlRes.headers['content-length'] || '0', 10);
+    let receivedBytes = 0;
+    const fileStream = fs.createWriteStream(destPath);
+
+    dlRes.on('data', (chunk: Buffer) => {
+      receivedBytes += chunk.length;
+      fileStream.write(chunk);
+      if (totalBytes > 0) {
+        send('progress', { received: receivedBytes, total: totalBytes, percent: Math.round((receivedBytes / totalBytes) * 100) });
+      }
+    });
+
+    dlRes.on('end', () => {
+      fileStream.end(() => {
+        downloadedInstallerPath = destPath;
+        send('done', { path: destPath });
+        res.end();
+      });
+    });
+
+    dlRes.on('error', (err) => {
+      fileStream.end();
+      send('error', { message: err.message });
+      res.end();
+    });
+  }, (err) => {
+    send('error', { message: err.message });
+    res.end();
+  });
+});
+
+// Launch the downloaded installer and shut down the server
+app.post('/api/launch-installer', (_req: Request, res: Response) => {
+  if (!downloadedInstallerPath || !fs.existsSync(downloadedInstallerPath)) {
+    res.status(400).json({ error: 'No downloaded installer found' });
+    return;
+  }
+  res.json({ ok: true });
+
+  // Give the response time to flush, then launch installer and exit
+  setTimeout(() => {
+    spawn(downloadedInstallerPath, [], { detached: true, stdio: 'ignore' }).unref();
+    closeDb();
+    process.exit(0);
+  }, 500);
 });
 
 // ── Settings API ─────────────────────────────────────────────────────────────
