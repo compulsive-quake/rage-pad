@@ -121,8 +121,12 @@ export class FooterComponent {
     this.soundpadService.launchInstaller()
       .pipe(take(1))
       .subscribe({
+        next: () => {
+          window.close();
+        },
         error: () => {
           this.downloadError = 'Failed to launch installer';
+          this.downloadDone = false;
         }
       });
   }
