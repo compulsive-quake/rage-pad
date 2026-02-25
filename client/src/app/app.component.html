@@ -11,6 +11,7 @@
     (toggleReorderMode)="toggleReorderMode()"
     (toggleSettings)="toggleSettingsModal()"
     (addSound)="openAddSoundModal()"
+    (showQrCode)="openQrModal()"
   ></app-header>
 
   <!-- Main Content / Settings -->
@@ -92,6 +93,12 @@
     [countdownSeconds]="wakeCountdownSeconds"
     (dismissed)="dismissWakeDialog()"
   ></app-wake-dialog>
+
+  <!-- QR Code Modal -->
+  <app-qr-modal
+    [isOpen]="isQrModalOpen"
+    (closed)="onQrModalClosed()"
+  ></app-qr-modal>
 
   <!-- Add Sound Modal -->
   <app-add-sound-modal

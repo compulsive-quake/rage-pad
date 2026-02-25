@@ -7,6 +7,8 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
+const os_1 = __importDefault(require("os"));
+const qrcode_1 = __importDefault(require("qrcode"));
 const routes_1 = __importDefault(require("./routes"));
 const database_1 = require("./database");
 // ── File logging for release builds ─────────────────────────────────────────
@@ -97,6 +99,36 @@ app.use(express_1.default.static(clientDistPath));
 // Return the port the server is currently listening on
 app.get('/api/current-port', (_req, res) => {
     res.json({ port: currentPort });
+});
+// Return a QR code image for connecting from another device on the LAN
+app.get('/api/qr-code', async (_req, res) => {
+    const nets = os_1.default.networkInterfaces();
+    let lanIp = '';
+    for (const iface of Object.values(nets)) {
+        if (!iface)
+            continue;
+        for (const addr of iface) {
+            if (addr.family === 'IPv4' && !addr.internal) {
+                lanIp = addr.address;
+                break;
+            }
+        }
+        if (lanIp)
+            break;
+    }
+    const host = lanIp || 'localhost';
+    const url = `http://${host}:${currentPort}`;
+    try {
+        const dataUrl = await qrcode_1.default.toDataURL(url, {
+            width: 300,
+            margin: 2,
+            color: { dark: '#ffffffff', light: '#00000000' },
+        });
+        res.json({ url, qrDataUrl: dataUrl });
+    }
+    catch (err) {
+        res.status(500).json({ error: 'Failed to generate QR code' });
+    }
 });
 // ── Settings API ─────────────────────────────────────────────────────────────
 app.get('/api/settings', (_req, res) => {

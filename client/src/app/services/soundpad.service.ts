@@ -74,6 +74,11 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  /** Fetch a QR code data-URL for the server's LAN address. */
+  getQrCode(): Observable<{ url: string; qrDataUrl: string }> {
+    return this.http.get<{ url: string; qrDataUrl: string }>(`${this.apiUrl}/qr-code`);
+  }
+
   /** Build a category-image URL using the current origin. */
   getCategoryImageUrl(path: string): string {
     return `${window.location.origin}/api/category-image?path=${encodeURIComponent(path)}`;

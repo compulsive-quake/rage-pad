@@ -21,6 +21,7 @@ export class HeaderComponent {
   @Output() toggleReorderMode = new EventEmitter<void>();
   @Output() toggleSettings = new EventEmitter<void>();
   @Output() addSound = new EventEmitter<void>();
+  @Output() showQrCode = new EventEmitter<void>();
 
   onSearch(query: string): void {
     this.search.emit(query);
@@ -44,5 +45,9 @@ export class HeaderComponent {
 
   onAddSound(): void {
     this.addSound.emit();
+  }
+
+  onShowQrCode(): void {
+    this.showQrCode.emit();
   }
 }
