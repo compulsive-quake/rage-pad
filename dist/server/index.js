@@ -171,13 +171,13 @@ app.get('/api/download-update', (req, res) => {
         res.end();
     });
 });
-// Launch the downloaded installer (the client will close the Tauri window)
+// Launch the downloaded installer visibly so the user sees the NSIS GUI
 app.post('/api/launch-installer', (_req, res) => {
     if (!downloadedInstallerPath || !fs_1.default.existsSync(downloadedInstallerPath)) {
         res.status(400).json({ error: 'No downloaded installer found' });
         return;
     }
-    (0, child_process_1.spawn)(downloadedInstallerPath, [], { detached: true, stdio: 'ignore' }).unref();
+    (0, child_process_1.spawn)(`"${downloadedInstallerPath}"`, [], { detached: true, stdio: 'ignore', shell: true }).unref();
     res.json({ ok: true });
 });
 // ── Settings API ─────────────────────────────────────────────────────────────
