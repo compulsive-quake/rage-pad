@@ -306,14 +306,48 @@
   text-align: center;
 }
 
+.youtube-fetch-error-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.4rem;
+}
+
 .youtube-fetch-error {
-  margin: 0.4rem 0 0;
+  margin: 0;
   font-size: 0.8rem;
   color: #ff6b6b;
   background: rgba(231, 76, 60, 0.1);
   border: 1px solid rgba(231, 76, 60, 0.25);
   border-radius: 6px;
   padding: 0.4rem 0.65rem;
+  flex: 1;
+}
+
+.youtube-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.75rem;
+  background: rgba(52, 152, 219, 0.15);
+  border: 1px solid rgba(52, 152, 219, 0.4);
+  border-radius: 6px;
+  color: #3498db;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(52, 152, 219, 0.28);
+    border-color: #3498db;
+  }
+
+  &:active {
+    transform: scale(0.96);
+  }
 }
 
 .field-input-row {

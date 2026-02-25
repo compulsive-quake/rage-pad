@@ -260,6 +260,32 @@ router.post('/sounds/:index/rename', async (req, res) => {
         res.status(500).json({ error: 'Failed to rename sound' });
     }
 });
+// Delete a sound by index (removes from SPL, deletes file, restarts Soundpad)
+router.delete('/sounds/:index', async (req, res) => {
+    try {
+        const index = parseInt(req.params.index, 10);
+        if (isNaN(index)) {
+            res.status(400).json({ error: 'Invalid sound index' });
+            return;
+        }
+        // Suppress SSE while Soundpad is being restarted
+        sseSuppressed = true;
+        const result = await soundpadClient.deleteSound(index);
+        // Re-enable SSE and notify clients
+        sseSuppressed = false;
+        if (result.success) {
+            notifySseClients();
+            res.json({ message: 'Sound deleted', data: result.data });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (error) {
+        sseSuppressed = false;
+        res.status(500).json({ error: 'Failed to delete sound' });
+    }
+});
 // Reorder a sound (move to a different category/position)
 router.post('/sounds/reorder', async (req, res) => {
     try {
@@ -479,11 +505,13 @@ router.post('/sounds/add', addSoundUpload, async (req, res) => {
         // Optional artist and title metadata
         const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
         const title = typeof req.body.title === 'string' ? req.body.title : '';
+        // Optional duration in seconds
+        const durationSeconds = parseInt(req.body.durationSeconds, 10) || 0;
         // Suppress SSE notifications while we kill/restart Soundpad.
         // The file watcher would otherwise fire before Soundpad is back up,
         // causing the client to hit a dead pipe and get an empty sound list.
         sseSuppressed = true;
-        const result = await soundpadClient.addSound(soundFile.path, soundFile.originalname, categoryName, displayName, artist, title, 0, originalFile ? originalFile.path : undefined, originalFile ? originalFile.originalname : undefined);
+        const result = await soundpadClient.addSound(soundFile.path, soundFile.originalname, categoryName, displayName, artist, title, durationSeconds, originalFile ? originalFile.path : undefined, originalFile ? originalFile.originalname : undefined);
         // Re-enable SSE and notify clients now that Soundpad is ready
         sseSuppressed = false;
         if (result.success) {

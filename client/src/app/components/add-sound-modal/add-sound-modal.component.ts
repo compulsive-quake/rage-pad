@@ -36,6 +36,9 @@ export class AddSoundModalComponent implements OnChanges {
   isFetchingYoutube = false;
   youtubeFetchError = '';
   youtubeDurationSeconds = 0;
+  showYoutubeRetryBtn = false;
+  private youtubeFetchAttempts = 0;
+  private youtubeRetryTimer: any = null;
 
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
@@ -90,6 +93,12 @@ export class AddSoundModalComponent implements OnChanges {
     this.isFetchingYoutube = false;
     this.youtubeFetchError = '';
     this.youtubeDurationSeconds = 0;
+    this.showYoutubeRetryBtn = false;
+    this.youtubeFetchAttempts = 0;
+    if (this.youtubeRetryTimer) {
+      clearTimeout(this.youtubeRetryTimer);
+      this.youtubeRetryTimer = null;
+    }
     this.previewDuration = 0;
     this.cropStart = 0;
     this.cropEnd = 1;
@@ -234,12 +243,15 @@ export class AddSoundModalComponent implements OnChanges {
     this.isFetchingYoutube = true;
     this.youtubeFetchError = '';
     this.addSoundError = '';
+    this.showYoutubeRetryBtn = false;
+    this.youtubeFetchAttempts++;
 
     this.soundpadService.fetchYoutubeAudio(url)
       .pipe(take(1))
       .subscribe({
         next: ({ file, title, durationSeconds }) => {
           this.isFetchingYoutube = false;
+          this.youtubeFetchAttempts = 0;
           this.addSoundFile = file;
           this.youtubeDurationSeconds = durationSeconds;
           this.addSoundTitle = title;
@@ -248,9 +260,26 @@ export class AddSoundModalComponent implements OnChanges {
         },
         error: (err) => {
           this.isFetchingYoutube = false;
-          this.youtubeFetchError = err?.error?.error || err?.message || 'Failed to fetch audio from YouTube.';
+          const errorMsg = err?.error?.error || err?.message || 'Failed to fetch audio from YouTube.';
+
+          if (this.youtubeFetchAttempts < 2) {
+            this.youtubeFetchError = errorMsg + ' Retrying…';
+            this.youtubeRetryTimer = setTimeout(() => {
+              this.youtubeRetryTimer = null;
+              this.fetchFromYoutube();
+            }, 2000);
+          } else {
+            this.youtubeFetchError = errorMsg;
+            this.showYoutubeRetryBtn = true;
+          }
         }
       });
+  }
+
+  retryYoutubeFetch(): void {
+    this.youtubeFetchAttempts = 0;
+    this.showYoutubeRetryBtn = false;
+    this.fetchFromYoutube();
   }
 
   formatFileSize(bytes: number): string {
@@ -347,15 +376,7 @@ export class AddSoundModalComponent implements OnChanges {
     const cropStartSec = this.cropStart > 0 ? this.cropStart * this.previewDuration : undefined;
     const cropEndSec = this.cropEnd < 1 ? this.cropEnd * this.previewDuration : undefined;
 
-    let effectiveDuration = this.youtubeDurationSeconds > 0
-      ? this.youtubeDurationSeconds
-      : (this.previewDuration > 0 ? this.previewDuration : 0);
-    if (effectiveDuration > 0 && (cropStartSec !== undefined || cropEndSec !== undefined)) {
-      const start = cropStartSec ?? 0;
-      const end = cropEndSec ?? effectiveDuration;
-      effectiveDuration = Math.max(end - start, 0);
-    }
-    const durationSeconds = effectiveDuration > 0 ? Math.round(effectiveDuration) : undefined;
+    const durationSeconds = this.previewDuration > 0 ? Math.round(this.previewDuration) : undefined;
 
     this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds, this.originalUncroppedFile)
       .pipe(take(1))

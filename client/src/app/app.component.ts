@@ -13,6 +13,7 @@ import { SettingsComponent, SettingsPayload } from './components/settings/settin
 import { RenameModalComponent } from './components/rename-modal/rename-modal.component';
 import { WakeDialogComponent } from './components/wake-dialog/wake-dialog.component';
 import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-modal.component';
+import { ContextMenuComponent } from './components/context-menu/context-menu.component';
 
 @Component({
   selector: 'app-root',
@@ -28,6 +29,7 @@ import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-m
     RenameModalComponent,
     WakeDialogComponent,
     AddSoundModalComponent,
+    ContextMenuComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -56,8 +58,17 @@ export class AppComponent implements OnInit, OnDestroy {
   // Add Sound modal state
   isAddSoundModalOpen = false;
 
-  // Uncropped backup tracking
-  uncroppedSoundUrls: Set<string> = new Set();
+  // Context menu state (desktop Tauri build only)
+  isTauri = !!(window as any).__TAURI_INTERNALS__;
+  contextMenuVisible = false;
+  contextMenuX = 0;
+  contextMenuY = 0;
+  contextMenuSound: Sound | null = null;
+
+  // Delete confirmation state
+  isDeleteConfirmOpen = false;
+  soundToDelete: Sound | null = null;
+  isDeleting = false;
 
   // Config-watch toggle
   configWatchEnabled: boolean;
@@ -368,10 +379,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
     forkJoin({
       sounds: this.soundpadService.getSounds().pipe(take(1)),
-      categoryIcons: this.soundpadService.getCategoryIcons().pipe(take(1)),
-      uncropped: this.soundpadService.getUncroppedList().pipe(take(1))
+      categoryIcons: this.soundpadService.getCategoryIcons().pipe(take(1))
     }).subscribe({
-      next: ({ sounds, categoryIcons, uncropped }) => {
+      next: ({ sounds, categoryIcons }) => {
         if (sounds.length === 0 && this.sounds.length > 0) {
           this.isLoading = false;
           return;
@@ -385,8 +395,6 @@ export class AppComponent implements OnInit, OnDestroy {
         categoryIcons.forEach(icon => {
           this.categoryIconsMap.set(icon.name, icon);
         });
-
-        this.uncroppedSoundUrls = new Set(uncropped.urls || []);
 
         if (this.searchQuery.trim()) {
           this.filterSounds(this.searchQuery);
@@ -849,17 +857,56 @@ export class AppComponent implements OnInit, OnDestroy {
     this.loadSounds(true);
   }
 
-  // ── Reset Crop handler ────────────────────────────────────────────────────
+  // ── Context menu & Delete sound ──────────────────────────────────────────
 
-  onResetCrop(sound: Sound): void {
-    this.soundpadService.resetCrop(sound.url)
+  onSoundContextMenu(event: { sound: Sound; event: MouseEvent }): void {
+    if (!this.isTauri) return;
+    this.contextMenuSound = event.sound;
+    this.contextMenuX = event.event.clientX;
+    this.contextMenuY = event.event.clientY;
+    this.contextMenuVisible = true;
+  }
+
+  onContextMenuClosed(): void {
+    this.contextMenuVisible = false;
+    this.contextMenuSound = null;
+  }
+
+  onContextMenuDelete(): void {
+    this.soundToDelete = this.contextMenuSound;
+    this.contextMenuVisible = false;
+    this.contextMenuSound = null;
+    this.isDeleteConfirmOpen = true;
+  }
+
+  cancelDelete(): void {
+    this.isDeleteConfirmOpen = false;
+    this.soundToDelete = null;
+    this.isDeleting = false;
+  }
+
+  confirmDelete(): void {
+    if (!this.soundToDelete || this.isDeleting) return;
+    this.isDeleting = true;
+
+    this.soundpadService.deleteSound(this.soundToDelete.index)
       .pipe(take(1))
       .subscribe({
-        next: () => {
-          this.loadSounds(true);
+        next: (result: any) => {
+          this.isDeleting = false;
+          this.isDeleteConfirmOpen = false;
+          this.soundToDelete = null;
+          if (result?.error) {
+            console.error('Failed to delete sound:', result.error);
+          } else {
+            this.loadSounds(true);
+          }
         },
         error: (err: any) => {
-          console.error('Failed to reset crop:', err);
+          console.error('Failed to delete sound:', err);
+          this.isDeleting = false;
+          this.isDeleteConfirmOpen = false;
+          this.soundToDelete = null;
         }
       });
   }

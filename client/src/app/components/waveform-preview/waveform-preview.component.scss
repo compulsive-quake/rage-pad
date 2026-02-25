@@ -272,6 +272,7 @@
   border: 1px solid rgba(46, 204, 113, 0.2);
   border-radius: 6px;
   padding: 0.25rem 0.6rem;
+  margin-left: auto;
 }
 
 .crop-icon {
@@ -370,6 +371,109 @@
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+// Volume controls
+.volume-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-top: 0.3rem;
+}
+
+.volume-normalize-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  background: rgba(155, 89, 182, 0.15);
+  border: 1px solid rgba(155, 89, 182, 0.4);
+  border-radius: 4px;
+  color: rgba(155, 89, 182, 0.95);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(155, 89, 182, 0.28);
+    border-color: #9b59b6;
+    color: #9b59b6;
+  }
+
+  &:active {
+    transform: scale(0.96);
+  }
+}
+
+.volume-slider {
+  flex: 1;
+  min-width: 80px;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #9b59b6;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+
+    &:hover {
+      transform: scale(1.2);
+      box-shadow: 0 0 8px rgba(155, 89, 182, 0.5);
+    }
+  }
+
+  &::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #9b59b6;
+    border: 2px solid rgba(255, 255, 255, 0.8);
+    cursor: pointer;
+  }
+}
+
+.volume-label {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+  min-width: 38px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.volume-reset-btn {
+  padding: 0.1rem 0.5rem;
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 4px;
+  color: rgba(231, 76, 60, 0.9);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(231, 76, 60, 0.25);
+    border-color: #e74c3c;
+    color: #e74c3c;
   }
 }
 

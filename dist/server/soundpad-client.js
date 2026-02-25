@@ -1450,6 +1450,120 @@ class SoundpadClient {
      * Restore the uncropped backup for a sound: replace the cropped file with
      * the _uncropped version, then restart Soundpad so it picks up the change.
      */
+    async deleteSound(soundIndex) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
+            const splId = soundIndex - 1;
+            // Step 1: Kill Soundpad so we can safely edit the file
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Read soundlist.spl
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            // Step 3: Find the Nth <Sound url="..." .../> definition tag (0-based)
+            const soundUrlTagRegex = /<Sound\s[^>]*url="([^"]*)"[^>]*\/>/gi;
+            let match;
+            let count = 0;
+            let soundDefStart = -1;
+            let soundDefEnd = -1;
+            let soundFilePath = '';
+            while ((match = soundUrlTagRegex.exec(splContent)) !== null) {
+                if (count === splId) {
+                    soundDefStart = match.index;
+                    soundDefEnd = match.index + match[0].length;
+                    soundFilePath = match[1]
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"');
+                    break;
+                }
+                count++;
+            }
+            if (soundDefStart === -1) {
+                // Relaunch Soundpad before returning error
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: `Sound definition at index ${soundIndex} not found in soundlist.spl` };
+            }
+            // Step 4: Remove the sound definition tag (and surrounding whitespace/newline)
+            // Eat the preceding whitespace on the same line and the trailing newline
+            let removeStart = soundDefStart;
+            while (removeStart > 0 && splContent[removeStart - 1] === ' ') {
+                removeStart--;
+            }
+            let removeEnd = soundDefEnd;
+            if (splContent[removeEnd] === '\r')
+                removeEnd++;
+            if (splContent[removeEnd] === '\n')
+                removeEnd++;
+            splContent = splContent.slice(0, removeStart) + splContent.slice(removeEnd);
+            // Step 5: Remove all <Sound id="splId"/> references from Categories and Hotbar
+            const soundRefRegex = new RegExp(`[ \\t]*<Sound\\s+id="${splId}"\\s*/>[ \\t]*\\r?\\n?`, 'g');
+            splContent = splContent.replace(soundRefRegex, '');
+            // Step 6: Renumber all <Sound id="N"/> where N > splId (decrement by 1)
+            splContent = splContent.replace(/<Sound\s+id="(\d+)"\s*\/>/g, (_full, idStr) => {
+                const id = parseInt(idStr, 10);
+                if (id > splId) {
+                    return `<Sound id="${id - 1}"/>`;
+                }
+                return _full;
+            });
+            // Step 7: Write the updated file
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`[deleteSound] Removed sound index ${soundIndex} (splId=${splId}) from soundlist.spl`);
+            // Step 8: Delete the physical audio file and any _uncropped backup
+            if (soundFilePath && fs.existsSync(soundFilePath)) {
+                try {
+                    fs.unlinkSync(soundFilePath);
+                    console.log(`[deleteSound] Deleted audio file: ${soundFilePath}`);
+                }
+                catch (e) {
+                    console.warn(`[deleteSound] Failed to delete audio file: ${soundFilePath}`, e);
+                }
+                // Delete _uncropped backup if it exists
+                const ext = path.extname(soundFilePath);
+                const base = path.basename(soundFilePath, ext);
+                const dir = path.dirname(soundFilePath);
+                const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+                for (const aExt of audioExts) {
+                    const uncroppedPath = path.join(dir, `${base}_uncropped${aExt}`);
+                    if (fs.existsSync(uncroppedPath)) {
+                        try {
+                            fs.unlinkSync(uncroppedPath);
+                            console.log(`[deleteSound] Deleted uncropped backup: ${uncroppedPath}`);
+                        }
+                        catch (e) {
+                            console.warn(`[deleteSound] Failed to delete uncropped backup: ${uncroppedPath}`, e);
+                        }
+                        break;
+                    }
+                }
+            }
+            // Step 9: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 10: Wait for Soundpad to become available
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound "${path.basename(soundFilePath)}" deleted successfully` };
+        }
+        catch (error) {
+            console.error('deleteSound error:', error);
+            // Try to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to delete sound'
+            };
+        }
+    }
     async resetCrop(soundUrl) {
         try {
             const soundPath = soundUrl.replace(/\//g, path.sep);
