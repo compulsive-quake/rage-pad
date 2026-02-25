@@ -1,0 +1,107 @@
+<div class="modal-overlay" *ngIf="isOpen" (click)="close()">
+  <div class="modal-content edit-details-modal-content" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Rename Sound</h2>
+      <button class="close-btn" (click)="close()">&times;</button>
+    </div>
+    <div class="modal-body edit-details-modal-body">
+      <div class="form-fields">
+        <!-- Row 1: Tag | Title -->
+        <div class="form-fields-row">
+          <!-- Tag -->
+          <div class="form-field-col">
+            <label class="category-label">Tag <span class="required-star">*</span></label>
+            <input
+              type="text"
+              class="sound-name-input"
+              [(ngModel)]="editTag"
+              placeholder="Enter tag (required)"
+            />
+          </div>
+          <!-- Title -->
+          <div class="form-field-col">
+            <label class="category-label">Title</label>
+            <div class="field-input-row">
+              <input
+                type="text"
+                class="sound-name-input"
+                [(ngModel)]="editTitle"
+                placeholder="Enter title"
+              />
+              <button
+                class="field-clear-btn"
+                *ngIf="editTitle"
+                (click)="editTitle = ''"
+                title="Clear title"
+                type="button"
+              >&times;</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Row 2: Artist | Category -->
+        <div class="form-fields-row">
+          <!-- Artist -->
+          <div class="form-field-col">
+            <label class="category-label">Artist</label>
+            <div class="field-input-row artist-autocomplete-wrapper">
+              <input
+                type="text"
+                class="sound-name-input"
+                [(ngModel)]="editArtist"
+                placeholder="Enter artist"
+                autocomplete="off"
+                (input)="onArtistInput()"
+                (focus)="onArtistFocus()"
+                (blur)="onArtistBlur()"
+              />
+              <button
+                class="field-clear-btn"
+                *ngIf="editArtist"
+                (click)="editArtist = ''; showArtistSuggestions = false"
+                title="Clear artist"
+                type="button"
+              >&times;</button>
+              <!-- Autocomplete dropdown -->
+              <ul class="artist-suggestions" *ngIf="showArtistSuggestions">
+                <li
+                  *ngFor="let artist of filteredArtistSuggestions"
+                  class="artist-suggestion-item"
+                  (mousedown)="selectArtistSuggestion(artist)"
+                >{{ artist }}</li>
+              </ul>
+            </div>
+          </div>
+          <!-- Category -->
+          <div class="form-field-col">
+            <label class="category-label">Category</label>
+            <app-category-select
+              [categories]="categories"
+              [categoryIconsMap]="categoryIconsMap"
+              [selected]="editCategory"
+              (selectionChange)="onCategoryChange($event)"
+            ></app-category-select>
+          </div>
+        </div>
+
+        <!-- Error message -->
+        <p *ngIf="errorMessage" class="edit-details-error">{{ errorMessage }}</p>
+      </div>
+    </div>
+
+    <!-- Actions footer -->
+    <div class="edit-details-actions">
+      <button class="cancel-btn" (click)="close()" [disabled]="isSaving">Cancel</button>
+      <button
+        class="save-btn"
+        (click)="save()"
+        [disabled]="!editTag.trim() || isSaving"
+      >
+        <svg *ngIf="isSaving" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; margin-right: 6px;">
+          <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+        </svg>
+        {{ isSaving ? 'Saving...' : 'Save' }}
+      </button>
+    </div>
+  </div>
+</div>

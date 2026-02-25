@@ -182,6 +182,17 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  updateSoundDetails(index: number, customTag: string, artist: string, title: string, category?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/${index}/update-details`, {
+      customTag, artist, title, category
+    }).pipe(
+      catchError(error => {
+        console.error('Failed to update sound details:', error);
+        return of({ error: 'Failed to update sound details' });
+      })
+    );
+  }
+
   renameSound(index: number, title: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/${index}/rename`, { title }).pipe(
       catchError(error => {

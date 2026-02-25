@@ -11,6 +11,8 @@ export interface Sound {
     parentCategory: string;
     categoryImage: string;
     categoryIndex: number;
+    customTag?: string;
+    rawTitle?: string;
 }
 export interface CategoryIcon {
     name: string;
@@ -98,6 +100,19 @@ export declare class SoundpadClient {
      *         { success: false, error: message } on failure.
      */
     private updateSoundCustomTag;
+    /**
+     * Update multiple attributes (customTag, artist, title) on a Sound element in
+     * the soundlist.spl file. Optionally moves the sound to a different category.
+     *
+     * This kills Soundpad, edits the file, and relaunches – all in a single
+     * restart cycle.
+     */
+    updateSoundDetails(index: number, customTag: string, artist: string, title: string, targetCategory?: string): Promise<SoundpadResponse>;
+    /**
+     * Update one or more attributes on the Nth <Sound> element (1-based index)
+     * in the soundlist.spl XML content. Generalizes `updateSoundCustomTag`.
+     */
+    private updateSoundAttributes;
     /**
      * Add a new sound file to Soundpad.
      * Since Soundpad has no API for adding files, we must:
