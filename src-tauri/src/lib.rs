@@ -32,7 +32,7 @@ pub fn run() {
 
             let (mut rx, _child) = app
                 .shell()
-                .sidecar("server")?
+                .sidecar("ragepad-server")?
                 .args([server_bundle.to_str().unwrap_or("")])
                 .env("RAGE_PAD_CLIENT_DIST", client_dist.to_str().unwrap_or(""))
                 .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
