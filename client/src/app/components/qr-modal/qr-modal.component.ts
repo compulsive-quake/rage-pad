@@ -18,8 +18,20 @@ export class QrModalComponent implements OnChanges {
   serverUrl = '';
   isLoading = false;
   error = '';
+  private mouseDownOnOverlay = false;
 
   constructor(private soundpadService: SoundpadService) {}
+
+  onOverlayMouseDown(event: MouseEvent): void {
+    this.mouseDownOnOverlay = event.target === event.currentTarget;
+  }
+
+  onOverlayMouseUp(event: MouseEvent): void {
+    if (this.mouseDownOnOverlay && event.target === event.currentTarget) {
+      this.onClose();
+    }
+    this.mouseDownOnOverlay = false;
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen) {

@@ -1,5 +1,5 @@
-<div class="modal-overlay" *ngIf="isOpen" (click)="onClose()">
-  <div class="modal-content qr-modal-content" (click)="$event.stopPropagation()">
+<div class="modal-overlay" *ngIf="isOpen" (mousedown)="onOverlayMouseDown($event)" (mouseup)="onOverlayMouseUp($event)">
+  <div class="modal-content qr-modal-content">
     <div class="modal-header">
       <h2>Connect from Phone</h2>
       <button class="close-btn" (click)="onClose()">&times;</button>
