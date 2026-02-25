@@ -83,7 +83,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private wakeDimTimer: any = null;
 
   // Server port
-  serverPort: number = 3000;
+  serverPort: number = 8088;
   isPortChanging = false;
   portChangeError = '';
 
@@ -125,7 +125,7 @@ export class AppComponent implements OnInit, OnDestroy {
     this.configWatchEnabled = false;
     this.autoLaunchEnabled = true;
     this.autoUpdateCheckEnabled = true;
-    this.serverPort = Number(window.location.port) || 3000;
+    this.serverPort = Number(window.location.port) || 8088;
   }
 
   ngOnInit(): void {

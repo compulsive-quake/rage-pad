@@ -79,7 +79,7 @@ pub fn run() {
                 .expect("main window not found");
 
             thread::spawn(move || {
-                wait_for_port(3000, 30);
+                wait_for_port(8088, 30);
 
                 // Reload now that the server is up (the webview may have cached
                 // a connection-refused error page while we were waiting).

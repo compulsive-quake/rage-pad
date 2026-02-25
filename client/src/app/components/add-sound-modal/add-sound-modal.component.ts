@@ -40,6 +40,8 @@ export class AddSoundModalComponent implements OnChanges {
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
 
+  step: 'select' | 'preview' | 'details' = 'select';
+
   // Waveform state (updated via events from WaveformPreviewComponent)
   previewDuration = 0;
   cropStart = 0;
@@ -69,6 +71,7 @@ export class AddSoundModalComponent implements OnChanges {
   }
 
   private resetState(): void {
+    this.step = 'select';
     this.addSoundFile = null;
     this.addSoundName = '';
     this.addSoundArtist = '';
@@ -178,6 +181,7 @@ export class AddSoundModalComponent implements OnChanges {
     }
     this.addSoundFile = file;
     this.addSoundName = this.fileNameWithoutExtension(file.name);
+    this.step = 'preview';
   }
 
   onFileSelected(event: Event): void {
@@ -193,6 +197,7 @@ export class AddSoundModalComponent implements OnChanges {
     }
     this.addSoundFile = file;
     this.addSoundName = this.fileNameWithoutExtension(file.name);
+    this.step = 'preview';
   }
 
   private fileNameWithoutExtension(name: string): string {
@@ -200,8 +205,8 @@ export class AddSoundModalComponent implements OnChanges {
     return lastDot > 0 ? name.substring(0, lastDot) : name;
   }
 
-  removeFile(event: Event): void {
-    event.stopPropagation();
+  removeFile(event?: Event): void {
+    event?.stopPropagation();
     this.addSoundFile = null;
     this.addSoundName = '';
     this.addSoundArtist = '';
@@ -212,6 +217,7 @@ export class AddSoundModalComponent implements OnChanges {
     this.previewDuration = 0;
     this.cropStart = 0;
     this.cropEnd = 1;
+    this.step = 'select';
   }
 
   fetchFromYoutube(): void {
@@ -231,6 +237,7 @@ export class AddSoundModalComponent implements OnChanges {
           this.youtubeDurationSeconds = durationSeconds;
           this.addSoundTitle = title;
           this.addSoundName = title;
+          this.step = 'preview';
         },
         error: (err) => {
           this.isFetchingYoutube = false;
@@ -272,6 +279,18 @@ export class AddSoundModalComponent implements OnChanges {
 
   blurCropHandles(): void {
     // This is now handled by the waveform-preview component internally
+  }
+
+  goToDetails(): void {
+    this.step = 'details';
+  }
+
+  goBackToPreview(): void {
+    this.step = 'preview';
+  }
+
+  goBackToSelect(): void {
+    this.removeFile();
   }
 
   confirmAddSound(): void {

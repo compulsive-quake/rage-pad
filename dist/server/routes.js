@@ -42,7 +42,16 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const soundpad_client_1 = __importDefault(require("./soundpad-client"));
-const ytdl_core_1 = __importDefault(require("@distube/ytdl-core"));
+const stream_1 = require("stream");
+// youtubei.js is ESM-only – lazily imported via dynamic import()
+let _innertube = null;
+async function getInnertube() {
+    if (!_innertube) {
+        const { Innertube } = await Promise.resolve().then(() => __importStar(require('youtubei.js')));
+        _innertube = await Innertube.create();
+    }
+    return _innertube;
+}
 const router = express_1.default.Router();
 const soundpadClient = new soundpad_client_1.default();
 // --- Multer setup for file uploads ---
@@ -511,38 +520,43 @@ router.post('/sounds/add', upload.single('soundFile'), async (req, res) => {
     }
 });
 /**
- * Normalise a YouTube URL so that Shorts links and other alternate formats
- * are converted to the canonical https://www.youtube.com/watch?v=VIDEO_ID
- * form that ytdl-core handles reliably.
+ * Extract a YouTube video ID from various URL formats.
  *
  * Handles:
- *   https://www.youtube.com/shorts/VIDEO_ID[?...]
- *   https://youtube.com/shorts/VIDEO_ID[?...]
- *   https://youtu.be/VIDEO_ID[?...]          (already handled by ytdl, but normalised anyway)
+ *   https://www.youtube.com/watch?v=VIDEO_ID
+ *   https://www.youtube.com/shorts/VIDEO_ID
+ *   https://youtu.be/VIDEO_ID
+ *   https://m.youtube.com/watch?v=VIDEO_ID
+ *
+ * Returns the 11-character video ID or null if not a valid YouTube URL.
  */
-function normaliseYouTubeUrl(raw) {
+function extractYouTubeVideoId(raw) {
     try {
         const u = new URL(raw);
         const host = u.hostname.replace(/^www\./, '');
-        // Shorts: youtube.com/shorts/VIDEO_ID
-        if ((host === 'youtube.com' || host === 'm.youtube.com') && u.pathname.startsWith('/shorts/')) {
-            const videoId = u.pathname.split('/shorts/')[1]?.split('/')[0];
-            if (videoId) {
-                return `https://www.youtube.com/watch?v=${videoId}`;
+        if (host === 'youtube.com' || host === 'm.youtube.com') {
+            // /shorts/VIDEO_ID
+            if (u.pathname.startsWith('/shorts/')) {
+                const id = u.pathname.split('/shorts/')[1]?.split('/')[0];
+                if (id)
+                    return id;
             }
+            // /watch?v=VIDEO_ID
+            const v = u.searchParams.get('v');
+            if (v)
+                return v;
         }
         // youtu.be/VIDEO_ID
         if (host === 'youtu.be') {
-            const videoId = u.pathname.replace(/^\//, '').split('/')[0];
-            if (videoId) {
-                return `https://www.youtube.com/watch?v=${videoId}`;
-            }
+            const id = u.pathname.replace(/^\//, '').split('/')[0];
+            if (id)
+                return id;
         }
     }
     catch {
-        // Not a valid URL – return as-is and let ytdl validate it
+        // Not a valid URL
     }
-    return raw;
+    return null;
 }
 // YouTube audio fetch endpoint
 router.post('/youtube/fetch', async (req, res) => {
@@ -552,17 +566,16 @@ router.post('/youtube/fetch', async (req, res) => {
             res.status(400).json({ error: 'YouTube URL is required' });
             return;
         }
-        // Normalise Shorts / youtu.be links → canonical watch?v= URL
-        const normalisedUrl = normaliseYouTubeUrl(url.trim());
-        // Validate it's a YouTube URL
-        if (!ytdl_core_1.default.validateURL(normalisedUrl)) {
+        const videoId = extractYouTubeVideoId(url.trim());
+        if (!videoId) {
             res.status(400).json({ error: 'Invalid YouTube URL' });
             return;
         }
+        const innertube = await getInnertube();
         // Get video info for the title and duration
-        const info = await ytdl_core_1.default.getInfo(normalisedUrl);
-        const videoTitle = info.videoDetails.title;
-        const videoDurationSeconds = parseInt(info.videoDetails.lengthSeconds, 10) || 0;
+        const info = await innertube.getBasicInfo(videoId);
+        const videoTitle = info.basic_info?.title || 'youtube_audio';
+        const videoDurationSeconds = info.basic_info?.duration || 0;
         // Sanitize title for use as filename
         const safeTitle = videoTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'youtube_audio';
         // Write audio to a temp file
@@ -571,14 +584,17 @@ router.post('/youtube/fetch', async (req, res) => {
             fs.mkdirSync(tmpDir, { recursive: true });
         }
         const tmpFilePath = path.join(tmpDir, `yt_${Date.now()}_${safeTitle}.mp3`);
+        // Download audio-only stream
+        const stream = await innertube.download(videoId, {
+            type: 'audio',
+            quality: 'best',
+        });
+        // Convert ReadableStream (web) to Node.js Readable, then write to file
+        const nodeStream = stream_1.Readable.fromWeb(stream);
         await new Promise((resolve, reject) => {
-            const audioStream = (0, ytdl_core_1.default)(normalisedUrl, {
-                quality: 'highestaudio',
-                filter: 'audioonly',
-            });
             const writeStream = fs.createWriteStream(tmpFilePath);
-            audioStream.pipe(writeStream);
-            audioStream.on('error', reject);
+            nodeStream.pipe(writeStream);
+            nodeStream.on('error', reject);
             writeStream.on('finish', resolve);
             writeStream.on('error', reject);
         });

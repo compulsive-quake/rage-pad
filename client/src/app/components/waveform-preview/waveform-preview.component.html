@@ -66,6 +66,11 @@
     </div>
   </div>
 
+  <!-- Frequency scope -->
+  <div *ngIf="!previewLoading" class="frequency-scope-container">
+    <canvas #frequencyCanvas class="frequency-scope-canvas"></canvas>
+  </div>
+
   <!-- Playback controls row -->
   <div *ngIf="!previewLoading" class="preview-controls">
     <button

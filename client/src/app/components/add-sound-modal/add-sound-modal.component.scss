@@ -18,26 +18,81 @@
   min-height: 0;
 }
 
-.add-sound-columns {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+.step-content {
+  padding: 1.5rem;
 }
 
-.add-sound-left {
-  padding: 1.5rem 1.5rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.add-sound-right {
+.step-hidden {
   display: none;
 }
 
 .add-sound-form-fields {
-  padding: 0.5rem 1.5rem 1.5rem;
+  padding: 0;
+}
+
+// Selected file bar (preview step)
+.selected-file-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.75rem;
+  background: rgba(46, 204, 113, 0.06);
+  border: 1px solid rgba(46, 204, 113, 0.2);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.selected-file-icon {
+  width: 20px;
+  height: 20px;
+  color: #2ecc71;
+  flex-shrink: 0;
+}
+
+.selected-file-name {
+  flex: 1;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.selected-file-size {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.selected-file-remove {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid rgba(231, 76, 60, 0.25);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+
+  svg {
+    width: 14px;
+    height: 14px;
+    color: rgba(231, 76, 60, 0.7);
+  }
+
+  &:hover {
+    background: rgba(231, 76, 60, 0.22);
+    border-color: rgba(231, 76, 60, 0.5);
+
+    svg {
+      color: #e74c3c;
+    }
+  }
 }
 
 .form-fields-row {
@@ -68,6 +123,7 @@
   gap: 0.75rem;
   justify-content: flex-end;
   padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .drop-zone {
@@ -91,11 +147,6 @@
     box-shadow: 0 0 20px rgba(46, 204, 113, 0.15);
   }
 
-  &.has-file {
-    border-color: rgba(46, 204, 113, 0.4);
-    background: rgba(46, 204, 113, 0.06);
-    padding: 1rem 1.25rem;
-  }
 }
 
 .drop-zone-content {
@@ -136,69 +187,6 @@
   letter-spacing: 0.5px;
 }
 
-.drop-zone-file {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.file-icon {
-  width: 36px;
-  height: 36px;
-  color: #2ecc71;
-  flex-shrink: 0;
-}
-
-.file-info {
-  flex: 1;
-  text-align: left;
-  min-width: 0;
-}
-
-.file-name {
-  margin: 0;
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-size {
-  margin: 0.15rem 0 0;
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.4);
-}
-
-.remove-file-btn {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(231, 76, 60, 0.15);
-  border: 1px solid rgba(231, 76, 60, 0.3);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
-
-  svg {
-    width: 16px;
-    height: 16px;
-    color: rgba(231, 76, 60, 0.8);
-  }
-
-  &:hover {
-    background: rgba(231, 76, 60, 0.25);
-    border-color: rgba(231, 76, 60, 0.6);
-
-    svg {
-      color: #e74c3c;
-    }
-  }
-}
 
 .youtube-url-section {
   margin-bottom: 1.25rem;
@@ -379,17 +367,8 @@
   max-height: 180px;
   overflow-y: auto;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
-
-  &::-webkit-scrollbar {
-    width: 5px;
-  }
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 3px;
-  }
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
 }
 
 .artist-suggestion-item {
@@ -481,12 +460,8 @@
 }
 
 @keyframes flash-cancel-red {
-  0%   { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
-  20%  { background: rgba(220, 53, 69, 0.5);    border-color: rgba(220, 53, 69, 0.8);    color: #fff; }
-  40%  { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
-  60%  { background: rgba(220, 53, 69, 0.5);    border-color: rgba(220, 53, 69, 0.8);    color: #fff; }
-  80%  { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
-  100% { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
+  0%, 40%, 80%, 100% { background: rgba(255, 255, 255, 0.07); border-color: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); }
+  20%, 60% { background: rgba(220, 53, 69, 0.5); border-color: rgba(220, 53, 69, 0.8); color: #fff; }
 }
 
 .add-sound-confirm-btn {
@@ -525,3 +500,4 @@
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
