@@ -93,6 +93,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // Update check
   autoUpdateCheckEnabled: boolean;
+  updateCheckIntervalMinutes = 60;
   updateAvailable = false;
   latestVersion = '';
   downloadUrl = '';
@@ -142,6 +143,7 @@ export class AppComponent implements OnInit, OnDestroy {
         this.idleTimeoutEnabled = settings.idleTimeoutEnabled;
         this.wakeMinutes = settings.wakeMinutes;
         this.autoUpdateCheckEnabled = settings.autoUpdateCheckEnabled;
+        this.updateCheckIntervalMinutes = settings.updateCheckIntervalMinutes;
         this.serverPort = settings.serverPort;
         this.initializeAfterSettingsLoad();
       });
@@ -307,8 +309,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private startUpdateCheck(): void {
     this.stopUpdateCheck();
-    // Check immediately then every 30 minutes
-    this.updateCheckSub = timer(0, 30 * 60 * 1000).pipe(
+    const intervalMs = this.updateCheckIntervalMinutes * 60 * 1000;
+    this.updateCheckSub = timer(0, intervalMs).pipe(
       takeUntil(this.destroy$),
       switchMap(() => this.soundpadService.checkForUpdate())
     ).subscribe(info => {
@@ -679,8 +681,10 @@ export class AppComponent implements OnInit, OnDestroy {
       }
     }
 
-    if (payload.autoUpdateCheckEnabled !== this.autoUpdateCheckEnabled) {
+    if (payload.autoUpdateCheckEnabled !== this.autoUpdateCheckEnabled ||
+        payload.updateCheckIntervalMinutes !== this.updateCheckIntervalMinutes) {
       this.autoUpdateCheckEnabled = payload.autoUpdateCheckEnabled;
+      this.updateCheckIntervalMinutes = payload.updateCheckIntervalMinutes;
       if (this.autoUpdateCheckEnabled) {
         this.startUpdateCheck();
       } else {

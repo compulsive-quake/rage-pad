@@ -97,8 +97,6 @@ export class FooterComponent {
         this.downloadDone = true;
         this.isDownloading = false;
         es.close();
-        // Auto-launch the installer
-        this.launchInstaller();
       });
     });
 
@@ -117,13 +115,10 @@ export class FooterComponent {
     });
   }
 
-  private launchInstaller(): void {
+  onLaunchInstaller(): void {
     this.soundpadService.launchInstaller()
       .pipe(take(1))
       .subscribe({
-        next: () => {
-          window.close();
-        },
         error: () => {
           this.downloadError = 'Failed to launch installer';
           this.downloadDone = false;

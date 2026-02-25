@@ -140,9 +140,10 @@
         <span class="update-percent">{{ downloadPercent }}%</span>
       </ng-container>
 
-      <!-- Done: launching installer and closing -->
+      <!-- Done: show install button -->
       <ng-container *ngIf="downloadDone">
-        <span class="update-text">Launching installer…</span>
+        <span class="update-text">v{{ latestVersion }} ready to install</span>
+        <button class="update-download-btn" (click)="onLaunchInstaller()">Install</button>
       </ng-container>
 
       <!-- Error -->
