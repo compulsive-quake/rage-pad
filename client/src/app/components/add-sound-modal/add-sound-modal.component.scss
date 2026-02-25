@@ -501,3 +501,52 @@
   to { transform: rotate(360deg); }
 }
 
+// Unapplied crop confirmation dialog
+.crop-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+}
+
+.crop-confirm-dialog {
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 400px;
+  width: 90%;
+
+  h3 { margin: 0 0 0.75rem; font-size: 1.1rem; font-weight: 600; color: #fff; }
+  p  { margin: 0 0 1.25rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.6); line-height: 1.4; }
+}
+
+.crop-confirm-actions { display: flex; gap: 0.75rem; justify-content: flex-end; }
+
+.crop-confirm-back-btn {
+  padding: 0.5rem 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  cursor: pointer;
+  &:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+}
+
+.crop-confirm-continue-btn {
+  padding: 0.5rem 1.25rem;
+  background: #e67e22;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover { background: #d35400; }
+}

@@ -46,6 +46,9 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   private cropDragEndBound: (() => void) | null = null;
   private analyserNode: AnalyserNode | null = null;
   private frequencyData: Uint8Array | null = null;
+  private frequencyPeaks: Float32Array | null = null;
+  private peakDecayAnimFrame: number | null = null;
+  private lastPeakDecayTime = 0;
 
   constructor(private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
@@ -95,6 +98,11 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     }
     this.analyserNode = null;
     this.frequencyData = null;
+    this.frequencyPeaks = null;
+    if (this.peakDecayAnimFrame !== null) {
+      cancelAnimationFrame(this.peakDecayAnimFrame);
+      this.peakDecayAnimFrame = null;
+    }
     this.removeCropDragListeners();
   }
 
@@ -121,6 +129,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       this.analyserNode.fftSize = 256;
       this.analyserNode.smoothingTimeConstant = 0.8;
       this.frequencyData = new Uint8Array(this.analyserNode.frequencyBinCount);
+      this.frequencyPeaks = new Float32Array(this.analyserNode.frequencyBinCount);
       this.audioCtx.decodeAudioData(arrayBuffer.slice(0))
         .then((buffer) => {
           this.ngZone.run(() => {
@@ -326,6 +335,11 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     if (this.audioCtx.state === 'suspended') {
       this.audioCtx.resume();
     }
+    // Cancel peak decay animation — live drawing takes over
+    if (this.peakDecayAnimFrame !== null) {
+      cancelAnimationFrame(this.peakDecayAnimFrame);
+      this.peakDecayAnimFrame = null;
+    }
 
     const startOffset = this.previewOffsetSec;
     const cropEndSec = this.cropEnd * this.previewDuration;
@@ -352,7 +366,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
           this.previewCurrentTime = this.previewOffsetSec;
           this.previewPlayheadPos = this.cropStart;
           this.drawWaveform();
-          this.clearFrequencyScope();
+          this.startPeakDecay();
           this.cdr.detectChanges();
         }
       });
@@ -629,12 +643,60 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       const b = Math.round(182 + (60 - 182) * t);
       ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
       ctx.fillRect(i * barW, H - barH, Math.max(barW - 0.5, 0.5), barH);
+
+      // Update peak tracking
+      if (this.frequencyPeaks) {
+        if (value > this.frequencyPeaks[i]) {
+          this.frequencyPeaks[i] = value;
+        }
+        // Draw peak indicator
+        const peakY = H - this.frequencyPeaks[i] * H;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(i * barW, peakY, Math.max(barW - 0.5, 0.5), 2);
+      }
+    }
+
+    // Decay peaks slowly during live playback
+    if (this.frequencyPeaks) {
+      const now = performance.now();
+      const dt = (now - this.lastPeakDecayTime) / 1000;
+      this.lastPeakDecayTime = now;
+      const decayRate = 0.3;
+      for (let i = 0; i < this.frequencyPeaks.length; i++) {
+        this.frequencyPeaks[i] = Math.max(this.frequencyData![i] / 255, this.frequencyPeaks[i] - decayRate * dt);
+      }
     }
   }
 
-  private clearFrequencyScope(): void {
+  private startPeakDecay(): void {
+    if (this.peakDecayAnimFrame !== null) return;
+    this.lastPeakDecayTime = performance.now();
+    const decay = (now: number) => {
+      if (!this.frequencyPeaks) return;
+      const dt = (now - this.lastPeakDecayTime) / 1000;
+      this.lastPeakDecayTime = now;
+      const decayRate = 0.4;
+      let anyAlive = false;
+      for (let i = 0; i < this.frequencyPeaks.length; i++) {
+        if (this.frequencyPeaks[i] > 0) {
+          this.frequencyPeaks[i] = Math.max(0, this.frequencyPeaks[i] - decayRate * dt);
+          if (this.frequencyPeaks[i] > 0.001) anyAlive = true;
+        }
+      }
+      this.drawFrequencyScopeStatic();
+      if (anyAlive) {
+        this.peakDecayAnimFrame = requestAnimationFrame(decay);
+      } else {
+        this.peakDecayAnimFrame = null;
+      }
+    };
+    this.peakDecayAnimFrame = requestAnimationFrame(decay);
+  }
+
+  /** Draw frequency scope with only peak indicators (no live data) — used during decay after playback stops. */
+  private drawFrequencyScopeStatic(): void {
     const canvasEl = this.frequencyCanvas?.nativeElement;
-    if (!canvasEl) return;
+    if (!canvasEl || !this.frequencyPeaks) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvasEl.getBoundingClientRect();
@@ -644,8 +706,23 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     const ctx = canvasEl.getContext('2d');
     if (!ctx) return;
     ctx.scale(dpr, dpr);
+
+    const W = rect.width;
+    const H = rect.height;
+
     ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
-    ctx.fillRect(0, 0, rect.width, rect.height);
+    ctx.fillRect(0, 0, W, H);
+
+    const bins = this.frequencyPeaks.length;
+    const barW = W / bins;
+
+    for (let i = 0; i < bins; i++) {
+      if (this.frequencyPeaks[i] > 0.001) {
+        const peakY = H - this.frequencyPeaks[i] * H;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.fillRect(i * barW, peakY, Math.max(barW - 0.5, 0.5), 2);
+      }
+    }
   }
 
   onPreviewKeydown(event: KeyboardEvent): void {

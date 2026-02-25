@@ -41,6 +41,7 @@ export class AddSoundModalComponent implements OnChanges {
   filteredArtistSuggestions: string[] = [];
 
   step: 'select' | 'preview' | 'details' = 'select';
+  showCropConfirmDialog = false;
 
   // Waveform state (updated via events from WaveformPreviewComponent)
   previewDuration = 0;
@@ -89,6 +90,7 @@ export class AddSoundModalComponent implements OnChanges {
     this.previewDuration = 0;
     this.cropStart = 0;
     this.cropEnd = 1;
+    this.showCropConfirmDialog = false;
   }
 
   close(): void {
@@ -281,8 +283,25 @@ export class AddSoundModalComponent implements OnChanges {
     // This is now handled by the waveform-preview component internally
   }
 
+  get hasPendingCrop(): boolean {
+    return this.cropStart !== 0 || this.cropEnd !== 1;
+  }
+
   goToDetails(): void {
+    if (this.hasPendingCrop) {
+      this.showCropConfirmDialog = true;
+      return;
+    }
     this.step = 'details';
+  }
+
+  onCropConfirmContinue(): void {
+    this.showCropConfirmDialog = false;
+    this.step = 'details';
+  }
+
+  onCropConfirmCancel(): void {
+    this.showCropConfirmDialog = false;
   }
 
   goBackToPreview(): void {
