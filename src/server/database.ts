@@ -10,6 +10,7 @@ export interface AppSettings {
   idleTimeoutEnabled: boolean;
   wakeMinutes: number;
   autoUpdateCheckEnabled: boolean;
+  updateCheckIntervalMinutes: number;
   serverPort: number;
 }
 
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   idleTimeoutEnabled: false,
   wakeMinutes: 30,
   autoUpdateCheckEnabled: true,
+  updateCheckIntervalMinutes: 60,
   serverPort: 3000,
 };
 

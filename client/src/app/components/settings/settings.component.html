@@ -146,6 +146,36 @@
             <span class="toggle-slider"></span>
           </label>
         </div>
+        <div class="settings-toggle-row" *ngIf="draftAutoUpdateCheck">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Check interval</span>
+            <span class="settings-toggle-description">How often to check for new releases</span>
+          </div>
+          <div class="interval-field">
+            <select
+              class="interval-select"
+              [ngModel]="intervalPreset"
+              (ngModelChange)="onIntervalPresetChange($event)"
+            >
+              <option value="30">Every 30 minutes</option>
+              <option value="60">Every hour</option>
+              <option value="1440">Daily</option>
+              <option value="custom">Custom</option>
+            </select>
+            <div class="custom-interval" *ngIf="intervalPreset === 'custom'">
+              <input
+                type="number"
+                class="wake-minutes-input"
+                [ngModel]="draftUpdateCheckInterval"
+                (ngModelChange)="onCustomIntervalChange($event)"
+                min="5"
+                max="10080"
+                step="1"
+              />
+              <span class="interval-unit">minutes</span>
+            </div>
+          </div>
+        </div>
         <div class="settings-toggle-row version-row">
           <div class="settings-toggle-info">
             <span class="settings-toggle-label">Version</span>
