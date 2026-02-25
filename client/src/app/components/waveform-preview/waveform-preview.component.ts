@@ -33,6 +33,8 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   focusedCropHandle: 'start' | 'end' | null = null;
   isCropping = false;
   originalFile: File | null = null;
+  volumeGain = 1.0;
+  volumeSliderMax = 200;
 
   private originalAudioBuffer: AudioBuffer | null = null;
   private audioCtx: AudioContext | null = null;
@@ -45,16 +47,22 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   private cropDragHandle: 'start' | 'end' | null = null;
   private cropDragBound: ((e: MouseEvent) => void) | null = null;
   private cropDragEndBound: (() => void) | null = null;
+  private gainNode: GainNode | null = null;
   private analyserNode: AnalyserNode | null = null;
   private frequencyData: Uint8Array | null = null;
   private frequencyPeaks: Float32Array | null = null;
   private peakDecayAnimFrame: number | null = null;
   private lastPeakDecayTime = 0;
+  private skipNextFileChange = false;
 
   constructor(private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['file']) {
+      if (this.skipNextFileChange) {
+        this.skipNextFileChange = false;
+        return;
+      }
       const newFile = changes['file'].currentValue as File | null;
       if (newFile) {
         this.loadAudioPreview(newFile);
@@ -85,6 +93,8 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.previewStartedAt = 0;
     this.originalFile = null;
     this.originalAudioBuffer = null;
+    this.volumeGain = 1.0;
+    this.volumeSliderMax = 200;
   }
 
   destroyPreviewAudio(): void {
@@ -97,6 +107,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       this.audioCtx.close().catch(() => {});
       this.audioCtx = null;
     }
+    this.gainNode = null;
     this.analyserNode = null;
     this.frequencyData = null;
     this.frequencyPeaks = null;
@@ -277,7 +288,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     for (let i = 0; i < n; i++) {
       const x = i * barW;
       const frac = i / n;
-      const barH = peaks[i] * midY * 0.95;
+      const barH = Math.min(peaks[i] * this.volumeGain * midY * 0.95, midY);
 
       if (frac < this.cropStart || frac > this.cropEnd) {
         ctx.fillStyle = 'rgba(155, 89, 182, 0.25)';
@@ -352,11 +363,15 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
     const source = this.audioCtx.createBufferSource();
     source.buffer = this.audioBuffer;
+    this.gainNode = this.audioCtx.createGain();
+    this.gainNode.gain.value = this.volumeGain;
     if (this.analyserNode) {
-      source.connect(this.analyserNode);
+      source.connect(this.gainNode);
+      this.gainNode.connect(this.analyserNode);
       this.analyserNode.connect(this.audioCtx.destination);
     } else {
-      source.connect(this.audioCtx.destination);
+      source.connect(this.gainNode);
+      this.gainNode.connect(this.audioCtx.destination);
     }
     source.start(0, startOffset, duration);
     source.onended = () => {
@@ -515,7 +530,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       dst.set(src.subarray(startSample, endSample));
     }
 
-    const wavBlob = this.audioBufferToWav(croppedBuffer);
+    const wavBlob = this.audioBufferToWav(croppedBuffer, this.volumeGain);
     const originalName = this.file?.name ?? 'cropped.wav';
     const baseName = this.fileNameWithoutExtension(originalName);
     const newFile = new File([wavBlob], `${baseName}.wav`, { type: 'audio/wav' });
@@ -533,6 +548,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.isCropping = false;
     this.durationChanged.emit(croppedBuffer.duration);
     this.cropStateChanged.emit({ start: 0, end: 1, duration: croppedBuffer.duration });
+    this.skipNextFileChange = true;
     this.fileChanged.emit(newFile);
     this.cdr.detectChanges();
     setTimeout(() => this.drawWaveform(), 0);
@@ -543,6 +559,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
     this.stopPreviewPlayback();
 
+    const restoredFile = this.originalFile;
     this.audioBuffer = this.originalAudioBuffer;
     this.previewDuration = this.originalAudioBuffer.duration;
 
@@ -559,13 +576,14 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.waveformPeaks = this.computePeaks(this.audioBuffer, 600);
     this.durationChanged.emit(this.audioBuffer.duration);
     this.cropStateChanged.emit({ start: 0, end: 1, duration: this.audioBuffer.duration });
-    this.fileChanged.emit(this.file!);
+    this.skipNextFileChange = true;
+    this.fileChanged.emit(restoredFile);
     this.originalFileChanged.emit(null);
     this.cdr.detectChanges();
     setTimeout(() => this.drawWaveform(), 0);
   }
 
-  private audioBufferToWav(buffer: AudioBuffer): Blob {
+  private audioBufferToWav(buffer: AudioBuffer, gain: number = 1.0): Blob {
     const numChannels = buffer.numberOfChannels;
     const sampleRate  = buffer.sampleRate;
     const numSamples  = buffer.length;
@@ -604,7 +622,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     }
     for (let i = 0; i < numSamples; i++) {
       for (let ch = 0; ch < numChannels; ch++) {
-        const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+        const sample = Math.max(-1, Math.min(1, channels[ch][i] * gain));
         view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
         offset += 2;
       }
@@ -766,6 +784,67 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
         this.focusedCropHandle = 'end';
       }
     }
+  }
+
+  // ── Volume controls ──────────────────────────────────────────────────────
+
+  onVolumeSliderInput(event: Event): void {
+    const value = +(event.target as HTMLInputElement).value;
+    this.volumeGain = value / 100;
+    if (this.gainNode) {
+      this.gainNode.gain.value = this.volumeGain;
+    }
+    this.drawWaveform();
+  }
+
+  onVolumeSliderChange(): void {
+    this.emitCurrentFile();
+  }
+
+  normalizeVolume(): void {
+    if (!this.audioBuffer) return;
+    const peak = this.findPeakAmplitude(this.audioBuffer);
+    if (peak > 0) {
+      this.volumeGain = 1.0 / peak;
+      this.volumeSliderMax = Math.max(200, Math.ceil(this.volumeGain * 100));
+      if (this.gainNode) {
+        this.gainNode.gain.value = this.volumeGain;
+      }
+      this.drawWaveform();
+      this.emitCurrentFile();
+    }
+  }
+
+  resetVolume(): void {
+    this.volumeGain = 1.0;
+    this.volumeSliderMax = 200;
+    if (this.gainNode) {
+      this.gainNode.gain.value = this.volumeGain;
+    }
+    this.drawWaveform();
+    this.emitCurrentFile();
+  }
+
+  private findPeakAmplitude(buffer: AudioBuffer): number {
+    let peak = 0;
+    for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+      const data = buffer.getChannelData(ch);
+      for (let i = 0; i < data.length; i++) {
+        const abs = Math.abs(data[i]);
+        if (abs > peak) peak = abs;
+      }
+    }
+    return peak;
+  }
+
+  private emitCurrentFile(): void {
+    if (!this.audioBuffer) return;
+    const wavBlob = this.audioBufferToWav(this.audioBuffer, this.volumeGain);
+    const originalName = this.file?.name ?? 'sound.wav';
+    const baseName = this.fileNameWithoutExtension(originalName);
+    const newFile = new File([wavBlob], `${baseName}.wav`, { type: 'audio/wav' });
+    this.skipNextFileChange = true;
+    this.fileChanged.emit(newFile);
   }
 
   formatTime(seconds: number): string {

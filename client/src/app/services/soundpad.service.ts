@@ -191,6 +191,15 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  deleteSound(index: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/sounds/${index}`).pipe(
+      catchError(error => {
+        console.error('Failed to delete sound:', error);
+        return of({ error: 'Failed to delete sound' });
+      })
+    );
+  }
+
   reorderCategory(categoryName: string, targetPosition: number): Observable<any> {
     return this.http.post(`${this.apiUrl}/categories/reorder`, {
       categoryName,

@@ -24,14 +24,13 @@
     [isRenameMode]="isRenameMode"
     [isReorderMode]="isReorderMode"
     [activeCategory]="activeCategory"
-    [uncroppedSoundUrls]="uncroppedSoundUrls"
     (playSound)="playSound($event)"
     (openRenameModal)="openRenameModal($event)"
-    (resetCrop)="onResetCrop($event)"
     (activeCategoryChange)="activeCategory = $event"
     (reorderSound)="onReorderSound($event)"
     (reorderCategory)="onReorderCategory($event)"
     (dragStateChange)="onDragStateChange($event)"
+    (soundContextMenu)="onSoundContextMenu($event)"
   ></app-content>
 
   <app-settings
@@ -104,4 +103,30 @@
     (closed)="onAddSoundClosed()"
     (soundAdded)="onSoundAdded()"
   ></app-add-sound-modal>
+
+  <!-- Context Menu (desktop Tauri build only) -->
+  <app-context-menu
+    *ngIf="isTauri"
+    [visible]="contextMenuVisible"
+    [x]="contextMenuX"
+    [y]="contextMenuY"
+    (closed)="onContextMenuClosed()"
+    (deleteSound)="onContextMenuDelete()"
+  ></app-context-menu>
+
+  <!-- Delete Confirmation Dialog -->
+  <div class="modal-backdrop" *ngIf="isDeleteConfirmOpen" (click)="cancelDelete()">
+    <div class="delete-confirm-dialog" (click)="$event.stopPropagation()">
+      <h3>Delete Sound</h3>
+      <p>Are you sure you want to delete <strong>{{ soundToDelete?.title }}</strong>?</p>
+      <p class="delete-warning">This will remove the sound from Soundpad and permanently delete the audio file.</p>
+      <div class="delete-confirm-actions">
+        <button class="btn-cancel" (click)="cancelDelete()" [disabled]="isDeleting">Cancel</button>
+        <button class="btn-delete" (click)="confirmDelete()" [disabled]="isDeleting">
+          <span *ngIf="!isDeleting">Delete</span>
+          <span *ngIf="isDeleting">Deleting...</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </div>

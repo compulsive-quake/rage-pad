@@ -187,6 +187,7 @@ export declare class SoundpadClient {
      * Restore the uncropped backup for a sound: replace the cropped file with
      * the _uncropped version, then restart Soundpad so it picks up the change.
      */
+    deleteSound(soundIndex: number): Promise<SoundpadResponse>;
     resetCrop(soundUrl: string): Promise<SoundpadResponse>;
 }
 export default SoundpadClient;

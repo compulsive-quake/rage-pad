@@ -87,10 +87,9 @@
               [sound]="sound"
               [isPlaying]="currentlyPlayingIndex === sound.index"
               [isRenameMode]="isRenameMode"
-              [hasUncropped]="soundHasUncropped(sound)"
               (play)="onPlaySound($event)"
               (rename)="onOpenRenameModal($event)"
-              (resetCrop)="onResetCrop($event)"
+              (soundContextMenu)="onSoundContextMenu($event)"
             ></app-sound-card>
           </div>
 
@@ -115,6 +114,7 @@
                 [sound]="sound"
                 [isPlaying]="currentlyPlayingIndex === sound.index"
                 [isRenameMode]="false"
+                (soundContextMenu)="onSoundContextMenu($event)"
                 class="reorder-card"
               ></app-sound-card>
               <div class="drag-handle">
@@ -150,10 +150,9 @@
                   [sound]="sound"
                   [isPlaying]="currentlyPlayingIndex === sound.index"
                   [isRenameMode]="isRenameMode"
-                  [hasUncropped]="soundHasUncropped(sound)"
                   (play)="onPlaySound($event)"
                   (rename)="onOpenRenameModal($event)"
-                  (resetCrop)="onResetCrop($event)"
+                  (soundContextMenu)="onSoundContextMenu($event)"
                 ></app-sound-card>
               </div>
 
@@ -175,6 +174,7 @@
                     [sound]="sound"
                     [isPlaying]="currentlyPlayingIndex === sound.index"
                     [isRenameMode]="false"
+                    (soundContextMenu)="onSoundContextMenu($event)"
                     class="reorder-card"
                   ></app-sound-card>
                   <div class="drag-handle">

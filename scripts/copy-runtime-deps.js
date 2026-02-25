@@ -39,6 +39,8 @@ while ((match = pattern.exec(bundleContent)) !== null) {
 
 if (externalPackages.size === 0) {
   console.log('No unresolved runtime dependencies found.');
+  fs.mkdirSync(path.join(TARGET_NM, '_placeholder'), { recursive: true });
+  fs.writeFileSync(path.join(TARGET_NM, '_placeholder', 'keep'), '');
   process.exit(0);
 }
 
@@ -79,6 +81,8 @@ const toCopy = [...allPackages].filter(pkg => {
 
 if (toCopy.length === 0) {
   console.log('All external packages are builtins, nothing to copy.');
+  fs.mkdirSync(path.join(TARGET_NM, '_placeholder'), { recursive: true });
+  fs.writeFileSync(path.join(TARGET_NM, '_placeholder', 'keep'), '');
   process.exit(0);
 }
 
