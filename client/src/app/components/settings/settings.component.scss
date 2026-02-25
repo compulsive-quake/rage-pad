@@ -345,6 +345,36 @@
   line-height: 1.3;
 }
 
+// ── QR code inline ──────────────────────────────────────────────────────
+
+.qr-inline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.qr-inline-image {
+  width: 120px;
+  height: 120px;
+  image-rendering: pixelated;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 6px;
+}
+
+.qr-inline-url {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.78rem;
+  color: rgba(155, 89, 182, 0.9);
+  background: rgba(155, 89, 182, 0.1);
+  padding: 0.3rem 0.6rem;
+  border-radius: 4px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
 // ── Update check interval ────────────────────────────────────────────────
 
 .interval-field {

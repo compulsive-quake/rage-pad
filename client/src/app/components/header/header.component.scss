@@ -155,40 +155,6 @@
   }
 }
 
-.qr-btn-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-
-  @media (pointer: coarse) {
-    display: none;
-  }
-  align-items: center;
-  justify-content: center;
-  background: rgba(155, 89, 182, 0.1);
-  border: 1px solid rgba(155, 89, 182, 0.3);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  color: rgba(155, 89, 182, 0.8);
-
-  &:hover {
-    background: rgba(155, 89, 182, 0.2);
-    border-color: rgba(155, 89, 182, 0.6);
-    color: #9b59b6;
-    transform: scale(1.05);
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-}
-
 .add-sound-btn-icon {
   width: 40px;
   height: 40px;

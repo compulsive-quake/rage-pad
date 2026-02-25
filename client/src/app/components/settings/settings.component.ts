@@ -1,7 +1,8 @@
 import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { APP_VERSION } from '../../services/soundpad.service';
+import { take } from 'rxjs';
+import { APP_VERSION, SoundpadService } from '../../services/soundpad.service';
 
 export interface SettingsPayload {
   configWatchEnabled: boolean;
@@ -64,7 +65,15 @@ export class SettingsComponent implements OnInit, OnChanges {
   // Discard confirmation dialog
   showDiscardDialog = false;
 
+  // QR code
+  qrDataUrl = '';
+  qrServerUrl = '';
+  isLoadingQr = false;
+
+  constructor(private soundpadService: SoundpadService) {}
+
   ngOnInit(): void {
+    this.loadQrCode();
     this.snapshotDraft();
   }
 
@@ -197,5 +206,23 @@ export class SettingsComponent implements OnInit, OnChanges {
 
   onDiscardCancel(): void {
     this.showDiscardDialog = false;
+  }
+
+  // ── QR code ─────────────────────────────────────────────────────────────
+
+  private loadQrCode(): void {
+    this.isLoadingQr = true;
+    this.soundpadService.getQrCode()
+      .pipe(take(1))
+      .subscribe({
+        next: (data) => {
+          this.qrDataUrl = data.qrDataUrl;
+          this.qrServerUrl = data.url;
+          this.isLoadingQr = false;
+        },
+        error: () => {
+          this.isLoadingQr = false;
+        }
+      });
   }
 }

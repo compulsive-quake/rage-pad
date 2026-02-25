@@ -13,7 +13,6 @@ import { SettingsComponent, SettingsPayload } from './components/settings/settin
 import { RenameModalComponent } from './components/rename-modal/rename-modal.component';
 import { WakeDialogComponent } from './components/wake-dialog/wake-dialog.component';
 import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-modal.component';
-import { QrModalComponent } from './components/qr-modal/qr-modal.component';
 
 @Component({
   selector: 'app-root',
@@ -29,7 +28,6 @@ import { QrModalComponent } from './components/qr-modal/qr-modal.component';
     RenameModalComponent,
     WakeDialogComponent,
     AddSoundModalComponent,
-    QrModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -58,8 +56,6 @@ export class AppComponent implements OnInit, OnDestroy {
   // Add Sound modal state
   isAddSoundModalOpen = false;
 
-  // QR modal state
-  isQrModalOpen = false;
 
   // Config-watch toggle
   configWatchEnabled: boolean;
@@ -846,16 +842,6 @@ export class AppComponent implements OnInit, OnDestroy {
   onSoundAdded(): void {
     this.isAddSoundModalOpen = false;
     this.loadSounds(true);
-  }
-
-  // ── QR modal handlers ────────────────────────────────────────────────────
-
-  openQrModal(): void {
-    this.isQrModalOpen = true;
-  }
-
-  onQrModalClosed(): void {
-    this.isQrModalOpen = false;
   }
 
   // ── Restart Soundpad ──────────────────────────────────────────────────────
