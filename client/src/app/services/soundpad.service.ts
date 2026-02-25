@@ -256,7 +256,7 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, title?: string, durationSeconds?: number): Observable<any> {
+  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, title?: string, durationSeconds?: number, originalFile?: File | null): Observable<any> {
     const formData = new FormData();
     formData.append('soundFile', file);
     formData.append('category', category);
@@ -275,7 +275,28 @@ export class SoundpadService implements OnDestroy {
     if (durationSeconds !== undefined && durationSeconds > 0) {
       formData.append('durationSeconds', String(durationSeconds));
     }
+    // Send the original uncropped file so the server can save a backup
+    if (originalFile) {
+      formData.append('originalFile', originalFile);
+    }
     return this.http.post(`${this.apiUrl}/sounds/add`, formData);
+  }
+
+  /** Get list of sound URLs that have uncropped backups. */
+  getUncroppedList(): Observable<{ urls: string[] }> {
+    return this.http.get<{ urls: string[] }>(`${this.apiUrl}/sounds/uncropped-list`).pipe(
+      catchError(() => of({ urls: [] }))
+    );
+  }
+
+  /** Restore the uncropped backup for a sound (replaces cropped file, restarts Soundpad). */
+  resetCrop(soundUrl: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/reset-crop`, { url: soundUrl }).pipe(
+      catchError(error => {
+        console.error('Failed to reset crop:', error);
+        return of({ error: 'Failed to reset crop' });
+      })
+    );
   }
 
   /**
@@ -354,7 +375,7 @@ export class SoundpadService implements OnDestroy {
         const durationSeconds = parseInt(response.headers.get('X-Video-Duration') || '0', 10) || 0;
         // Extract filename from Content-Disposition header
         const contentDisposition = response.headers.get('Content-Disposition') || '';
-        let fileName = 'youtube_audio.mp3';
+        let fileName = 'youtube_audio.m4a';
         const match = contentDisposition.match(/filename="([^"]+)"/);
         if (match) {
           try {
@@ -363,7 +384,7 @@ export class SoundpadService implements OnDestroy {
             fileName = match[1];
           }
         }
-        const file = new File([blob], fileName, { type: 'audio/mpeg' });
+        const file = new File([blob], fileName, { type: blob.type || 'audio/mpeg' });
         return { file, title, durationSeconds };
       })
     );

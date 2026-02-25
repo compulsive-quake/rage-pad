@@ -41,10 +41,8 @@ const multer_1 = __importDefault(require("multer"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
+const child_process_1 = require("child_process");
 const soundpad_client_1 = __importDefault(require("./soundpad-client"));
-const https_1 = __importDefault(require("https"));
-// @vreden/youtube_scraper for YouTube audio downloads
-const yt = require('@vreden/youtube_scraper');
 const router = express_1.default.Router();
 const soundpadClient = new soundpad_client_1.default();
 // --- Multer setup for file uploads ---
@@ -448,19 +446,31 @@ router.get('/categories', async (req, res) => {
     }
 });
 // Add a new sound file to Soundpad
-router.post('/sounds/add', upload.single('soundFile'), async (req, res) => {
+const addSoundUpload = upload.fields([
+    { name: 'soundFile', maxCount: 1 },
+    { name: 'originalFile', maxCount: 1 },
+]);
+router.post('/sounds/add', addSoundUpload, async (req, res) => {
+    const files = req.files;
+    const soundFile = files?.['soundFile']?.[0];
+    const originalFile = files?.['originalFile']?.[0];
     try {
-        if (!req.file) {
+        if (!soundFile) {
             res.status(400).json({ error: 'No sound file uploaded' });
             return;
         }
         const categoryName = req.body.category;
         if (!categoryName) {
-            // Clean up temp file
+            // Clean up temp files
             try {
-                fs.unlinkSync(req.file.path);
+                fs.unlinkSync(soundFile.path);
             }
             catch { /* ignore */ }
+            if (originalFile)
+                try {
+                    fs.unlinkSync(originalFile.path);
+                }
+                catch { /* ignore */ }
             res.status(400).json({ error: 'Category name is required' });
             return;
         }
@@ -473,7 +483,7 @@ router.post('/sounds/add', upload.single('soundFile'), async (req, res) => {
         // The file watcher would otherwise fire before Soundpad is back up,
         // causing the client to hit a dead pipe and get an empty sound list.
         sseSuppressed = true;
-        const result = await soundpadClient.addSound(req.file.path, req.file.originalname, categoryName, displayName, artist, title);
+        const result = await soundpadClient.addSound(soundFile.path, soundFile.originalname, categoryName, displayName, artist, title, 0, originalFile ? originalFile.path : undefined, originalFile ? originalFile.originalname : undefined);
         // Re-enable SSE and notify clients now that Soundpad is ready
         sseSuppressed = false;
         if (result.success) {
@@ -489,10 +499,16 @@ router.post('/sounds/add', upload.single('soundFile'), async (req, res) => {
     catch (error) {
         // Always re-enable SSE on error
         sseSuppressed = false;
-        // Clean up temp file on error
-        if (req.file) {
+        // Clean up temp files on error
+        if (soundFile) {
             try {
-                fs.unlinkSync(req.file.path);
+                fs.unlinkSync(soundFile.path);
+            }
+            catch { /* ignore */ }
+        }
+        if (originalFile) {
+            try {
+                fs.unlinkSync(originalFile.path);
             }
             catch { /* ignore */ }
         }
@@ -512,29 +528,87 @@ router.post('/sounds/add', upload.single('soundFile'), async (req, res) => {
         res.status(500).json({ error: 'Failed to add sound' });
     }
 });
-/** Download a URL to a buffer via https (follows redirects). */
-function httpsDownloadBuffer(url) {
+// Return list of sound URLs that have uncropped backups
+router.get('/sounds/uncropped-list', async (req, res) => {
+    try {
+        const soundsDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Leppsoft', 'sounds');
+        if (!fs.existsSync(soundsDir)) {
+            res.json({ urls: [] });
+            return;
+        }
+        const files = fs.readdirSync(soundsDir);
+        const uncroppedFiles = files.filter(f => f.includes('_uncropped'));
+        // Map uncropped filenames back to the original sound URL
+        const urls = [];
+        for (const uf of uncroppedFiles) {
+            const ext = path.extname(uf);
+            const base = path.basename(uf, ext).replace(/_uncropped$/, '');
+            // The cropped file could have any audio extension
+            const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+            for (const aExt of audioExts) {
+                const croppedPath = path.join(soundsDir, `${base}${aExt}`);
+                if (fs.existsSync(croppedPath)) {
+                    urls.push(croppedPath);
+                    break;
+                }
+            }
+        }
+        res.json({ urls });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to list uncropped backups' });
+    }
+});
+// Restore the uncropped backup for a sound
+router.post('/sounds/reset-crop', async (req, res) => {
+    try {
+        const { url: soundUrl } = req.body;
+        if (!soundUrl || typeof soundUrl !== 'string') {
+            res.status(400).json({ error: 'Sound URL is required' });
+            return;
+        }
+        sseSuppressed = true;
+        const result = await soundpadClient.resetCrop(soundUrl);
+        sseSuppressed = false;
+        if (result.success) {
+            console.log('[sounds/reset-crop] Crop reset successfully – notifying SSE clients');
+            notifySseClients();
+            res.json({ message: result.data });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (error) {
+        sseSuppressed = false;
+        res.status(500).json({ error: 'Failed to reset crop' });
+    }
+});
+/** Resolve the path to the yt-dlp binary. In Tauri builds the RAGE_PAD_YT_DLP
+ *  env var points to the bundled exe; in dev mode fall back to the build dir
+ *  or assume yt-dlp is on PATH. */
+function getYtDlpPath() {
+    if (process.env['RAGE_PAD_YT_DLP'])
+        return process.env['RAGE_PAD_YT_DLP'];
+    const localBin = path.join(__dirname, '../../src-tauri/binaries/yt-dlp.exe');
+    if (fs.existsSync(localBin))
+        return localBin;
+    return 'yt-dlp'; // assume on PATH
+}
+/** Run yt-dlp and return stdout as a string. */
+function runYtDlp(args) {
     return new Promise((resolve, reject) => {
-        const get = (u) => {
-            https_1.default.get(u, (res) => {
-                if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
-                    get(res.headers.location);
-                    return;
-                }
-                if (res.statusCode !== 200) {
-                    reject(new Error(`HTTP ${res.statusCode}`));
-                    return;
-                }
-                const chunks = [];
-                res.on('data', (c) => chunks.push(c));
-                res.on('end', () => resolve(Buffer.concat(chunks)));
-                res.on('error', reject);
-            }).on('error', reject);
-        };
-        get(url);
+        (0, child_process_1.execFile)(getYtDlpPath(), args, { maxBuffer: 10 * 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) {
+                reject(new Error(stderr || err.message));
+            }
+            else {
+                resolve(stdout);
+            }
+        });
     });
 }
-// YouTube audio fetch endpoint (using @vreden/youtube_scraper)
+// YouTube audio fetch endpoint (uses yt-dlp binary)
 router.post('/youtube/fetch', async (req, res) => {
     try {
         const { url } = req.body;
@@ -542,23 +616,61 @@ router.post('/youtube/fetch', async (req, res) => {
             res.status(400).json({ error: 'YouTube URL is required' });
             return;
         }
-        const result = await yt.ytmp3(url.trim(), 128);
-        if (!result || !result.status) {
-            res.status(500).json({ error: 'Failed to fetch audio from YouTube' });
-            return;
+        const videoUrl = url.trim();
+        const tmpDir = process.env['RAGE_PAD_TMP_DIR'] || os.tmpdir();
+        // Step 1: Get video metadata (title, duration) via yt-dlp -j
+        let videoTitle = 'youtube_audio';
+        let videoDurationSeconds = 0;
+        try {
+            const metaJson = await runYtDlp([
+                '--no-download', '-j', '--no-warnings', videoUrl
+            ]);
+            const meta = JSON.parse(metaJson);
+            videoTitle = meta.title || meta.fulltitle || 'youtube_audio';
+            videoDurationSeconds = meta.duration || 0;
         }
-        const videoTitle = result.metadata?.title || 'youtube_audio';
-        const videoDurationSeconds = result.metadata?.duration || 0;
-        const downloadUrl = result.download?.url;
-        if (!downloadUrl) {
-            res.status(500).json({ error: 'No download URL returned from YouTube' });
-            return;
+        catch (metaErr) {
+            console.warn('[youtube/fetch] Could not fetch metadata:', metaErr);
         }
-        // Download the mp3 from the provided URL
-        const fileBuffer = await httpsDownloadBuffer(downloadUrl);
         const safeTitle = videoTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'youtube_audio';
-        const fileName = `${safeTitle}.mp3`;
-        res.setHeader('Content-Type', 'audio/mpeg');
+        // Use yt-dlp's output template; the actual extension is determined by format
+        const outTemplate = path.join(tmpDir, `${safeTitle}.%(ext)s`);
+        // Step 2: Download best audio natively (m4a/webm — no ffmpeg needed)
+        await runYtDlp([
+            '-f', 'bestaudio[ext=m4a]/bestaudio',
+            '-o', outTemplate,
+            '--no-playlist',
+            '--no-warnings',
+            '--force-overwrites',
+            videoUrl
+        ]);
+        // yt-dlp replaces %(ext)s with the actual extension; find the output file
+        const possibleExts = ['m4a', 'webm', 'opus', 'ogg', 'mp3'];
+        let outPath = '';
+        for (const ext of possibleExts) {
+            const candidate = path.join(tmpDir, `${safeTitle}.${ext}`);
+            if (fs.existsSync(candidate)) {
+                outPath = candidate;
+                break;
+            }
+        }
+        if (!outPath) {
+            res.status(500).json({ error: 'yt-dlp did not produce an output file' });
+            return;
+        }
+        const ext = path.extname(outPath).slice(1); // e.g. "m4a"
+        const mimeMap = {
+            m4a: 'audio/mp4', webm: 'audio/webm', opus: 'audio/opus',
+            ogg: 'audio/ogg', mp3: 'audio/mpeg',
+        };
+        const fileBuffer = fs.readFileSync(outPath);
+        // Clean up temp file
+        try {
+            fs.unlinkSync(outPath);
+        }
+        catch { /* ignore */ }
+        const fileName = `${safeTitle}.${ext}`;
+        res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
         res.setHeader('X-Video-Title', encodeURIComponent(videoTitle));
         res.setHeader('X-Video-Duration', String(videoDurationSeconds));

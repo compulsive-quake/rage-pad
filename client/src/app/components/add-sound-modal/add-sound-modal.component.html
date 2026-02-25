@@ -101,6 +101,7 @@
         <app-waveform-preview
           [file]="addSoundFile"
           (fileChanged)="onWaveformFileChanged($event)"
+          (originalFileChanged)="onOriginalFileChanged($event)"
           (metadataParsed)="onMetadataParsed($event)"
           (durationChanged)="onDurationChanged($event)"
           (cropStateChanged)="onCropStateChanged($event)"

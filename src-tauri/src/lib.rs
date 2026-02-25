@@ -30,6 +30,9 @@ pub fn run() {
             fs::create_dir_all(&data_dir)?;
             fs::create_dir_all(&tmp_dir)?;
 
+            // yt-dlp binary lives next to server-bundle.js in the resource dir
+            let yt_dlp_path = resource_dir.join("yt-dlp.exe");
+
             let (mut rx, _child) = app
                 .shell()
                 .sidecar("ragepad-server")?
@@ -37,10 +40,14 @@ pub fn run() {
                 .env("RAGE_PAD_CLIENT_DIST", client_dist.to_str().unwrap_or(""))
                 .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
                 .env("RAGE_PAD_DATA_DIR", data_dir.to_str().unwrap_or(""))
+                .env("RAGE_PAD_YT_DLP", yt_dlp_path.to_str().unwrap_or(""))
                 .spawn()?;
 
             // Drain sidecar stdout/stderr into a log file for debugging.
+            // When the server process terminates, exit the Tauri app as well
+            // (e.g. the server exits after launching an update installer).
             let log_path = data_dir.join("server.log");
+            let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 let mut file = fs::OpenOptions::new()
                     .create(true)
@@ -62,6 +69,8 @@ pub fn run() {
                                     "[terminated] code={:?} signal={:?}",
                                     payload.code, payload.signal
                                 );
+                                // Server exited — quit the Tauri app
+                                app_handle.exit(0);
                             }
                             CommandEvent::Error(err) => {
                                 let _ = writeln!(f, "[error] {}", err);

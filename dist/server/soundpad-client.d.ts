@@ -113,8 +113,10 @@ export declare class SoundpadClient {
      * @param artist        Optional artist metadata to write into the SPL tag
      * @param title         Optional title metadata to write into the SPL tag
      * @param durationSeconds
+     * @param uncroppedTempPath
+     * @param uncroppedOriginalName
      */
-    addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist?: string, title?: string, durationSeconds?: number): Promise<SoundpadResponse>;
+    addSound(tempFilePath: string, originalName: string, categoryName: string, displayName?: string, artist?: string, title?: string, durationSeconds?: number, uncroppedTempPath?: string, uncroppedOriginalName?: string): Promise<SoundpadResponse>;
     /**
      * Get the list of categories and sub-categories from soundlist.spl.
      * Returns a flat list of { name, parentCategory } objects.
@@ -181,6 +183,11 @@ export declare class SoundpadClient {
      * to each <Sound id="N"/> found within.
      */
     private walkCategoryHierarchy;
+    /**
+     * Restore the uncropped backup for a sound: replace the cropped file with
+     * the _uncropped version, then restart Soundpad so it picks up the change.
+     */
+    resetCrop(soundUrl: string): Promise<SoundpadResponse>;
 }
 export default SoundpadClient;
 //# sourceMappingURL=soundpad-client.d.ts.map

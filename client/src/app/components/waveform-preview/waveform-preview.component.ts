@@ -14,6 +14,7 @@ import { CommonModule } from '@angular/common';
 export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   @Input() file: File | null = null;
   @Output() fileChanged = new EventEmitter<File>();
+  @Output() originalFileChanged = new EventEmitter<File | null>();
   @Output() metadataParsed = new EventEmitter<{ artist: string; title: string }>();
   @Output() durationChanged = new EventEmitter<number>();
   @Output() cropStateChanged = new EventEmitter<{ start: number; end: number; duration: number }>();
@@ -504,6 +505,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     if (!this.originalFile) {
       this.originalFile = this.file;
       this.originalAudioBuffer = this.audioBuffer;
+      this.originalFileChanged.emit(this.originalFile);
     }
 
     const croppedBuffer = this.audioCtx.createBuffer(numChannels, newLength, sampleRate);
@@ -558,6 +560,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.durationChanged.emit(this.audioBuffer.duration);
     this.cropStateChanged.emit({ start: 0, end: 1, duration: this.audioBuffer.duration });
     this.fileChanged.emit(this.file!);
+    this.originalFileChanged.emit(null);
     this.cdr.detectChanges();
     setTimeout(() => this.drawWaveform(), 0);
   }

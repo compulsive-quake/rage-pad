@@ -20,6 +20,11 @@ import { Sound } from '../../models/sound.model';
           <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
         </svg>
       </span>
+      <span class="crop-badge" *ngIf="hasUncropped && !isRenameMode" title="Reset crop — restore full-length original" (click)="onResetCrop($event)">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
+        </svg>
+      </span>
     </button>
   `,
   styles: [`
@@ -108,14 +113,43 @@ import { Sound } from '../../models/sound.model';
         color: #fff;
       }
     }
+
+    .crop-badge {
+      position: absolute;
+      bottom: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      background: rgba(46, 204, 113, 0.85);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.2s;
+      z-index: 2;
+
+      svg {
+        width: 12px;
+        height: 12px;
+        color: #fff;
+      }
+
+      &:hover {
+        background: rgba(46, 204, 113, 1);
+        transform: scale(1.15);
+      }
+    }
   `]
 })
 export class SoundCardComponent {
   @Input() sound!: Sound;
   @Input() isPlaying = false;
   @Input() isRenameMode = false;
+  @Input() hasUncropped = false;
   @Output() play = new EventEmitter<Sound>();
   @Output() rename = new EventEmitter<Sound>();
+  @Output() resetCrop = new EventEmitter<Sound>();
 
   onClick(): void {
     if (this.isRenameMode) {
@@ -123,5 +157,10 @@ export class SoundCardComponent {
     } else {
       this.play.emit(this.sound);
     }
+  }
+
+  onResetCrop(event: MouseEvent): void {
+    event.stopPropagation();
+    this.resetCrop.emit(this.sound);
   }
 }
