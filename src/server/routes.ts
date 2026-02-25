@@ -4,17 +4,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import SoundpadClient from './soundpad-client';
-import { Readable } from 'stream';
+import https from 'https';
 
-// youtubei.js is ESM-only – lazily imported via dynamic import()
-let _innertube: any = null;
-async function getInnertube() {
-  if (!_innertube) {
-    const { Innertube } = await import('youtubei.js');
-    _innertube = await Innertube.create();
-  }
-  return _innertube;
-}
+// @vreden/youtube_scraper for YouTube audio downloads
+const yt = require('@vreden/youtube_scraper');
 
 const router: Router = express.Router();
 const soundpadClient = new SoundpadClient();
@@ -512,45 +505,30 @@ router.post('/sounds/add', upload.single('soundFile'), async (req: Request, res:
   }
 });
 
-/**
- * Extract a YouTube video ID from various URL formats.
- *
- * Handles:
- *   https://www.youtube.com/watch?v=VIDEO_ID
- *   https://www.youtube.com/shorts/VIDEO_ID
- *   https://youtu.be/VIDEO_ID
- *   https://m.youtube.com/watch?v=VIDEO_ID
- *
- * Returns the 11-character video ID or null if not a valid YouTube URL.
- */
-function extractYouTubeVideoId(raw: string): string | null {
-  try {
-    const u = new URL(raw);
-    const host = u.hostname.replace(/^www\./, '');
-
-    if (host === 'youtube.com' || host === 'm.youtube.com') {
-      // /shorts/VIDEO_ID
-      if (u.pathname.startsWith('/shorts/')) {
-        const id = u.pathname.split('/shorts/')[1]?.split('/')[0];
-        if (id) return id;
-      }
-      // /watch?v=VIDEO_ID
-      const v = u.searchParams.get('v');
-      if (v) return v;
-    }
-
-    // youtu.be/VIDEO_ID
-    if (host === 'youtu.be') {
-      const id = u.pathname.replace(/^\//, '').split('/')[0];
-      if (id) return id;
-    }
-  } catch {
-    // Not a valid URL
-  }
-  return null;
+/** Download a URL to a buffer via https (follows redirects). */
+function httpsDownloadBuffer(url: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const get = (u: string) => {
+      https.get(u, (res) => {
+        if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
+          get(res.headers.location);
+          return;
+        }
+        if (res.statusCode !== 200) {
+          reject(new Error(`HTTP ${res.statusCode}`));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => resolve(Buffer.concat(chunks)));
+        res.on('error', reject);
+      }).on('error', reject);
+    };
+    get(url);
+  });
 }
 
-// YouTube audio fetch endpoint
+// YouTube audio fetch endpoint (using @vreden/youtube_scraper)
 router.post('/youtube/fetch', async (req: Request, res: Response) => {
   try {
     const { url } = req.body;
@@ -559,51 +537,27 @@ router.post('/youtube/fetch', async (req: Request, res: Response) => {
       return;
     }
 
-    const videoId = extractYouTubeVideoId(url.trim());
-    if (!videoId) {
-      res.status(400).json({ error: 'Invalid YouTube URL' });
+    const result = await yt.ytmp3(url.trim(), 128);
+
+    if (!result || !result.status) {
+      res.status(500).json({ error: 'Failed to fetch audio from YouTube' });
       return;
     }
 
-    const innertube = await getInnertube();
+    const videoTitle = result.metadata?.title || 'youtube_audio';
+    const videoDurationSeconds = result.metadata?.duration || 0;
+    const downloadUrl = result.download?.url;
 
-    // Get video info for the title and duration
-    const info = await innertube.getBasicInfo(videoId);
-    const videoTitle = info.basic_info?.title || 'youtube_audio';
-    const videoDurationSeconds = info.basic_info?.duration || 0;
-
-    // Sanitize title for use as filename
-    const safeTitle = videoTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'youtube_audio';
-
-    // Write audio to a temp file
-    const tmpDir = path.join(os.tmpdir(), 'rage-pad-uploads');
-    if (!fs.existsSync(tmpDir)) {
-      fs.mkdirSync(tmpDir, { recursive: true });
+    if (!downloadUrl) {
+      res.status(500).json({ error: 'No download URL returned from YouTube' });
+      return;
     }
-    const tmpFilePath = path.join(tmpDir, `yt_${Date.now()}_${safeTitle}.mp3`);
 
-    // Download audio-only stream
-    const stream = await innertube.download(videoId, {
-      type: 'audio',
-      quality: 'best',
-    });
+    // Download the mp3 from the provided URL
+    const fileBuffer = await httpsDownloadBuffer(downloadUrl);
 
-    // Convert ReadableStream (web) to Node.js Readable, then write to file
-    const nodeStream = Readable.fromWeb(stream as any);
-    await new Promise<void>((resolve, reject) => {
-      const writeStream = fs.createWriteStream(tmpFilePath);
-      nodeStream.pipe(writeStream);
-      nodeStream.on('error', reject);
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
-
-    // Read the file and send it as a response with the title in a header
-    const fileBuffer = fs.readFileSync(tmpFilePath);
+    const safeTitle = videoTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'youtube_audio';
     const fileName = `${safeTitle}.mp3`;
-
-    // Clean up temp file
-    try { fs.unlinkSync(tmpFilePath); } catch { /* ignore */ }
 
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
