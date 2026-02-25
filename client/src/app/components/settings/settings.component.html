@@ -47,6 +47,19 @@
         </div>
       </div>
 
+      <div class="settings-section qr-section" *ngIf="qrDataUrl">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Connect from phone</span>
+            <span class="settings-toggle-description">Scan this QR code to open RagePad on another device on the same network</span>
+          </div>
+          <div class="qr-inline">
+            <img [src]="qrDataUrl" alt="QR Code" class="qr-inline-image" />
+            <span class="qr-inline-url">{{ qrServerUrl }}</span>
+          </div>
+        </div>
+      </div>
+
       <div class="settings-section">
         <div class="settings-toggle-row">
           <div class="settings-toggle-info">
