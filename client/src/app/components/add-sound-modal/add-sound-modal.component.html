@@ -222,5 +222,17 @@
         </ng-container>
       </div>
     </div>
+
+    <!-- Unapplied crop confirmation dialog -->
+    <div class="crop-confirm-overlay" *ngIf="showCropConfirmDialog" (click)="onCropConfirmCancel()">
+      <div class="crop-confirm-dialog" (click)="$event.stopPropagation()">
+        <h3>Unapplied Crop</h3>
+        <p>You've set crop handles but haven't clicked "Crop" to apply them. The sound will be added without cropping.</p>
+        <div class="crop-confirm-actions">
+          <button class="crop-confirm-back-btn" (click)="onCropConfirmCancel()">Go Back</button>
+          <button class="crop-confirm-continue-btn" (click)="onCropConfirmContinue()">Continue Without Cropping</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

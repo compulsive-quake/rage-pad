@@ -5,6 +5,11 @@
     <span>Analyzing audio...</span>
   </div>
 
+  <!-- Frequency scope -->
+  <div *ngIf="!previewLoading" class="frequency-scope-container">
+    <canvas #frequencyCanvas class="frequency-scope-canvas"></canvas>
+  </div>
+
   <!-- Waveform canvas + crop UI -->
   <div *ngIf="!previewLoading" class="waveform-container" (click)="$event.stopPropagation()">
     <!-- Canvas for waveform drawing -->
@@ -64,11 +69,6 @@
       </div>
       <div class="crop-handle-label">{{ formatTime(cropEnd * previewDuration) }}</div>
     </div>
-  </div>
-
-  <!-- Frequency scope -->
-  <div *ngIf="!previewLoading" class="frequency-scope-container">
-    <canvas #frequencyCanvas class="frequency-scope-canvas"></canvas>
   </div>
 
   <!-- Playback controls row -->
