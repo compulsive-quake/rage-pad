@@ -1,17 +1,34 @@
 # Rage Pad - Soundpad Remote Control
 
-A Node.js application with an Angular frontend that integrates with Soundpad software API to list and play sounds.
+A Node.js application with an Angular frontend that integrates with Soundpad software API to list and play sounds. Ships as a standalone Windows desktop app via Tauri, or runs in any browser on your local network.
+
+## Screenshots
+
+### Soundboard
+Browse your entire Soundpad library organized by category with a clean dark-themed UI.
+
+![Soundboard](docs/screenshots/soundboard.png)
+
+### Add Sound
+Drag & drop audio files or paste a YouTube URL to add new sounds.
+
+![Add Sound](docs/screenshots/add-sound.png)
+
 
 ## Features
 
-- 🎵 Browse all sounds from your Soundpad library
-- 🔍 Search sounds by title or artist
-- ▶️ Play sounds with a single click
-- ⏸️ Pause/Resume and Stop playback controls
-- 🔊 Volume control
-- 📡 Real-time connection status indicator
-- 🎨 Clean, modern dark-themed UI
-- 📱 Responsive design for all screen sizes
+- Browse all sounds from your Soundpad library organized by category
+- Search sounds by title, artist, or category
+- Play sounds with a single click
+- Pause/Resume and Stop playback controls
+- Volume control with mic/speaker routing options
+- Add sounds via file upload or YouTube URL with waveform preview & cropping
+- Edit sound metadata (tag, title, artist, category) via right-click menu
+- Drag-and-drop reordering of sounds and categories
+- Real-time connection status with auto-launch
+- QR code for quick phone access on your local network
+- Responsive design for desktop and mobile
+- Clean, modern dark-themed UI
 
 ## Prerequisites
 
@@ -138,10 +155,13 @@ Make sure Soundpad is running with Remote Control enabled:
 - Named Pipes (Windows IPC)
 
 ### Frontend
-- Angular 18
+- Angular 17
 - TypeScript
 - SCSS
 - RxJS
+
+### Desktop
+- Tauri 2
 
 ## Troubleshooting
 

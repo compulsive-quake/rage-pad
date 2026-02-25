@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, NgZone, ChangeDetectorRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, NgZone, ChangeDetectorRef, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
@@ -151,6 +151,11 @@ export class AppComponent implements OnInit, OnDestroy {
     this.autoLaunchEnabled = true;
     this.autoUpdateCheckEnabled = true;
     this.serverPort = Number(window.location.port) || 8088;
+  }
+
+  @HostListener('document:contextmenu', ['$event'])
+  onGlobalContextMenu(event: MouseEvent): void {
+    event.preventDefault();
   }
 
   ngOnInit(): void {

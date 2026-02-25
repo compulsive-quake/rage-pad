@@ -11,7 +11,9 @@
       "Bash(cd:*)",
       "Bash(tail:*)",
       "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm run 2>&1)",
-      "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm run build:server 2>&1)"
+      "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm run build:server 2>&1)",
+      "Bash(cd C:/Users/Richard/WebstormProjects/rage-pad && node scripts/take-screenshots.mjs 2>&1)",
+      "Bash(curl:*)"
     ]
   }
 }
