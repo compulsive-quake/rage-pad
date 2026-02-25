@@ -305,14 +305,21 @@ export class SoundpadService implements OnDestroy {
       map(release => {
         const latestTag = (release.tag_name || '').replace(/^v/, '');
         const updateAvailable = this.isNewerVersion(latestTag, APP_VERSION);
+        const assets: any[] = release.assets || [];
+        const installer = assets.find((a: any) => a.name?.endsWith('.exe'));
         return {
           updateAvailable,
           latestVersion: latestTag,
-          downloadUrl: release.html_url || ''
+          downloadUrl: installer?.browser_download_url || release.html_url || ''
         };
       }),
       catchError(() => of({ updateAvailable: false, latestVersion: APP_VERSION, downloadUrl: '' }))
     );
+  }
+
+  /** Launch the downloaded installer and shut down the server. */
+  launchInstaller(): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(`${this.apiUrl}/launch-installer`, {});
   }
 
   private isNewerVersion(latest: string, current: string): boolean {
