@@ -31,7 +31,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() wakeMinutes = 30;
   @Input() autoUpdateCheckEnabled = true;
   @Input() updateCheckIntervalMinutes = 60;
-  @Input() serverPort = 3000;
+  @Input() serverPort = 8088;
   @Input() isPortChanging = false;
   @Input() portChangeError = '';
   @Input() isRestarting = false;
@@ -54,7 +54,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftAutoUpdateCheck = true;
   draftUpdateCheckInterval = 60;
   intervalPreset: string = '60';
-  draftServerPort = 3000;
+  draftServerPort = 8088;
 
   // Version
   readonly appVersion = APP_VERSION;

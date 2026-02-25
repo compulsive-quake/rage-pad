@@ -32,7 +32,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   wakeMinutes: 30,
   autoUpdateCheckEnabled: true,
   updateCheckIntervalMinutes: 60,
-  serverPort: 3000,
+  serverPort: 8088,
 };
 
 @Injectable({
@@ -59,7 +59,7 @@ export class SoundpadService implements OnDestroy {
 
   /** The port the page (and therefore the API) is currently served from. */
   get port(): number {
-    return Number(window.location.port) || 3000;
+    return Number(window.location.port) || 8088;
   }
 
   /** Ask the server (on its current port) to move to a new port. */

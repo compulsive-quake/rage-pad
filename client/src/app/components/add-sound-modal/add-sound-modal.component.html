@@ -1,111 +1,114 @@
 <div class="modal-overlay" *ngIf="isOpen" (click)="flashCancelBtn()">
   <div class="modal-content add-sound-modal-content" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2>Add Sound</h2>
+      <h2>{{ step === 'select' ? 'Add Sound' : step === 'preview' ? 'Preview & Crop' : 'Sound Details' }}</h2>
       <button class="close-btn" (click)="close()">&times;</button>
     </div>
     <div class="modal-body add-sound-modal-body" (click)="blurCropHandles()">
 
-      <!-- Single-column layout: drop zone + waveform + form fields -->
-      <div class="add-sound-columns">
-
-        <!-- Main content: Drop zone + waveform + form fields -->
-        <div class="add-sound-left">
-          <!-- Drop Zone -->
-          <div
-            class="drop-zone"
-            [class.drag-over]="isDragOver"
-            [class.has-file]="addSoundFile !== null"
-            (dragover)="onDragOver($event)"
-            (dragleave)="onDragLeave($event)"
-            (drop)="onDrop($event)"
-            (click)="addSoundFile ? null : fileInput.click()"
-          >
-            <input
-              #fileInput
-              type="file"
-              accept=".mp3,.wav,.ogg,.flac,.aac,.wma,.m4a,.opus,.aiff,.ape"
-              (change)="onFileSelected($event)"
-              style="display: none"
-            />
-            <div *ngIf="!addSoundFile" class="drop-zone-content">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="drop-zone-icon">
-                <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
-              </svg>
-              <p class="drop-zone-text">Drag & drop a sound file here</p>
-              <p class="drop-zone-hint">or click to browse</p>
-              <p class="drop-zone-formats">MP3, WAV, OGG, FLAC, AAC, WMA, M4A, OPUS, AIFF, APE</p>
-            </div>
-            <div *ngIf="addSoundFile" class="drop-zone-file">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="file-icon">
-                <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
-              </svg>
-              <div class="file-info">
-                <p class="file-name">{{ addSoundFile.name }}</p>
-                <p class="file-size">{{ formatFileSize(addSoundFile.size) }}</p>
-              </div>
-              <button class="remove-file-btn" (click)="removeFile($event)" title="Remove file">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                </svg>
-              </button>
-            </div>
+      <!-- Step 1: Select file -->
+      <div class="step-content" *ngIf="step === 'select'">
+        <!-- Drop Zone -->
+        <div
+          class="drop-zone"
+          [class.drag-over]="isDragOver"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave($event)"
+          (drop)="onDrop($event)"
+          (click)="fileInput.click()"
+        >
+          <input
+            #fileInput
+            type="file"
+            accept=".mp3,.wav,.ogg,.flac,.aac,.wma,.m4a,.opus,.aiff,.ape"
+            (change)="onFileSelected($event)"
+            style="display: none"
+          />
+          <div class="drop-zone-content">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="drop-zone-icon">
+              <path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/>
+            </svg>
+            <p class="drop-zone-text">Drag & drop a sound file here</p>
+            <p class="drop-zone-hint">or click to browse</p>
+            <p class="drop-zone-formats">MP3, WAV, OGG, FLAC, AAC, WMA, M4A, OPUS, AIFF, APE</p>
           </div>
-
-          <!-- YouTube URL Input -->
-          <div class="youtube-url-section" *ngIf="!addSoundFile">
-            <div class="youtube-url-label">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="youtube-icon">
-                <path d="M21.58 7.19c-.23-.86-.91-1.54-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.81.42c-.86.23-1.54.91-1.77 1.77C2 8.75 2 12 2 12s0 3.25.42 4.81c.23.86.91 1.54 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.81-.42c.86-.23 1.54-.91 1.77-1.77C22 15.25 22 12 22 12s0-3.25-.42-4.81zM10 15V9l5.2 3-5.2 3z"/>
-              </svg>
-              <span>Or paste a YouTube URL</span>
-            </div>
-            <div class="youtube-url-input-row">
-              <input
-                type="url"
-                class="youtube-url-input"
-                [(ngModel)]="youtubeUrl"
-                placeholder="https://www.youtube.com/watch?v=..."
-                [disabled]="isFetchingYoutube || isAddingSound"
-                (keydown.enter)="fetchFromYoutube()"
-              />
-              <button
-                class="youtube-fetch-btn"
-                (click)="fetchFromYoutube()"
-                [disabled]="!youtubeUrl.trim() || isFetchingYoutube || isAddingSound"
-                title="Fetch audio from YouTube"
-              >
-                <svg *ngIf="isFetchingYoutube" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                </svg>
-                <svg *ngIf="!isFetchingYoutube" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-                </svg>
-                <span>{{ isFetchingYoutube ? 'Fetching...' : 'Fetch' }}</span>
-              </button>
-            </div>
-            <!-- YouTube loading indicator -->
-            <div *ngIf="isFetchingYoutube" class="youtube-loading">
-              <div class="youtube-loading-bar">
-                <div class="youtube-loading-progress"></div>
-              </div>
-              <span class="youtube-loading-text">Downloading and processing audio from YouTube…</span>
-            </div>
-            <!-- YouTube fetch error -->
-            <p *ngIf="youtubeFetchError" class="youtube-fetch-error">{{ youtubeFetchError }}</p>
-          </div>
-
-          <!-- Waveform Preview (shown when file is selected) -->
-          <app-waveform-preview
-            [file]="addSoundFile"
-            (fileChanged)="onWaveformFileChanged($event)"
-            (metadataParsed)="onMetadataParsed($event)"
-            (durationChanged)="onDurationChanged($event)"
-            (cropStateChanged)="onCropStateChanged($event)"
-          ></app-waveform-preview>
         </div>
 
-        <!-- Form fields: 2-column grid below crop tool -->
+        <!-- YouTube URL Input -->
+        <div class="youtube-url-section">
+          <div class="youtube-url-label">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="youtube-icon">
+              <path d="M21.58 7.19c-.23-.86-.91-1.54-1.77-1.77C18.25 5 12 5 12 5s-6.25 0-7.81.42c-.86.23-1.54.91-1.77 1.77C2 8.75 2 12 2 12s0 3.25.42 4.81c.23.86.91 1.54 1.77 1.77C5.75 19 12 19 12 19s6.25 0 7.81-.42c.86-.23 1.54-.91 1.77-1.77C22 15.25 22 12 22 12s0-3.25-.42-4.81zM10 15V9l5.2 3-5.2 3z"/>
+            </svg>
+            <span>Or paste a YouTube URL</span>
+          </div>
+          <div class="youtube-url-input-row">
+            <input
+              type="url"
+              class="youtube-url-input"
+              [(ngModel)]="youtubeUrl"
+              placeholder="https://www.youtube.com/watch?v=..."
+              [disabled]="isFetchingYoutube || isAddingSound"
+              (keydown.enter)="fetchFromYoutube()"
+            />
+            <button
+              class="youtube-fetch-btn"
+              (click)="fetchFromYoutube()"
+              [disabled]="!youtubeUrl.trim() || isFetchingYoutube || isAddingSound"
+              title="Fetch audio from YouTube"
+            >
+              <svg *ngIf="isFetchingYoutube" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <svg *ngIf="!isFetchingYoutube" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+              </svg>
+              <span>{{ isFetchingYoutube ? 'Fetching...' : 'Fetch' }}</span>
+            </button>
+          </div>
+          <!-- YouTube loading indicator -->
+          <div *ngIf="isFetchingYoutube" class="youtube-loading">
+            <div class="youtube-loading-bar">
+              <div class="youtube-loading-progress"></div>
+            </div>
+            <span class="youtube-loading-text">Downloading and processing audio from YouTube…</span>
+          </div>
+          <!-- YouTube fetch error -->
+          <p *ngIf="youtubeFetchError" class="youtube-fetch-error">{{ youtubeFetchError }}</p>
+        </div>
+
+        <!-- Error message (file validation) -->
+        <p *ngIf="addSoundError" class="add-sound-error">{{ addSoundError }}</p>
+      </div>
+
+      <!-- Step 2: Preview & Crop (CSS toggle to keep AudioContext alive) -->
+      <div class="step-content" [class.step-hidden]="step !== 'preview'">
+        <!-- Compact selected file bar -->
+        <div class="selected-file-bar" *ngIf="addSoundFile">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="selected-file-icon">
+            <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+          </svg>
+          <span class="selected-file-name">{{ addSoundFile.name }}</span>
+          <span class="selected-file-size">{{ formatFileSize(addSoundFile.size) }}</span>
+          <button class="selected-file-remove" (click)="removeFile()" title="Remove file">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Waveform Preview -->
+        <app-waveform-preview
+          [file]="addSoundFile"
+          (fileChanged)="onWaveformFileChanged($event)"
+          (metadataParsed)="onMetadataParsed($event)"
+          (durationChanged)="onDurationChanged($event)"
+          (cropStateChanged)="onCropStateChanged($event)"
+        ></app-waveform-preview>
+      </div>
+
+      <!-- Step 3: Sound Details -->
+      <div class="step-content" *ngIf="step === 'details'">
         <div class="add-sound-form-fields">
           <!-- Row 1: Tag | Title -->
           <div class="form-fields-row">
@@ -188,22 +191,35 @@
           <!-- Error message -->
           <p *ngIf="addSoundError" class="add-sound-error">{{ addSoundError }}</p>
         </div>
+      </div>
 
-      </div><!-- /.add-sound-columns -->
-
-      <!-- Actions (full-width footer) -->
+      <!-- Actions footer (adapts per step) -->
       <div class="add-sound-actions">
-        <button class="rename-cancel-btn" [class.flash-cancel]="isAddSoundCancelFlashing" (click)="close()">Cancel</button>
-        <button
-          class="add-sound-confirm-btn"
-          (click)="confirmAddSound()"
-          [disabled]="!addSoundFile || isAddingSound || !addSoundName.trim()"
-        >
-          <svg *ngIf="isAddingSound" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; margin-right: 6px;">
-            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-          </svg>
-          {{ isAddingSound ? 'Adding...' : 'Add Sound' }}
-        </button>
+        <!-- Select step: Cancel only -->
+        <ng-container *ngIf="step === 'select'">
+          <button class="rename-cancel-btn" [class.flash-cancel]="isAddSoundCancelFlashing" (click)="close()">Cancel</button>
+        </ng-container>
+
+        <!-- Preview step: Back + Continue -->
+        <ng-container *ngIf="step === 'preview'">
+          <button class="rename-cancel-btn" (click)="goBackToSelect()">Back</button>
+          <button class="add-sound-confirm-btn" (click)="goToDetails()">Continue</button>
+        </ng-container>
+
+        <!-- Details step: Back + Add Sound -->
+        <ng-container *ngIf="step === 'details'">
+          <button class="rename-cancel-btn" (click)="goBackToPreview()">Back</button>
+          <button
+            class="add-sound-confirm-btn"
+            (click)="confirmAddSound()"
+            [disabled]="!addSoundFile || isAddingSound || !addSoundName.trim()"
+          >
+            <svg *ngIf="isAddingSound" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; margin-right: 6px;">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            {{ isAddingSound ? 'Adding...' : 'Add Sound' }}
+          </button>
+        </ng-container>
       </div>
     </div>
   </div>

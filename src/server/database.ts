@@ -22,7 +22,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   wakeMinutes: 30,
   autoUpdateCheckEnabled: true,
   updateCheckIntervalMinutes: 60,
-  serverPort: 3000,
+  serverPort: 8088,
 };
 
 // ── Data dir & file path ─────────────────────────────────────────────────────

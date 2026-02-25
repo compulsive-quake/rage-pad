@@ -19,6 +19,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   @Output() cropStateChanged = new EventEmitter<{ start: number; end: number; duration: number }>();
 
   @ViewChild('waveformCanvas') waveformCanvas!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('frequencyCanvas') frequencyCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('waveformSection') waveformSection!: ElementRef<HTMLDivElement>;
 
   previewLoading = false;
@@ -43,6 +44,8 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   private cropDragHandle: 'start' | 'end' | null = null;
   private cropDragBound: ((e: MouseEvent) => void) | null = null;
   private cropDragEndBound: (() => void) | null = null;
+  private analyserNode: AnalyserNode | null = null;
+  private frequencyData: Uint8Array | null = null;
 
   constructor(private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
@@ -90,6 +93,8 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       this.audioCtx.close().catch(() => {});
       this.audioCtx = null;
     }
+    this.analyserNode = null;
+    this.frequencyData = null;
     this.removeCropDragListeners();
   }
 
@@ -112,6 +117,10 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       }
 
       this.audioCtx = new AudioContext();
+      this.analyserNode = this.audioCtx.createAnalyser();
+      this.analyserNode.fftSize = 256;
+      this.analyserNode.smoothingTimeConstant = 0.8;
+      this.frequencyData = new Uint8Array(this.analyserNode.frequencyBinCount);
       this.audioCtx.decodeAudioData(arrayBuffer.slice(0))
         .then((buffer) => {
           this.ngZone.run(() => {
@@ -328,7 +337,12 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
     const source = this.audioCtx.createBufferSource();
     source.buffer = this.audioBuffer;
-    source.connect(this.audioCtx.destination);
+    if (this.analyserNode) {
+      source.connect(this.analyserNode);
+      this.analyserNode.connect(this.audioCtx.destination);
+    } else {
+      source.connect(this.audioCtx.destination);
+    }
     source.start(0, startOffset, duration);
     source.onended = () => {
       this.ngZone.run(() => {
@@ -338,6 +352,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
           this.previewCurrentTime = this.previewOffsetSec;
           this.previewPlayheadPos = this.cropStart;
           this.drawWaveform();
+          this.clearFrequencyScope();
           this.cdr.detectChanges();
         }
       });
@@ -383,6 +398,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
         this.previewCurrentTime = currentSec;
         this.previewPlayheadPos = this.previewDuration > 0 ? currentSec / this.previewDuration : 0;
         this.drawWaveform();
+        this.drawFrequencyScope();
       });
       this.previewAnimFrame = requestAnimationFrame(tick);
     };
@@ -578,6 +594,58 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     }
 
     return new Blob([arrayBuffer], { type: 'audio/wav' });
+  }
+
+  private drawFrequencyScope(): void {
+    const canvasEl = this.frequencyCanvas?.nativeElement;
+    if (!canvasEl || !this.analyserNode || !this.frequencyData) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvasEl.getBoundingClientRect();
+    canvasEl.width = rect.width * dpr;
+    canvasEl.height = rect.height * dpr;
+
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+
+    const W = rect.width;
+    const H = rect.height;
+
+    this.analyserNode.getByteFrequencyData(this.frequencyData);
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.fillRect(0, 0, W, H);
+
+    const bins = this.frequencyData.length;
+    const barW = W / bins;
+
+    for (let i = 0; i < bins; i++) {
+      const value = this.frequencyData[i] / 255;
+      const barH = value * H;
+      const t = i / bins;
+      const r = Math.round(155 + (231 - 155) * t);
+      const g = Math.round(89 + (76 - 89) * t);
+      const b = Math.round(182 + (60 - 182) * t);
+      ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
+      ctx.fillRect(i * barW, H - barH, Math.max(barW - 0.5, 0.5), barH);
+    }
+  }
+
+  private clearFrequencyScope(): void {
+    const canvasEl = this.frequencyCanvas?.nativeElement;
+    if (!canvasEl) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvasEl.getBoundingClientRect();
+    canvasEl.width = rect.width * dpr;
+    canvasEl.height = rect.height * dpr;
+
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+    ctx.scale(dpr, dpr);
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+    ctx.fillRect(0, 0, rect.width, rect.height);
   }
 
   onPreviewKeydown(event: KeyboardEvent): void {

@@ -3,5 +3,8 @@
   "ext": "js",
   "delay": 1000,
   "legacyWatch": true,
+  "env": {
+    "PORT": "3000"
+  },
   "exec": "ts-node src/server/index.ts"
 }

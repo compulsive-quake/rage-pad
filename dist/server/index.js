@@ -56,30 +56,6 @@ setupLogging();
 const app = (0, express_1.default)();
 const startupPort = Number(process.env.PORT) || (0, database_1.getSetting)('serverPort');
 let currentPort = startupPort;
-// Redirect ytdl-core debug files (e.g. player-script.js) to ./tmp instead of
-// the project root.  The tmp directory is listed in .gitignore.
-// When packaged as a Tauri sidecar, RAGE_PAD_TMP_DIR points to a writable location.
-const ytdlTmpDir = process.env['RAGE_PAD_TMP_DIR']
-    ? path_1.default.resolve(process.env['RAGE_PAD_TMP_DIR'])
-    : path_1.default.resolve(__dirname, '../../tmp');
-if (!fs_1.default.existsSync(ytdlTmpDir)) {
-    fs_1.default.mkdirSync(ytdlTmpDir, { recursive: true });
-}
-process.env.YTDL_DEBUG_PATH = ytdlTmpDir;
-// Clean up any stale ytdl debug files left in tmp from previous runs.
-try {
-    const staleFiles = fs_1.default.readdirSync(ytdlTmpDir).filter(f => f.endsWith('-player-script.js'));
-    for (const f of staleFiles) {
-        try {
-            fs_1.default.unlinkSync(path_1.default.join(ytdlTmpDir, f));
-        }
-        catch { /* ignore */ }
-    }
-    if (staleFiles.length > 0) {
-        console.log(`[startup] Cleaned up ${staleFiles.length} stale ytdl debug file(s) from tmp/`);
-    }
-}
-catch { /* ignore */ }
 console.log(`Server running on port ${startupPort}`);
 // Middleware
 app.use((0, cors_1.default)({
