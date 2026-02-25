@@ -1,0 +1,228 @@
+.edit-sound-modal-content {
+  max-width: 700px;
+  width: 92%;
+  max-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+
+.edit-sound-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: visible;
+  max-height: none;
+  flex: 1;
+  min-height: 0;
+}
+
+.waveform-area {
+  padding: 1.5rem;
+}
+
+.step-hidden {
+  display: none;
+}
+
+.loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  padding: 3rem 1.5rem;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.9rem;
+
+  svg {
+    width: 32px;
+    height: 32px;
+    color: #3498db;
+  }
+}
+
+.edit-sound-error {
+  margin: 1.5rem;
+  padding: 0.6rem 0.85rem;
+  background: rgba(231, 76, 60, 0.12);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 6px;
+  color: #e74c3c;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.edit-sound-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.rename-cancel-btn {
+  padding: 0.6rem 1.25rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.save-copy-btn {
+  padding: 0.6rem 1.25rem;
+  background: rgba(52, 152, 219, 0.15);
+  border: 1px solid rgba(52, 152, 219, 0.4);
+  border-radius: 6px;
+  color: #3498db;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: rgba(52, 152, 219, 0.28);
+    border-color: #3498db;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.add-sound-confirm-btn {
+  padding: 0.6rem 1.25rem;
+  background: #2ecc71;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  transition: all 0.2s;
+
+  &:hover:not(:disabled) {
+    background: #27ae60;
+    transform: translateY(-1px);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+// Unapplied crop / copy-name confirmation dialog
+.crop-confirm-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  backdrop-filter: blur(2px);
+  border-radius: 12px;
+}
+
+.crop-confirm-dialog {
+  background: #1e1e2e;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 400px;
+  width: 90%;
+
+  h3 { margin: 0 0 0.75rem; font-size: 1.1rem; font-weight: 600; color: #fff; }
+  p  { margin: 0 0 1.25rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.6); line-height: 1.4; }
+}
+
+.crop-confirm-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.copy-name-actions {
+  margin-top: 1.25rem;
+}
+
+.crop-confirm-back-btn {
+  padding: 0.5rem 1.25rem;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.9rem;
+  cursor: pointer;
+  &:hover { background: rgba(255, 255, 255, 0.12); color: #fff; }
+}
+
+.crop-confirm-continue-btn {
+  padding: 0.5rem 1.25rem;
+  background: #e67e22;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  &:hover { background: #d35400; }
+}
+
+.save-copy-confirm-btn {
+  background: #3498db;
+  &:hover { background: #2980b9; }
+}
+
+.sound-name-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  &:focus {
+    border-color: rgba(52, 152, 219, 0.6);
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.12);
+  }
+}

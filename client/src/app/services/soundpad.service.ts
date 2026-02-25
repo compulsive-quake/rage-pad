@@ -367,6 +367,40 @@ export class SoundpadService implements OnDestroy {
   }
 
   /**
+   * Fetches a sound's audio file from the server as a File object.
+   */
+  getSoundAudio(index: number): Observable<File> {
+    return this.http.get(`${this.apiUrl}/sounds/${index}/audio`, {
+      responseType: 'blob',
+      observe: 'response',
+    }).pipe(
+      map(response => {
+        const blob = response.body as Blob;
+        const contentDisposition = response.headers.get('Content-Disposition') || '';
+        let fileName = `sound_${index}.wav`;
+        const match = contentDisposition.match(/filename="([^"]+)"/);
+        if (match) {
+          try {
+            fileName = decodeURIComponent(match[1]);
+          } catch {
+            fileName = match[1];
+          }
+        }
+        return new File([blob], fileName, { type: blob.type || 'audio/mpeg' });
+      })
+    );
+  }
+
+  /**
+   * Uploads a replacement audio file for an existing sound.
+   */
+  updateSoundFile(index: number, file: File): Observable<any> {
+    const formData = new FormData();
+    formData.append('soundFile', file);
+    return this.http.post(`${this.apiUrl}/sounds/${index}/update-file`, formData);
+  }
+
+  /**
    * Fetches audio from a YouTube URL.
    * Returns an Observable that emits { file: File, title: string, durationSeconds: number }.
    */

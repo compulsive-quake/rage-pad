@@ -14,6 +14,7 @@ import { RenameModalComponent } from './components/rename-modal/rename-modal.com
 import { WakeDialogComponent } from './components/wake-dialog/wake-dialog.component';
 import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-modal.component';
 import { ContextMenuComponent } from './components/context-menu/context-menu.component';
+import { EditSoundModalComponent } from './components/edit-sound-modal/edit-sound-modal.component';
 
 @Component({
   selector: 'app-root',
@@ -30,6 +31,7 @@ import { ContextMenuComponent } from './components/context-menu/context-menu.com
     WakeDialogComponent,
     AddSoundModalComponent,
     ContextMenuComponent,
+    EditSoundModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -64,6 +66,10 @@ export class AppComponent implements OnInit, OnDestroy {
   contextMenuX = 0;
   contextMenuY = 0;
   contextMenuSound: Sound | null = null;
+
+  // Edit sound modal state
+  isEditSoundModalOpen = false;
+  soundToEdit: Sound | null = null;
 
   // Delete confirmation state
   isDeleteConfirmOpen = false;
@@ -860,7 +866,6 @@ export class AppComponent implements OnInit, OnDestroy {
   // ── Context menu & Delete sound ──────────────────────────────────────────
 
   onSoundContextMenu(event: { sound: Sound; event: MouseEvent }): void {
-    if (!this.isTauri) return;
     this.contextMenuSound = event.sound;
     this.contextMenuX = event.event.clientX;
     this.contextMenuY = event.event.clientY;
@@ -870,6 +875,24 @@ export class AppComponent implements OnInit, OnDestroy {
   onContextMenuClosed(): void {
     this.contextMenuVisible = false;
     this.contextMenuSound = null;
+  }
+
+  onContextMenuEdit(): void {
+    this.soundToEdit = this.contextMenuSound;
+    this.contextMenuVisible = false;
+    this.contextMenuSound = null;
+    this.isEditSoundModalOpen = true;
+  }
+
+  onEditSoundClosed(): void {
+    this.isEditSoundModalOpen = false;
+    this.soundToEdit = null;
+  }
+
+  onEditSoundSaved(): void {
+    this.isEditSoundModalOpen = false;
+    this.soundToEdit = null;
+    this.loadSounds(true);
   }
 
   onContextMenuDelete(): void {
