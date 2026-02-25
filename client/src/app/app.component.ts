@@ -15,6 +15,7 @@ import { WakeDialogComponent } from './components/wake-dialog/wake-dialog.compon
 import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-modal.component';
 import { ContextMenuComponent } from './components/context-menu/context-menu.component';
 import { EditSoundModalComponent } from './components/edit-sound-modal/edit-sound-modal.component';
+import { EditDetailsModalComponent } from './components/edit-details-modal/edit-details-modal.component';
 
 @Component({
   selector: 'app-root',
@@ -32,6 +33,7 @@ import { EditSoundModalComponent } from './components/edit-sound-modal/edit-soun
     AddSoundModalComponent,
     ContextMenuComponent,
     EditSoundModalComponent,
+    EditDetailsModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -70,6 +72,10 @@ export class AppComponent implements OnInit, OnDestroy {
   // Edit sound modal state
   isEditSoundModalOpen = false;
   soundToEdit: Sound | null = null;
+
+  // Edit details modal state
+  isEditDetailsModalOpen = false;
+  soundToEditDetails: Sound | null = null;
 
   // Delete confirmation state
   isDeleteConfirmOpen = false;
@@ -892,6 +898,24 @@ export class AppComponent implements OnInit, OnDestroy {
   onEditSoundSaved(): void {
     this.isEditSoundModalOpen = false;
     this.soundToEdit = null;
+    this.loadSounds(true);
+  }
+
+  onContextMenuRename(): void {
+    this.soundToEditDetails = this.contextMenuSound;
+    this.contextMenuVisible = false;
+    this.contextMenuSound = null;
+    this.isEditDetailsModalOpen = true;
+  }
+
+  onEditDetailsClosed(): void {
+    this.isEditDetailsModalOpen = false;
+    this.soundToEditDetails = null;
+  }
+
+  onEditDetailsSaved(): void {
+    this.isEditDetailsModalOpen = false;
+    this.soundToEditDetails = null;
     this.loadSounds(true);
   }
 

@@ -703,6 +703,112 @@ class SoundpadClient {
         return { success: true, content: updatedContent };
     }
     /**
+     * Update multiple attributes (customTag, artist, title) on a Sound element in
+     * the soundlist.spl file. Optionally moves the sound to a different category.
+     *
+     * This kills Soundpad, edits the file, and relaunches – all in a single
+     * restart cycle.
+     */
+    async updateSoundDetails(index, customTag, artist, title, targetCategory) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            // Step 1: Kill Soundpad
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Update attributes in soundlist.spl
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const attrResult = this.updateSoundAttributes(splContent, index, { customTag, artist, title });
+            if (!attrResult.success) {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: attrResult.error };
+            }
+            splContent = attrResult.content;
+            // Step 3: If a target category was given, move the sound reference
+            if (targetCategory) {
+                const splId = index - 1; // SPL uses 0-based IDs
+                const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
+                const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+                if (categoriesMatch) {
+                    let categoriesContent = categoriesMatch[1];
+                    categoriesContent = categoriesContent.replace(soundTagRegex, '');
+                    categoriesContent = categoriesContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+                    const insertResult = this.insertSoundInCategory(categoriesContent, targetCategory, splId, 999999);
+                    if (insertResult.success) {
+                        splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${insertResult.content}</Categories>`);
+                    }
+                    else {
+                        console.warn(`[updateSoundDetails] Could not move to category "${targetCategory}": ${insertResult.error}`);
+                    }
+                }
+            }
+            // Step 4: Write the updated file
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Updated details for sound index ${index}`);
+            // Step 5: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound details updated` };
+        }
+        catch (error) {
+            console.error('updateSoundDetails error:', error);
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to update sound details'
+            };
+        }
+    }
+    /**
+     * Update one or more attributes on the Nth <Sound> element (1-based index)
+     * in the soundlist.spl XML content. Generalizes `updateSoundCustomTag`.
+     */
+    updateSoundAttributes(splContent, index, attrs) {
+        // Collect every <Sound …/> element in document order
+        const soundTagRegex = /<Sound\s[^>]*?\/>/gi;
+        const matches = [];
+        let m;
+        while ((m = soundTagRegex.exec(splContent)) !== null) {
+            matches.push({ index: m.index, match: m[0] });
+        }
+        if (index < 1 || index > matches.length) {
+            return {
+                success: false,
+                error: `Sound with index ${index} not found in soundlist (file has ${matches.length} sounds)`
+            };
+        }
+        const target = matches[index - 1];
+        let updatedTag = target.match;
+        for (const [attrName, rawValue] of Object.entries(attrs)) {
+            if (rawValue === undefined)
+                continue;
+            const escapedValue = rawValue
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const attrRegex = new RegExp(`\\b${attrName}="[^"]*"`);
+            if (attrRegex.test(updatedTag)) {
+                updatedTag = updatedTag.replace(attrRegex, `${attrName}="${escapedValue}"`);
+            }
+            else {
+                updatedTag = updatedTag.replace(/\s*\/>$/, ` ${attrName}="${escapedValue}"/>`);
+            }
+        }
+        const updatedContent = splContent.slice(0, target.index) +
+            updatedTag +
+            splContent.slice(target.index + target.match.length);
+        return { success: true, content: updatedContent };
+    }
+    /**
      * Add a new sound file to Soundpad.
      * Since Soundpad has no API for adding files, we must:
      *   1. Close Soundpad so it releases the soundlist.spl file
@@ -1116,10 +1222,12 @@ class SoundpadClient {
                     const url = this.extractAttribute(attrs, 'url') || '';
                     // Try to get category from the 'category' attribute if present
                     const categoryFromAttr = this.extractAttribute(attrs, 'category');
+                    const rawCustomTag = this.extractAttribute(attrs, 'tag') || this.extractAttribute(attrs, 'customTag') || '';
+                    const rawTitle = this.extractAttribute(attrs, 'title') || '';
                     const sound = {
                         index,
-                        title: this.extractAttribute(attrs, 'tag') ||
-                            this.extractAttribute(attrs, 'title') ||
+                        title: rawCustomTag ||
+                            rawTitle ||
                             this.extractAttribute(attrs, 'name') ||
                             `Sound ${index}`,
                         url,
@@ -1132,7 +1240,9 @@ class SoundpadClient {
                         category: categoryFromAttr || this.extractCategoryFromUrl(url),
                         parentCategory: '',
                         categoryImage: '',
-                        categoryIndex: 0
+                        categoryIndex: 0,
+                        customTag: rawCustomTag || undefined,
+                        rawTitle: rawTitle || undefined,
                     };
                     sounds.push(sound);
                 }
@@ -1263,10 +1373,12 @@ class SoundpadClient {
             if (indexMatch) {
                 const index = parseInt(indexMatch[1], 10);
                 const url = this.extractAttribute(attrs, 'url') || '';
+                const rawCustomTag = this.extractAttribute(attrs, 'tag') || this.extractAttribute(attrs, 'customTag') || '';
+                const rawTitle = this.extractAttribute(attrs, 'title') || '';
                 const sound = {
                     index,
-                    title: this.extractAttribute(attrs, 'tag') ||
-                        this.extractAttribute(attrs, 'title') ||
+                    title: rawCustomTag ||
+                        rawTitle ||
                         this.extractAttribute(attrs, 'name') ||
                         `Sound ${index}`,
                     url,
@@ -1279,7 +1391,9 @@ class SoundpadClient {
                     category: categoryName,
                     parentCategory: parentCategoryName,
                     categoryImage: categoryImage,
-                    categoryIndex: 0
+                    categoryIndex: 0,
+                    customTag: rawCustomTag || undefined,
+                    rawTitle: rawTitle || undefined,
                 };
                 sounds.push(sound);
             }

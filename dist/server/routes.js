@@ -260,6 +260,35 @@ router.post('/sounds/:index/rename', async (req, res) => {
         res.status(500).json({ error: 'Failed to rename sound' });
     }
 });
+// Update a sound's details (tag, artist, title, and optionally move to a different category)
+router.post('/sounds/:index/update-details', async (req, res) => {
+    try {
+        const index = parseInt(req.params.index, 10);
+        if (isNaN(index)) {
+            res.status(400).json({ error: 'Invalid sound index' });
+            return;
+        }
+        const { customTag, artist, title, category } = req.body;
+        if (typeof customTag !== 'string' || !customTag.trim()) {
+            res.status(400).json({ error: 'customTag must be a non-empty string' });
+            return;
+        }
+        sseSuppressed = true;
+        const result = await soundpadClient.updateSoundDetails(index, customTag.trim(), typeof artist === 'string' ? artist : '', typeof title === 'string' ? title : '', typeof category === 'string' && category.trim() ? category.trim() : undefined);
+        sseSuppressed = false;
+        if (result.success) {
+            notifySseClients();
+            res.json({ message: 'Sound details updated', data: result.data });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (error) {
+        sseSuppressed = false;
+        res.status(500).json({ error: 'Failed to update sound details' });
+    }
+});
 // Delete a sound by index (removes from SPL, deletes file, restarts Soundpad)
 router.delete('/sounds/:index', async (req, res) => {
     try {

@@ -111,6 +111,7 @@
     [y]="contextMenuY"
     (closed)="onContextMenuClosed()"
     (editSound)="onContextMenuEdit()"
+    (renameSound)="onContextMenuRename()"
     (deleteSound)="onContextMenuDelete()"
   ></app-context-menu>
 
@@ -121,6 +122,16 @@
     (closed)="onEditSoundClosed()"
     (saved)="onEditSoundSaved()"
   ></app-edit-sound-modal>
+
+  <!-- Edit Details (Rename) Modal -->
+  <app-edit-details-modal
+    [isOpen]="isEditDetailsModalOpen"
+    [sound]="soundToEditDetails"
+    [sounds]="sounds"
+    [categoryIconsMap]="categoryIconsMap"
+    (closed)="onEditDetailsClosed()"
+    (saved)="onEditDetailsSaved()"
+  ></app-edit-details-modal>
 
   <!-- Delete Confirmation Dialog -->
   <div class="modal-backdrop" *ngIf="isDeleteConfirmOpen" (click)="cancelDelete()">

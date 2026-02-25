@@ -25,6 +25,12 @@ import { CommonModule } from '@angular/common';
           </svg>
           Edit Sound
         </button>
+        <button class="context-menu-item rename" (click)="onRename()">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z"/>
+          </svg>
+          Rename Sound
+        </button>
         <button class="context-menu-item delete" (click)="onDelete()">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -83,6 +89,14 @@ import { CommonModule } from '@angular/common';
         background: rgba(52, 152, 219, 0.15);
       }
 
+      &.rename {
+        color: #f39c12;
+      }
+
+      &.rename:hover {
+        background: rgba(243, 156, 18, 0.15);
+      }
+
       &.delete {
         color: #e74c3c;
       }
@@ -99,6 +113,7 @@ export class ContextMenuComponent {
   @Input() y = 0;
   @Output() closed = new EventEmitter<void>();
   @Output() editSound = new EventEmitter<void>();
+  @Output() renameSound = new EventEmitter<void>();
   @Output() deleteSound = new EventEmitter<void>();
 
   @HostListener('document:keydown.escape')
@@ -117,6 +132,10 @@ export class ContextMenuComponent {
 
   onEdit(): void {
     this.editSound.emit();
+  }
+
+  onRename(): void {
+    this.renameSound.emit();
   }
 
   onDelete(): void {

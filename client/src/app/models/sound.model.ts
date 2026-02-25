@@ -11,6 +11,8 @@ export interface Sound {
   parentCategory: string;
   categoryImage: string;
   categoryIndex: number; // position of this sound within its category (0-based)
+  customTag?: string;    // raw customTag attribute from SPL
+  rawTitle?: string;     // raw title attribute from SPL (distinct from computed title)
 }
 
 export interface Category {
