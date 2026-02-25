@@ -8,7 +8,10 @@
       "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad && npm run build:server 2>&1 && npm run bundle:server 2>&1)",
       "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad && ls -la src-tauri/target/release/bundle/nsis/*.exe 2>&1)",
       "Bash(cd /c/Users/Richard/WebstormProjects/rage-pad/src-tauri && cargo check --release 2>&1)",
-      "Bash(cd:*)"
+      "Bash(cd:*)",
+      "Bash(tail:*)",
+      "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm run 2>&1)",
+      "Bash(cd \"C:/Users/Richard/WebstormProjects/rage-pad\" && npm run build:server 2>&1)"
     ]
   }
 }

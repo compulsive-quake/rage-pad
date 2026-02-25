@@ -1,0 +1,64 @@
+.qr-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.qr-instructions {
+  margin: 0 0 1.25rem;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.qr-container {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.qr-image {
+  width: 220px;
+  height: 220px;
+  image-rendering: pixelated;
+}
+
+.qr-loading {
+  padding: 2rem;
+  color: rgba(255, 255, 255, 0.5);
+
+  svg {
+    width: 32px;
+    height: 32px;
+  }
+}
+
+.qr-error {
+  color: #e74c3c;
+  padding: 1rem;
+}
+
+.qr-url {
+  margin: 1rem 0 0;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.85rem;
+  color: rgba(155, 89, 182, 0.9);
+  background: rgba(155, 89, 182, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}

@@ -2,6 +2,8 @@ import express, { Application, Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import QRCode from 'qrcode';
 import soundpadRoutes from './routes';
 import { getSetting, getAllSettings, setSetting, updateSettings, closeDb } from './database';
 
@@ -103,6 +105,34 @@ app.use(express.static(clientDistPath));
 // Return the port the server is currently listening on
 app.get('/api/current-port', (_req: Request, res: Response) => {
   res.json({ port: currentPort });
+});
+
+// Return a QR code image for connecting from another device on the LAN
+app.get('/api/qr-code', async (_req: Request, res: Response) => {
+  const nets = os.networkInterfaces();
+  let lanIp = '';
+  for (const iface of Object.values(nets)) {
+    if (!iface) continue;
+    for (const addr of iface) {
+      if (addr.family === 'IPv4' && !addr.internal) {
+        lanIp = addr.address;
+        break;
+      }
+    }
+    if (lanIp) break;
+  }
+  const host = lanIp || 'localhost';
+  const url = `http://${host}:${currentPort}`;
+  try {
+    const dataUrl = await QRCode.toDataURL(url, {
+      width: 300,
+      margin: 2,
+      color: { dark: '#ffffffff', light: '#00000000' },
+    });
+    res.json({ url, qrDataUrl: dataUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
 });
 
 // ── Settings API ─────────────────────────────────────────────────────────────
