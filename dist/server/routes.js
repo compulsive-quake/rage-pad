@@ -556,6 +556,98 @@ router.post('/sounds/add', addSoundUpload, async (req, res) => {
         res.status(500).json({ error: 'Failed to add sound' });
     }
 });
+// Stream a sound's audio file by index
+router.get('/sounds/:index/audio', async (req, res) => {
+    try {
+        const index = parseInt(req.params.index, 10);
+        if (isNaN(index)) {
+            res.status(400).json({ error: 'Invalid sound index' });
+            return;
+        }
+        const filePath = soundpadClient.getSoundFilePath(index);
+        if (!filePath || !fs.existsSync(filePath)) {
+            res.status(404).json({ error: 'Sound file not found' });
+            return;
+        }
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeTypes = {
+            '.mp3': 'audio/mpeg',
+            '.wav': 'audio/wav',
+            '.ogg': 'audio/ogg',
+            '.flac': 'audio/flac',
+            '.aac': 'audio/aac',
+            '.wma': 'audio/x-ms-wma',
+            '.m4a': 'audio/mp4',
+            '.opus': 'audio/opus',
+            '.aiff': 'audio/aiff',
+            '.ape': 'audio/x-ape',
+        };
+        const contentType = mimeTypes[ext] || 'application/octet-stream';
+        const fileName = path.basename(filePath);
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+        res.setHeader('Access-Control-Expose-Headers', 'Content-Disposition');
+        const fileStream = fs.createReadStream(filePath);
+        fileStream.pipe(res);
+    }
+    catch (error) {
+        console.error('Error serving sound audio:', error);
+        res.status(500).json({ error: 'Failed to serve sound audio' });
+    }
+});
+// Update a sound's audio file by index
+router.post('/sounds/:index/update-file', upload.single('soundFile'), async (req, res) => {
+    const soundFile = req.file;
+    try {
+        const index = parseInt(req.params.index, 10);
+        if (isNaN(index)) {
+            if (soundFile)
+                try {
+                    fs.unlinkSync(soundFile.path);
+                }
+                catch { /* ignore */ }
+            res.status(400).json({ error: 'Invalid sound index' });
+            return;
+        }
+        if (!soundFile) {
+            res.status(400).json({ error: 'No sound file uploaded' });
+            return;
+        }
+        sseSuppressed = true;
+        const result = await soundpadClient.updateSoundFile(index, soundFile.path, soundFile.originalname);
+        sseSuppressed = false;
+        if (result.success) {
+            console.log('[sounds/update-file] Sound file updated – notifying SSE clients');
+            notifySseClients();
+            res.json({ message: result.data });
+        }
+        else {
+            res.status(500).json({ error: result.error });
+        }
+    }
+    catch (error) {
+        sseSuppressed = false;
+        if (soundFile) {
+            try {
+                fs.unlinkSync(soundFile.path);
+            }
+            catch { /* ignore */ }
+        }
+        if (error instanceof multer_1.default.MulterError) {
+            if (error.code === 'LIMIT_FILE_SIZE') {
+                res.status(413).json({ error: 'File too large. Maximum size is 100 MB.' });
+                return;
+            }
+            res.status(400).json({ error: `Upload error: ${error.message}` });
+            return;
+        }
+        if (error instanceof Error) {
+            res.status(400).json({ error: error.message });
+            return;
+        }
+        res.status(500).json({ error: 'Failed to update sound file' });
+    }
+});
 // Return list of sound URLs that have uncropped backups
 router.get('/sounds/uncropped-list', async (req, res) => {
     try {

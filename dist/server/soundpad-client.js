@@ -1564,6 +1564,117 @@ class SoundpadClient {
             };
         }
     }
+    /**
+     * Resolve the filesystem path of the Nth sound in soundlist.spl.
+     * @param soundIndex 1-based sound index (from Soundpad API)
+     */
+    getSoundFilePath(soundIndex) {
+        if (!fs.existsSync(this.soundlistPath))
+            return null;
+        const splId = soundIndex - 1;
+        const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+        const soundUrlTagRegex = /<Sound\s[^>]*url="([^"]*)"[^>]*\/>/gi;
+        let match;
+        let count = 0;
+        while ((match = soundUrlTagRegex.exec(splContent)) !== null) {
+            if (count === splId) {
+                return match[1]
+                    .replace(/&amp;/g, '&')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&quot;/g, '"');
+            }
+            count++;
+        }
+        return null;
+    }
+    /**
+     * Replace a sound's audio file on disk.
+     * Kills Soundpad, overwrites (or replaces with new extension), cleans up
+     * any _uncropped backup, and relaunches Soundpad.
+     */
+    async updateSoundFile(soundIndex, tempFilePath, originalName) {
+        try {
+            const currentPath = this.getSoundFilePath(soundIndex);
+            if (!currentPath) {
+                try {
+                    fs.unlinkSync(tempFilePath);
+                }
+                catch { /* ignore */ }
+                return { success: false, error: `Sound at index ${soundIndex} not found in soundlist.spl` };
+            }
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            const currentExt = path.extname(currentPath).toLowerCase();
+            const newExt = path.extname(originalName).toLowerCase();
+            if (currentExt === newExt) {
+                // Same extension — overwrite in place
+                fs.copyFileSync(tempFilePath, currentPath);
+            }
+            else {
+                // Different extension — write new file, update SPL url, remove old file
+                const dir = path.dirname(currentPath);
+                const base = path.basename(currentPath, currentExt);
+                const newPath = path.join(dir, `${base}${newExt}`);
+                fs.copyFileSync(tempFilePath, newPath);
+                if (fs.existsSync(this.soundlistPath)) {
+                    let spl = fs.readFileSync(this.soundlistPath, 'utf-8');
+                    const escapedOld = currentPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
+                    spl = spl.replace(new RegExp(escapedOld, 'g'), newPath);
+                    fs.writeFileSync(this.soundlistPath, spl, 'utf-8');
+                }
+                try {
+                    fs.unlinkSync(currentPath);
+                }
+                catch { /* ignore */ }
+            }
+            // Clean up temp file
+            try {
+                fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            // Remove any _uncropped backup (user is deliberately replacing the audio)
+            const ext = path.extname(currentPath);
+            const base = path.basename(currentPath, ext);
+            const dir = path.dirname(currentPath);
+            const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+            for (const aExt of audioExts) {
+                const uncroppedPath = path.join(dir, `${base}_uncropped${aExt}`);
+                if (fs.existsSync(uncroppedPath)) {
+                    try {
+                        fs.unlinkSync(uncroppedPath);
+                    }
+                    catch { /* ignore */ }
+                    console.log(`[updateSoundFile] Removed uncropped backup: ${uncroppedPath}`);
+                    break;
+                }
+            }
+            console.log(`[updateSoundFile] Replaced audio for sound index ${soundIndex}`);
+            // Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound file updated successfully` };
+        }
+        catch (error) {
+            // Try to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch { /* ignore */ }
+            try {
+                if (fs.existsSync(tempFilePath))
+                    fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to update sound file'
+            };
+        }
+    }
     async resetCrop(soundUrl) {
         try {
             const soundPath = soundUrl.replace(/\//g, path.sep);

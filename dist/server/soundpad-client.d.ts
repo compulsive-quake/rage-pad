@@ -188,6 +188,17 @@ export declare class SoundpadClient {
      * the _uncropped version, then restart Soundpad so it picks up the change.
      */
     deleteSound(soundIndex: number): Promise<SoundpadResponse>;
+    /**
+     * Resolve the filesystem path of the Nth sound in soundlist.spl.
+     * @param soundIndex 1-based sound index (from Soundpad API)
+     */
+    getSoundFilePath(soundIndex: number): string | null;
+    /**
+     * Replace a sound's audio file on disk.
+     * Kills Soundpad, overwrites (or replaces with new extension), cleans up
+     * any _uncropped backup, and relaunches Soundpad.
+     */
+    updateSoundFile(soundIndex: number, tempFilePath: string, originalName: string): Promise<SoundpadResponse>;
     resetCrop(soundUrl: string): Promise<SoundpadResponse>;
 }
 export default SoundpadClient;

@@ -106,13 +106,21 @@
 
   <!-- Context Menu (desktop Tauri build only) -->
   <app-context-menu
-    *ngIf="isTauri"
     [visible]="contextMenuVisible"
     [x]="contextMenuX"
     [y]="contextMenuY"
     (closed)="onContextMenuClosed()"
+    (editSound)="onContextMenuEdit()"
     (deleteSound)="onContextMenuDelete()"
   ></app-context-menu>
+
+  <!-- Edit Sound Modal -->
+  <app-edit-sound-modal
+    [isOpen]="isEditSoundModalOpen"
+    [sound]="soundToEdit"
+    (closed)="onEditSoundClosed()"
+    (saved)="onEditSoundSaved()"
+  ></app-edit-sound-modal>
 
   <!-- Delete Confirmation Dialog -->
   <div class="modal-backdrop" *ngIf="isDeleteConfirmOpen" (click)="cancelDelete()">

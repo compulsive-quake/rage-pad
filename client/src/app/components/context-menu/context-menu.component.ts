@@ -19,6 +19,12 @@ import { CommonModule } from '@angular/common';
         [style.top.px]="y"
         (click)="$event.stopPropagation()"
       >
+        <button class="context-menu-item edit" (click)="onEdit()">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+          </svg>
+          Edit Sound
+        </button>
         <button class="context-menu-item delete" (click)="onDelete()">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
@@ -69,6 +75,14 @@ import { CommonModule } from '@angular/common';
         background: rgba(255, 255, 255, 0.08);
       }
 
+      &.edit {
+        color: #3498db;
+      }
+
+      &.edit:hover {
+        background: rgba(52, 152, 219, 0.15);
+      }
+
       &.delete {
         color: #e74c3c;
       }
@@ -84,6 +98,7 @@ export class ContextMenuComponent {
   @Input() x = 0;
   @Input() y = 0;
   @Output() closed = new EventEmitter<void>();
+  @Output() editSound = new EventEmitter<void>();
   @Output() deleteSound = new EventEmitter<void>();
 
   @HostListener('document:keydown.escape')
@@ -98,6 +113,10 @@ export class ContextMenuComponent {
   onBackdropRightClick(event: MouseEvent): void {
     event.preventDefault();
     this.close();
+  }
+
+  onEdit(): void {
+    this.editSound.emit();
   }
 
   onDelete(): void {
