@@ -87,8 +87,10 @@
               [sound]="sound"
               [isPlaying]="currentlyPlayingIndex === sound.index"
               [isRenameMode]="isRenameMode"
+              [hasUncropped]="soundHasUncropped(sound)"
               (play)="onPlaySound($event)"
               (rename)="onOpenRenameModal($event)"
+              (resetCrop)="onResetCrop($event)"
             ></app-sound-card>
           </div>
 
@@ -148,8 +150,10 @@
                   [sound]="sound"
                   [isPlaying]="currentlyPlayingIndex === sound.index"
                   [isRenameMode]="isRenameMode"
+                  [hasUncropped]="soundHasUncropped(sound)"
                   (play)="onPlaySound($event)"
                   (rename)="onOpenRenameModal($event)"
+                  (resetCrop)="onResetCrop($event)"
                 ></app-sound-card>
               </div>
 

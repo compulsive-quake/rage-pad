@@ -35,9 +35,11 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() isRenameMode = false;
   @Input() isReorderMode = false;
   @Input() activeCategory = '';
+  @Input() uncroppedSoundUrls: Set<string> = new Set();
 
   @Output() playSound = new EventEmitter<Sound>();
   @Output() openRenameModal = new EventEmitter<Sound>();
+  @Output() resetCrop = new EventEmitter<Sound>();
   @Output() activeCategoryChange = new EventEmitter<string>();
   @Output() reorderSound = new EventEmitter<{ soundIndex: number; targetCategory: string; targetPosition: number }>();
   @Output() reorderCategory = new EventEmitter<{ categoryName: string; targetPosition: number }>();
@@ -1062,5 +1064,13 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
 
   onOpenRenameModal(sound: Sound): void {
     this.openRenameModal.emit(sound);
+  }
+
+  onResetCrop(sound: Sound): void {
+    this.resetCrop.emit(sound);
+  }
+
+  soundHasUncropped(sound: Sound): boolean {
+    return this.uncroppedSoundUrls.has(sound.url);
   }
 }

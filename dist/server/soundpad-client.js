@@ -717,8 +717,10 @@ class SoundpadClient {
      * @param artist        Optional artist metadata to write into the SPL tag
      * @param title         Optional title metadata to write into the SPL tag
      * @param durationSeconds
+     * @param uncroppedTempPath
+     * @param uncroppedOriginalName
      */
-    async addSound(tempFilePath, originalName, categoryName, displayName, artist = '', title = '', durationSeconds = 0) {
+    async addSound(tempFilePath, originalName, categoryName, displayName, artist = '', title = '', durationSeconds = 0, uncroppedTempPath, uncroppedOriginalName) {
         try {
             if (!fs.existsSync(this.soundlistPath)) {
                 return { success: false, error: 'Soundlist file not found' };
@@ -746,6 +748,18 @@ class SoundpadClient {
                 fs.unlinkSync(tempFilePath);
             }
             catch { /* ignore */ }
+            // If an uncropped original was provided, save it alongside with _uncropped suffix
+            if (uncroppedTempPath && uncroppedOriginalName) {
+                const uncroppedExt = path.extname(uncroppedOriginalName);
+                const uncroppedBaseName = path.basename(destFileName, ext);
+                const uncroppedDestPath = path.join(soundsDir, `${uncroppedBaseName}_uncropped${uncroppedExt}`);
+                fs.copyFileSync(uncroppedTempPath, uncroppedDestPath);
+                try {
+                    fs.unlinkSync(uncroppedTempPath);
+                }
+                catch { /* ignore */ }
+                console.log(`[addSound] Saved uncropped backup: ${uncroppedDestPath}`);
+            }
             // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
             await this.killSoundpadAndWait();
             this.cachedConnectionState = false;
@@ -1430,6 +1444,82 @@ class SoundpadClient {
             if (/<Category\s/i.test(content)) {
                 this.walkCategoryHierarchy(content, categoryName, result);
             }
+        }
+    }
+    /**
+     * Restore the uncropped backup for a sound: replace the cropped file with
+     * the _uncropped version, then restart Soundpad so it picks up the change.
+     */
+    async resetCrop(soundUrl) {
+        try {
+            const soundPath = soundUrl.replace(/\//g, path.sep);
+            const ext = path.extname(soundPath);
+            const base = path.basename(soundPath, ext);
+            const dir = path.dirname(soundPath);
+            // Find the _uncropped backup (may have a different extension than the cropped file)
+            const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+            let uncroppedPath = '';
+            for (const aExt of audioExts) {
+                const candidate = path.join(dir, `${base}_uncropped${aExt}`);
+                if (fs.existsSync(candidate)) {
+                    uncroppedPath = candidate;
+                    break;
+                }
+            }
+            if (!uncroppedPath) {
+                return { success: false, error: 'No uncropped backup found for this sound' };
+            }
+            // Kill Soundpad so we can safely modify the file
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Replace the cropped file with the uncropped backup
+            const uncroppedExt = path.extname(uncroppedPath);
+            if (ext === uncroppedExt) {
+                // Same extension — just overwrite
+                fs.copyFileSync(uncroppedPath, soundPath);
+            }
+            else {
+                // Different extension — write new file, update SPL reference, remove old cropped file
+                const newSoundPath = path.join(dir, `${base}${uncroppedExt}`);
+                fs.copyFileSync(uncroppedPath, newSoundPath);
+                // Update the URL in soundlist.spl
+                if (fs.existsSync(this.soundlistPath)) {
+                    let spl = fs.readFileSync(this.soundlistPath, 'utf-8');
+                    const escapedOld = soundPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
+                    spl = spl.replace(new RegExp(escapedOld, 'g'), newSoundPath);
+                    fs.writeFileSync(this.soundlistPath, spl, 'utf-8');
+                }
+                // Remove old cropped file (different extension)
+                try {
+                    fs.unlinkSync(soundPath);
+                }
+                catch { /* ignore */ }
+            }
+            // Remove the uncropped backup since it's been restored
+            try {
+                fs.unlinkSync(uncroppedPath);
+            }
+            catch { /* ignore */ }
+            console.log(`[resetCrop] Restored uncropped audio for: ${soundPath}`);
+            // Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Wait for Soundpad to respond
+            const timeout = 15000;
+            const start = Date.now();
+            while (Date.now() - start < timeout) {
+                const connected = await this.isConnected();
+                if (connected)
+                    break;
+                await new Promise(r => setTimeout(r, 500));
+            }
+            return { success: true, data: 'Crop reset successfully' };
+        }
+        catch (error) {
+            const errMsg = error instanceof Error ? error.message : String(error);
+            console.error('[resetCrop] Error:', errMsg);
+            return { success: false, error: errMsg };
         }
     }
 }

@@ -179,6 +179,8 @@ app.post('/api/launch-installer', (_req, res) => {
     }
     (0, child_process_1.spawn)(`"${downloadedInstallerPath}"`, [], { detached: true, stdio: 'ignore', shell: true }).unref();
     res.json({ ok: true });
+    // Give the response time to flush, then exit so the installer can replace files
+    setTimeout(() => process.exit(0), 500);
 });
 // ── Settings API ─────────────────────────────────────────────────────────────
 app.get('/api/settings', (_req, res) => {

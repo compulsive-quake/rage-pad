@@ -48,6 +48,9 @@ export class AddSoundModalComponent implements OnChanges {
   cropStart = 0;
   cropEnd = 1;
 
+  // Original uncropped file (set when user applies crop, null otherwise)
+  originalUncroppedFile: File | null = null;
+
   private readonly ALLOWED_AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|wma|m4a|opus|aiff|ape)$/i;
 
   constructor(private soundpadService: SoundpadService) {}
@@ -91,6 +94,7 @@ export class AddSoundModalComponent implements OnChanges {
     this.cropStart = 0;
     this.cropEnd = 1;
     this.showCropConfirmDialog = false;
+    this.originalUncroppedFile = null;
   }
 
   close(): void {
@@ -219,6 +223,7 @@ export class AddSoundModalComponent implements OnChanges {
     this.previewDuration = 0;
     this.cropStart = 0;
     this.cropEnd = 1;
+    this.originalUncroppedFile = null;
     this.step = 'select';
   }
 
@@ -257,6 +262,10 @@ export class AddSoundModalComponent implements OnChanges {
   // Waveform event handlers
   onWaveformFileChanged(newFile: File): void {
     this.addSoundFile = newFile;
+  }
+
+  onOriginalFileChanged(originalFile: File | null): void {
+    this.originalUncroppedFile = originalFile;
   }
 
   onMetadataParsed(meta: { artist: string; title: string }): void {
@@ -348,7 +357,7 @@ export class AddSoundModalComponent implements OnChanges {
     }
     const durationSeconds = effectiveDuration > 0 ? Math.round(effectiveDuration) : undefined;
 
-    this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds)
+    this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds, this.originalUncroppedFile)
       .pipe(take(1))
       .subscribe({
         next: () => {

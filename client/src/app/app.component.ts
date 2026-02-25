@@ -56,6 +56,8 @@ export class AppComponent implements OnInit, OnDestroy {
   // Add Sound modal state
   isAddSoundModalOpen = false;
 
+  // Uncropped backup tracking
+  uncroppedSoundUrls: Set<string> = new Set();
 
   // Config-watch toggle
   configWatchEnabled: boolean;
@@ -366,9 +368,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
     forkJoin({
       sounds: this.soundpadService.getSounds().pipe(take(1)),
-      categoryIcons: this.soundpadService.getCategoryIcons().pipe(take(1))
+      categoryIcons: this.soundpadService.getCategoryIcons().pipe(take(1)),
+      uncropped: this.soundpadService.getUncroppedList().pipe(take(1))
     }).subscribe({
-      next: ({ sounds, categoryIcons }) => {
+      next: ({ sounds, categoryIcons, uncropped }) => {
         if (sounds.length === 0 && this.sounds.length > 0) {
           this.isLoading = false;
           return;
@@ -382,6 +385,8 @@ export class AppComponent implements OnInit, OnDestroy {
         categoryIcons.forEach(icon => {
           this.categoryIconsMap.set(icon.name, icon);
         });
+
+        this.uncroppedSoundUrls = new Set(uncropped.urls || []);
 
         if (this.searchQuery.trim()) {
           this.filterSounds(this.searchQuery);
@@ -842,6 +847,21 @@ export class AppComponent implements OnInit, OnDestroy {
   onSoundAdded(): void {
     this.isAddSoundModalOpen = false;
     this.loadSounds(true);
+  }
+
+  // ── Reset Crop handler ────────────────────────────────────────────────────
+
+  onResetCrop(sound: Sound): void {
+    this.soundpadService.resetCrop(sound.url)
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          this.loadSounds(true);
+        },
+        error: (err: any) => {
+          console.error('Failed to reset crop:', err);
+        }
+      });
   }
 
   // ── Restart Soundpad ──────────────────────────────────────────────────────
