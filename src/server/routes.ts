@@ -483,6 +483,38 @@ router.get('/category-icons', async (req: Request, res: Response) => {
   }
 });
 
+// Update a category's icon (base64 image data)
+router.put('/category-icon', async (req: Request, res: Response) => {
+  try {
+    const { categoryName, iconBase64 } = req.body;
+
+    if (typeof categoryName !== 'string' || !categoryName.trim()) {
+      res.status(400).json({ error: 'categoryName must be a non-empty string' });
+      return;
+    }
+    if (typeof iconBase64 !== 'string' || !iconBase64.trim()) {
+      res.status(400).json({ error: 'iconBase64 must be a non-empty string' });
+      return;
+    }
+
+    sseSuppressed = true;
+
+    const result = await soundpadClient.setCategoryIcon(categoryName.trim(), iconBase64.trim());
+
+    sseSuppressed = false;
+
+    if (result.success) {
+      notifySseClients();
+      res.json({ message: result.data });
+    } else {
+      res.status(500).json({ error: result.error });
+    }
+  } catch (error) {
+    sseSuppressed = false;
+    res.status(500).json({ error: 'Failed to update category icon' });
+  }
+});
+
 // Get categories list (for add-sound modal dropdown)
 router.get('/categories', async (req: Request, res: Response) => {
   try {

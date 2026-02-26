@@ -832,6 +832,23 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
 
+  onUpdateCategoryIcon(event: { categoryName: string; iconBase64: string }): void {
+    this.soundpadService.updateCategoryIcon(event.categoryName, event.iconBase64)
+      .pipe(take(1))
+      .subscribe({
+        next: (result: any) => {
+          if (result?.error) {
+            console.error('Failed to update category icon:', result.error);
+          } else {
+            this.loadSounds(true);
+          }
+        },
+        error: (err: any) => {
+          console.error('Failed to update category icon:', err);
+        }
+      });
+  }
+
   onDragStateChange(isDragging: boolean): void {
     this.isDragActive = isDragging;
     if (!isDragging && this.pendingReload) {

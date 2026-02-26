@@ -270,6 +270,15 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
+  updateCategoryIcon(categoryName: string, iconBase64: string): Observable<any> {
+    return this.http.put(`${this.apiUrl}/category-icon`, { categoryName, iconBase64 }).pipe(
+      catchError(error => {
+        console.error('Failed to update category icon:', error);
+        return of({ error: 'Failed to update category icon' });
+      })
+    );
+  }
+
   getCategories(): Observable<{ name: string; parentCategory: string }[]> {
     return this.http.get<{ name: string; parentCategory: string }[]>(`${this.apiUrl}/categories`).pipe(
       catchError(() => of([]))
