@@ -1,13 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -72,8 +63,8 @@ app.use((0, cors_1.default)({
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
 }));
-app.use(express_1.default.json());
-app.use(express_1.default.urlencoded({ extended: true }));
+app.use(express_1.default.json({ limit: '10mb' }));
+app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 // API Routes
 app.use('/api', routes_1.default);
 // Serve Angular static files in production.
@@ -88,7 +79,7 @@ app.get('/api/current-port', (_req, res) => {
     res.json({ port: currentPort });
 });
 // Return a QR code image for connecting from another device on the LAN
-app.get('/api/qr-code', (_req, res) => __awaiter(void 0, void 0, void 0, function* () {
+app.get('/api/qr-code', async (_req, res) => {
     const nets = os_1.default.networkInterfaces();
     let lanIp = '';
     for (const iface of Object.values(nets)) {
@@ -106,7 +97,7 @@ app.get('/api/qr-code', (_req, res) => __awaiter(void 0, void 0, void 0, functio
     const host = lanIp || 'localhost';
     const url = `http://${host}:${currentPort}`;
     try {
-        const dataUrl = yield qrcode_1.default.toDataURL(url, {
+        const dataUrl = await qrcode_1.default.toDataURL(url, {
             width: 300,
             margin: 2,
             color: { dark: '#ffffffff', light: '#00000000' },
@@ -116,7 +107,7 @@ app.get('/api/qr-code', (_req, res) => __awaiter(void 0, void 0, void 0, functio
     catch (err) {
         res.status(500).json({ error: 'Failed to generate QR code' });
     }
-}));
+});
 // ── Update download & install ────────────────────────────────────────────────
 /** Follow redirects and stream the response, calling `onResponse` with the final response. */
 function httpsGetFollowRedirects(url, onResponse, onError) {
@@ -196,7 +187,7 @@ app.get('/api/settings', (_req, res) => {
     res.json((0, database_1.getAllSettings)());
 });
 app.put('/api/settings', (req, res) => {
-    const body = Object.assign({}, req.body);
+    const body = { ...req.body };
     // Port changes go through /api/change-port — strip it here
     delete body.serverPort;
     const updated = (0, database_1.updateSettings)(body);
@@ -283,3 +274,4 @@ const shutdown = () => {
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);
 exports.default = app;
+//# sourceMappingURL=index.js.map

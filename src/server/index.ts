@@ -7,6 +7,7 @@ import https from 'https';
 import { spawn } from 'child_process';
 import QRCode from 'qrcode';
 import soundpadRoutes from './routes';
+
 import { getSetting, getAllSettings, setSetting, updateSettings, closeDb } from './database';
 
 // ── File logging for release builds ─────────────────────────────────────────
@@ -68,8 +69,8 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true
 }));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // API Routes
 app.use('/api', soundpadRoutes);

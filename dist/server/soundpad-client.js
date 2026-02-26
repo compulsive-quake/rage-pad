@@ -32,15 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SoundpadClient = void 0;
 const net = __importStar(require("net"));
@@ -58,229 +49,213 @@ class SoundpadClient {
         const appData = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming');
         this.soundlistPath = path.join(appData, 'Leppsoft', 'soundlist.spl');
     }
-    sendCommand(command) {
-        return __awaiter(this, void 0, void 0, function* () {
-            return new Promise((resolve, reject) => {
-                const client = net.createConnection(this.pipeName);
-                // Update connection cache on successful connection
-                const markConnected = () => {
-                    this.cachedConnectionState = true;
-                    this.lastConnectionCheck = Date.now();
-                };
-                const markDisconnected = () => {
-                    this.cachedConnectionState = false;
-                    this.lastConnectionCheck = Date.now();
-                };
-                let data = Buffer.alloc(0);
-                let resolved = false;
-                client.on('connect', () => {
-                    // Soundpad expects commands with null terminator
-                    const commandBuffer = Buffer.from(command + '\0', 'utf-8');
-                    client.write(commandBuffer);
-                });
-                client.on('data', (chunk) => {
-                    markConnected(); // Data received means we're connected
-                    data = Buffer.concat([data, chunk]);
-                    // Check if we received a complete response (ends with null byte or has complete XML)
-                    const dataStr = data.toString('utf-8');
-                    // For simple responses (like "R-0" for success)
-                    if (dataStr.startsWith('R-') || dataStr.startsWith('E-')) {
-                        if (!resolved) {
-                            resolved = true;
-                            client.end();
-                            resolve(dataStr.replace(/\0/g, ''));
-                        }
-                        return;
-                    }
-                    // For XML responses, check if we have complete XML
-                    if (dataStr.includes('</Soundlist>') || dataStr.includes('</Sounds>') ||
-                        dataStr.includes('</PlayStatus>') || dataStr.includes('/>')) {
-                        if (!resolved) {
-                            resolved = true;
-                            client.end();
-                            resolve(dataStr.replace(/\0/g, ''));
-                        }
-                    }
-                });
-                client.on('end', () => {
-                    if (!resolved) {
-                        resolved = true;
-                        resolve(data.toString('utf-8').replace(/\0/g, ''));
-                    }
-                });
-                client.on('error', (err) => {
-                    markDisconnected(); // Error means connection failed
-                    if (!resolved) {
-                        resolved = true;
-                        reject(err);
-                    }
-                });
-                client.on('close', () => {
-                    if (!resolved) {
-                        resolved = true;
-                        resolve(data.toString('utf-8').replace(/\0/g, ''));
-                    }
-                });
-                // Set timeout for connection
-                setTimeout(() => {
-                    if (!resolved) {
-                        resolved = true;
-                        client.destroy();
-                        // If we have some data, return it
-                        if (data.length > 0) {
-                            resolve(data.toString('utf-8').replace(/\0/g, ''));
-                        }
-                        else {
-                            markDisconnected(); // Timeout with no data means disconnected
-                            reject(new Error('Connection timeout'));
-                        }
-                    }
-                }, 5000);
+    async sendCommand(command) {
+        return new Promise((resolve, reject) => {
+            const client = net.createConnection(this.pipeName);
+            // Update connection cache on successful connection
+            const markConnected = () => {
+                this.cachedConnectionState = true;
+                this.lastConnectionCheck = Date.now();
+            };
+            const markDisconnected = () => {
+                this.cachedConnectionState = false;
+                this.lastConnectionCheck = Date.now();
+            };
+            let data = Buffer.alloc(0);
+            let resolved = false;
+            client.on('connect', () => {
+                // Soundpad expects commands with null terminator
+                const commandBuffer = Buffer.from(command + '\0', 'utf-8');
+                client.write(commandBuffer);
             });
-        });
-    }
-    getSoundList() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield this.sendCommand('GetSoundlist()');
-                console.log('Soundpad GetSoundlist response:', response.substring(0, 500));
-                const sounds = this.parseSoundList(response);
-                // Enrich sounds with category hierarchy from soundlist.spl
-                if (fs.existsSync(this.soundlistPath)) {
-                    const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                    const categoryMap = this.parseCategoryHierarchy(splContent);
-                    sounds.forEach(sound => {
-                        const mapping = categoryMap.get(sound.index);
-                        if (mapping) {
-                            sound.category = mapping.category;
-                            sound.parentCategory = mapping.parentCategory;
-                            sound.categoryIndex = mapping.categoryIndex;
-                        }
-                    });
+            client.on('data', (chunk) => {
+                markConnected(); // Data received means we're connected
+                data = Buffer.concat([data, chunk]);
+                // Check if we received a complete response (ends with null byte or has complete XML)
+                const dataStr = data.toString('utf-8');
+                // For simple responses (like "R-0" for success)
+                if (dataStr.startsWith('R-') || dataStr.startsWith('E-')) {
+                    if (!resolved) {
+                        resolved = true;
+                        client.end();
+                        resolve(dataStr.replace(/\0/g, ''));
+                    }
+                    return;
                 }
-                return { success: true, data: sounds };
-            }
-            catch (error) {
-                console.error('GetSoundlist error:', error);
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to get sound list'
-                };
-            }
-        });
-    }
-    playSound(index_1) {
-        return __awaiter(this, arguments, void 0, function* (index, speakersOnly = false, micOnly = false) {
-            try {
-                // Soundpad uses DoPlaySound for playing by index
-                // Second param: play on speakers, Third param: play on microphone
-                // If neither speakers-only nor mic-only is enabled, use DoPlaySound with index only
-                const neitherEnabled = !speakersOnly && !micOnly;
-                const response = yield this.sendCommand(neitherEnabled
-                    ? `DoPlaySound(${index})`
-                    : `DoPlaySound(${index},${speakersOnly},${micOnly})`);
-                console.log('Soundpad DoPlaySound response:', response);
-                return { success: true, data: response };
-            }
-            catch (error) {
-                console.error('PlaySound error:', error);
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to play sound'
-                };
-            }
-        });
-    }
-    stopSound() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Soundpad uses DoStopSound
-                const response = yield this.sendCommand('DoStopSound()');
-                console.log('Soundpad DoStopSound response:', response);
-                return { success: true, data: response };
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to stop sound'
-                };
-            }
-        });
-    }
-    togglePause() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Soundpad uses DoTogglePause
-                const response = yield this.sendCommand('DoTogglePause()');
-                console.log('Soundpad DoTogglePause response:', response);
-                return { success: true, data: response };
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to toggle pause'
-                };
-            }
-        });
-    }
-    setVolume(volume) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Volume should be between 0 and 100
-                const clampedVolume = Math.max(0, Math.min(100, volume));
-                const response = yield this.sendCommand(`SetVolume(${clampedVolume})`);
-                return { success: true, data: response };
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to set volume'
-                };
-            }
-        });
-    }
-    searchSounds(query) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const response = yield this.sendCommand('GetSoundlist()');
-                const sounds = this.parseSoundList(response);
-                const filteredSounds = sounds.filter((sound) => sound.title.toLowerCase().includes(query.toLowerCase()) ||
-                    sound.artist.toLowerCase().includes(query.toLowerCase()));
-                return { success: true, data: filteredSounds };
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to search sounds'
-                };
-            }
-        });
-    }
-    renameSound(index, newTitle) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Directly edit the soundlist.spl file to change the customTag attribute for the sound.
-                // Sounds in soundlist.spl are identified by their 1-based position in the file (not an
-                // index attribute). The display name is stored in the "customTag" attribute.
-                if (!fs.existsSync(this.soundlistPath)) {
-                    return { success: false, error: 'Soundlist file not found' };
+                // For XML responses, check if we have complete XML
+                if (dataStr.includes('</Soundlist>') || dataStr.includes('</Sounds>') ||
+                    dataStr.includes('</PlayStatus>') || dataStr.includes('/>')) {
+                    if (!resolved) {
+                        resolved = true;
+                        client.end();
+                        resolve(dataStr.replace(/\0/g, ''));
+                    }
                 }
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                const result = this.updateSoundCustomTag(splContent, index, newTitle);
-                if (!result.success) {
-                    return { success: false, error: result.error };
+            });
+            client.on('end', () => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve(data.toString('utf-8').replace(/\0/g, ''));
                 }
-                fs.writeFileSync(this.soundlistPath, result.content, 'utf-8');
-                console.log(`Renamed sound index ${index} to "${newTitle}" in soundlist.spl`);
-                return { success: true, data: `Sound renamed to "${newTitle}"` };
-            }
-            catch (error) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to rename sound'
-                };
-            }
+            });
+            client.on('error', (err) => {
+                markDisconnected(); // Error means connection failed
+                if (!resolved) {
+                    resolved = true;
+                    reject(err);
+                }
+            });
+            client.on('close', () => {
+                if (!resolved) {
+                    resolved = true;
+                    resolve(data.toString('utf-8').replace(/\0/g, ''));
+                }
+            });
+            // Set timeout for connection
+            setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    client.destroy();
+                    // If we have some data, return it
+                    if (data.length > 0) {
+                        resolve(data.toString('utf-8').replace(/\0/g, ''));
+                    }
+                    else {
+                        markDisconnected(); // Timeout with no data means disconnected
+                        reject(new Error('Connection timeout'));
+                    }
+                }
+            }, 5000);
         });
+    }
+    async getSoundList() {
+        try {
+            const response = await this.sendCommand('GetSoundlist()');
+            console.log('Soundpad GetSoundlist response:', response.substring(0, 500));
+            const sounds = this.parseSoundList(response);
+            // Enrich sounds with category hierarchy from soundlist.spl
+            if (fs.existsSync(this.soundlistPath)) {
+                const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+                const categoryMap = this.parseCategoryHierarchy(splContent);
+                sounds.forEach(sound => {
+                    const mapping = categoryMap.get(sound.index);
+                    if (mapping) {
+                        sound.category = mapping.category;
+                        sound.parentCategory = mapping.parentCategory;
+                        sound.categoryIndex = mapping.categoryIndex;
+                    }
+                });
+            }
+            return { success: true, data: sounds };
+        }
+        catch (error) {
+            console.error('GetSoundlist error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to get sound list'
+            };
+        }
+    }
+    async playSound(index, speakersOnly = false, micOnly = false) {
+        try {
+            // Soundpad uses DoPlaySound for playing by index
+            // Second param: play on speakers, Third param: play on microphone
+            // If neither speakers-only nor mic-only is enabled, use DoPlaySound with index only
+            const neitherEnabled = !speakersOnly && !micOnly;
+            const response = await this.sendCommand(neitherEnabled
+                ? `DoPlaySound(${index})`
+                : `DoPlaySound(${index},${speakersOnly},${micOnly})`);
+            console.log('Soundpad DoPlaySound response:', response);
+            return { success: true, data: response };
+        }
+        catch (error) {
+            console.error('PlaySound error:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to play sound'
+            };
+        }
+    }
+    async stopSound() {
+        try {
+            // Soundpad uses DoStopSound
+            const response = await this.sendCommand('DoStopSound()');
+            console.log('Soundpad DoStopSound response:', response);
+            return { success: true, data: response };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to stop sound'
+            };
+        }
+    }
+    async togglePause() {
+        try {
+            // Soundpad uses DoTogglePause
+            const response = await this.sendCommand('DoTogglePause()');
+            console.log('Soundpad DoTogglePause response:', response);
+            return { success: true, data: response };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to toggle pause'
+            };
+        }
+    }
+    async setVolume(volume) {
+        try {
+            // Volume should be between 0 and 100
+            const clampedVolume = Math.max(0, Math.min(100, volume));
+            const response = await this.sendCommand(`SetVolume(${clampedVolume})`);
+            return { success: true, data: response };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to set volume'
+            };
+        }
+    }
+    async searchSounds(query) {
+        try {
+            const response = await this.sendCommand('GetSoundlist()');
+            const sounds = this.parseSoundList(response);
+            const filteredSounds = sounds.filter((sound) => sound.title.toLowerCase().includes(query.toLowerCase()) ||
+                sound.artist.toLowerCase().includes(query.toLowerCase()));
+            return { success: true, data: filteredSounds };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to search sounds'
+            };
+        }
+    }
+    async renameSound(index, newTitle) {
+        try {
+            // Directly edit the soundlist.spl file to change the customTag attribute for the sound.
+            // Sounds in soundlist.spl are identified by their 1-based position in the file (not an
+            // index attribute). The display name is stored in the "customTag" attribute.
+            if (!fs.existsSync(this.soundlistPath)) {
+                return { success: false, error: 'Soundlist file not found' };
+            }
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const result = this.updateSoundCustomTag(splContent, index, newTitle);
+            if (!result.success) {
+                return { success: false, error: result.error };
+            }
+            fs.writeFileSync(this.soundlistPath, result.content, 'utf-8');
+            console.log(`Renamed sound index ${index} to "${newTitle}" in soundlist.spl`);
+            return { success: true, data: `Sound renamed to "${newTitle}"` };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to rename sound'
+            };
+        }
     }
     /**
      * Reliably kill Soundpad and wait until the process is fully gone.
@@ -296,59 +271,57 @@ class SoundpadClient {
      *   4. Return only once `tasklist` confirms the process is gone (or after the
      *      combined timeout).
      */
-    killSoundpadAndWait() {
-        return __awaiter(this, arguments, void 0, function* (gracefulTimeoutMs = 6000) {
-            const isSoundpadRunning = () => {
-                try {
-                    const output = (0, child_process_1.execSync)('tasklist /FI "IMAGENAME eq Soundpad.exe" /NH', {
-                        encoding: 'utf-8',
-                        timeout: 3000,
-                        stdio: ['ignore', 'pipe', 'ignore']
-                    });
-                    return output.toLowerCase().includes('soundpad.exe');
-                }
-                catch (_a) {
-                    return false; // tasklist failed – assume not running
-                }
-            };
-            // If Soundpad isn't running at all, nothing to do
+    async killSoundpadAndWait(gracefulTimeoutMs = 6000) {
+        const isSoundpadRunning = () => {
+            try {
+                const output = (0, child_process_1.execSync)('tasklist /FI "IMAGENAME eq Soundpad.exe" /NH', {
+                    encoding: 'utf-8',
+                    timeout: 3000,
+                    stdio: ['ignore', 'pipe', 'ignore']
+                });
+                return output.toLowerCase().includes('soundpad.exe');
+            }
+            catch {
+                return false; // tasklist failed – assume not running
+            }
+        };
+        // If Soundpad isn't running at all, nothing to do
+        if (!isSoundpadRunning()) {
+            console.log('[killSoundpad] Soundpad was not running');
+            return;
+        }
+        // Step 1: Graceful close
+        await new Promise((resolve) => {
+            const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
+            gracefulKill.on('close', resolve);
+            gracefulKill.on('error', resolve); // not running – that's fine
+        });
+        // Step 2: Poll until the process disappears or the graceful timeout expires
+        const gracefulDeadline = Date.now() + gracefulTimeoutMs;
+        while (Date.now() < gracefulDeadline) {
+            await new Promise(r => setTimeout(r, 250));
             if (!isSoundpadRunning()) {
-                console.log('[killSoundpad] Soundpad was not running');
+                console.log(`[killSoundpad] Soundpad exited gracefully after ~${gracefulTimeoutMs - (gracefulDeadline - Date.now())}ms`);
                 return;
             }
-            // Step 1: Graceful close
-            yield new Promise((resolve) => {
-                const gracefulKill = (0, child_process_1.spawn)('taskkill', ['/IM', 'Soundpad.exe'], { stdio: 'ignore' });
-                gracefulKill.on('close', resolve);
-                gracefulKill.on('error', resolve); // not running – that's fine
-            });
-            // Step 2: Poll until the process disappears or the graceful timeout expires
-            const gracefulDeadline = Date.now() + gracefulTimeoutMs;
-            while (Date.now() < gracefulDeadline) {
-                yield new Promise(r => setTimeout(r, 250));
-                if (!isSoundpadRunning()) {
-                    console.log(`[killSoundpad] Soundpad exited gracefully after ~${gracefulTimeoutMs - (gracefulDeadline - Date.now())}ms`);
-                    return;
-                }
-            }
-            // Step 3: Force-kill if still alive
-            console.warn('[killSoundpad] Soundpad did not exit gracefully – force-killing');
-            yield new Promise((resolve) => {
-                const forceKill = (0, child_process_1.spawn)('taskkill', ['/F', '/IM', 'Soundpad.exe'], { stdio: 'ignore' });
-                forceKill.on('close', resolve);
-                forceKill.on('error', resolve);
-            });
-            // Step 4: Wait for the OS to fully remove the process entry (up to 3 s)
-            const forceDeadline = Date.now() + 3000;
-            while (Date.now() < forceDeadline) {
-                yield new Promise(r => setTimeout(r, 250));
-                if (!isSoundpadRunning()) {
-                    console.log('[killSoundpad] Soundpad force-killed successfully');
-                    return;
-                }
-            }
-            console.warn('[killSoundpad] Soundpad process may still be running after force-kill');
+        }
+        // Step 3: Force-kill if still alive
+        console.warn('[killSoundpad] Soundpad did not exit gracefully – force-killing');
+        await new Promise((resolve) => {
+            const forceKill = (0, child_process_1.spawn)('taskkill', ['/F', '/IM', 'Soundpad.exe'], { stdio: 'ignore' });
+            forceKill.on('close', resolve);
+            forceKill.on('error', resolve);
         });
+        // Step 4: Wait for the OS to fully remove the process entry (up to 3 s)
+        const forceDeadline = Date.now() + 3000;
+        while (Date.now() < forceDeadline) {
+            await new Promise(r => setTimeout(r, 250));
+            if (!isSoundpadRunning()) {
+                console.log('[killSoundpad] Soundpad force-killed successfully');
+                return;
+            }
+        }
+        console.warn('[killSoundpad] Soundpad process may still be running after force-kill');
     }
     /**
      * Reorder a sound by moving it to a target category at a specific position.
@@ -361,123 +334,119 @@ class SoundpadClient {
      * @param targetCategory Name of the target category (or sub-category)
      * @param targetPosition 0-based position within the target category's sound list
      */
-    reorderSound(soundIndex, targetCategory, targetPosition) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!fs.existsSync(this.soundlistPath)) {
-                return { success: false, error: 'Soundlist file not found' };
-            }
-            try {
-                // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
-                const splId = soundIndex - 1;
-                // Also match with varying whitespace
-                const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
-                // Step 1: Kill Soundpad
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                // Step 2: Read and edit soundlist.spl
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                // Find the Categories section
-                const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-                if (!categoriesMatch) {
-                    // Relaunch Soundpad before returning error
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: 'No Categories section found in soundlist.spl' };
-                }
-                let categoriesContent = categoriesMatch[1];
-                // Remove the sound reference from wherever it currently is in the Categories section
-                const originalLength = categoriesContent.length;
-                categoriesContent = categoriesContent.replace(soundTagRegex, '');
-                // Clean up any leftover blank lines from removal
-                categoriesContent = categoriesContent.replace(/\n\s*\n\s*\n/g, '\n\n');
-                if (categoriesContent.length === originalLength) {
-                    console.warn(`Sound id="${splId}" not found in Categories section, it may be uncategorized`);
-                }
-                // Find the target category and insert the sound at the target position
-                const insertResult = this.insertSoundInCategory(categoriesContent, targetCategory, splId, targetPosition);
-                if (!insertResult.success) {
-                    // Relaunch Soundpad before returning error
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: insertResult.error || 'Failed to insert sound in target category' };
-                }
-                // Replace the Categories section in the full SPL content
-                splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${insertResult.content}</Categories>`);
-                // Step 3: Write the updated file
-                fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
-                console.log(`Reordered sound index ${soundIndex} to category "${targetCategory}" at position ${targetPosition}`);
-                // Step 4: Relaunch Soundpad
+    async reorderSound(soundIndex, targetCategory, targetPosition) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
+            const splId = soundIndex - 1;
+            // Also match with varying whitespace
+            const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
+            // Step 1: Kill Soundpad
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Read and edit soundlist.spl
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            // Find the Categories section
+            const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+            if (!categoriesMatch) {
+                // Relaunch Soundpad before returning error
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                // Step 5: Wait for Soundpad to become available
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Sound moved to "${targetCategory}" at position ${targetPosition}` };
+                return { success: false, error: 'No Categories section found in soundlist.spl' };
             }
-            catch (error) {
-                console.error('reorderSound error:', error);
-                // Try to relaunch Soundpad even on error
-                try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                }
-                catch (e) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to reorder sound'
-                };
+            let categoriesContent = categoriesMatch[1];
+            // Remove the sound reference from wherever it currently is in the Categories section
+            const originalLength = categoriesContent.length;
+            categoriesContent = categoriesContent.replace(soundTagRegex, '');
+            // Clean up any leftover blank lines from removal
+            categoriesContent = categoriesContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+            if (categoriesContent.length === originalLength) {
+                console.warn(`Sound id="${splId}" not found in Categories section, it may be uncategorized`);
             }
-        });
+            // Find the target category and insert the sound at the target position
+            const insertResult = this.insertSoundInCategory(categoriesContent, targetCategory, splId, targetPosition);
+            if (!insertResult.success) {
+                // Relaunch Soundpad before returning error
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: insertResult.error || 'Failed to insert sound in target category' };
+            }
+            // Replace the Categories section in the full SPL content
+            splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${insertResult.content}</Categories>`);
+            // Step 3: Write the updated file
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Reordered sound index ${soundIndex} to category "${targetCategory}" at position ${targetPosition}`);
+            // Step 4: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 5: Wait for Soundpad to become available
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound moved to "${targetCategory}" at position ${targetPosition}` };
+        }
+        catch (error) {
+            console.error('reorderSound error:', error);
+            // Try to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to reorder sound'
+            };
+        }
     }
     /**
      * Move a top-level category to a new position in soundlist.spl.
      * @param categoryName Name of the category to move
      * @param targetPosition 0-based index in the visible (non-hidden) category list
      */
-    reorderCategory(categoryName, targetPosition) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!fs.existsSync(this.soundlistPath)) {
-                return { success: false, error: 'Soundlist file not found' };
-            }
-            try {
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-                if (!categoriesMatch) {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: 'No Categories section found in soundlist.spl' };
-                }
-                const categoriesContent = categoriesMatch[1];
-                const result = this.reorderCategoryInContent(categoriesContent, categoryName, targetPosition);
-                if (!result.success) {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: result.error };
-                }
-                splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${result.content}</Categories>`);
-                fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
-                console.log(`Reordered category "${categoryName}" to position ${targetPosition}`);
+    async reorderCategory(categoryName, targetPosition) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+            if (!categoriesMatch) {
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Category "${categoryName}" moved to position ${targetPosition}` };
+                return { success: false, error: 'No Categories section found in soundlist.spl' };
             }
-            catch (error) {
-                console.error('reorderCategory error:', error);
-                try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                }
-                catch (e) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to reorder category'
-                };
+            const categoriesContent = categoriesMatch[1];
+            const result = this.reorderCategoryInContent(categoriesContent, categoryName, targetPosition);
+            if (!result.success) {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: result.error };
             }
-        });
+            splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${result.content}</Categories>`);
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Reordered category "${categoryName}" to position ${targetPosition}`);
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Category "${categoryName}" moved to position ${targetPosition}` };
+        }
+        catch (error) {
+            console.error('reorderCategory error:', error);
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to reorder category'
+            };
+        }
     }
     /**
      * Find all top-level <Category> elements in the given XML content, returning
@@ -661,33 +630,31 @@ class SoundpadClient {
             categoriesContent.substring(closingPos);
         return { success: true, content: newContent };
     }
-    restartSoundpad(index, newTitle) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!fs.existsSync(this.soundlistPath)) {
-                return { success: false, error: 'Soundlist file not found' };
-            }
-            // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
-            yield this.killSoundpadAndWait();
-            this.cachedConnectionState = false;
-            this.lastConnectionCheck = 0;
-            // Step 2: Edit the soundlist.spl XML while Soundpad is closed
-            const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-            const result = this.updateSoundCustomTag(splContent, index, newTitle);
-            if (!result.success) {
-                // Soundpad is already closed – relaunch before returning the error
-                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                return { success: false, error: result.error };
-            }
-            fs.writeFileSync(this.soundlistPath, result.content, 'utf-8');
-            console.log(`Renamed sound index ${index} to "${newTitle}" in soundlist.spl`);
-            // Step 3: Relaunch Soundpad with the updated soundlist
+    async restartSoundpad(index, newTitle) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
+        await this.killSoundpadAndWait();
+        this.cachedConnectionState = false;
+        this.lastConnectionCheck = 0;
+        // Step 2: Edit the soundlist.spl XML while Soundpad is closed
+        const splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+        const result = this.updateSoundCustomTag(splContent, index, newTitle);
+        if (!result.success) {
+            // Soundpad is already closed – relaunch before returning the error
             const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
             (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-            // Step 4: Wait for Soundpad to become available via its named pipe
-            yield this.waitForSoundpadReady(15000, 500);
-            return { success: true, data: `Sound renamed to "${newTitle}" and Soundpad restarting` };
-        });
+            return { success: false, error: result.error };
+        }
+        fs.writeFileSync(this.soundlistPath, result.content, 'utf-8');
+        console.log(`Renamed sound index ${index} to "${newTitle}" in soundlist.spl`);
+        // Step 3: Relaunch Soundpad with the updated soundlist
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        // Step 4: Wait for Soundpad to become available via its named pipe
+        await this.waitForSoundpadReady(15000, 500);
+        return { success: true, data: `Sound renamed to "${newTitle}" and Soundpad restarting` };
     }
     /**
      * Update the customTag attribute of the Nth <Sound> element (1-based index) in the
@@ -742,65 +709,63 @@ class SoundpadClient {
      * This kills Soundpad, edits the file, and relaunches – all in a single
      * restart cycle.
      */
-    updateSoundDetails(index, customTag, artist, title, targetCategory) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!fs.existsSync(this.soundlistPath)) {
-                return { success: false, error: 'Soundlist file not found' };
-            }
-            try {
-                // Step 1: Kill Soundpad
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                // Step 2: Update attributes in soundlist.spl
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                const attrResult = this.updateSoundAttributes(splContent, index, { customTag, artist, title });
-                if (!attrResult.success) {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: attrResult.error };
-                }
-                splContent = attrResult.content;
-                // Step 3: If a target category was given, move the sound reference
-                if (targetCategory) {
-                    const splId = index - 1; // SPL uses 0-based IDs
-                    const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
-                    const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-                    if (categoriesMatch) {
-                        let categoriesContent = categoriesMatch[1];
-                        categoriesContent = categoriesContent.replace(soundTagRegex, '');
-                        categoriesContent = categoriesContent.replace(/\n\s*\n\s*\n/g, '\n\n');
-                        const insertResult = this.insertSoundInCategory(categoriesContent, targetCategory, splId, 999999);
-                        if (insertResult.success) {
-                            splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${insertResult.content}</Categories>`);
-                        }
-                        else {
-                            console.warn(`[updateSoundDetails] Could not move to category "${targetCategory}": ${insertResult.error}`);
-                        }
-                    }
-                }
-                // Step 4: Write the updated file
-                fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
-                console.log(`Updated details for sound index ${index}`);
-                // Step 5: Relaunch Soundpad
+    async updateSoundDetails(index, customTag, artist, title, targetCategory) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            // Step 1: Kill Soundpad
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Update attributes in soundlist.spl
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const attrResult = this.updateSoundAttributes(splContent, index, { customTag, artist, title });
+            if (!attrResult.success) {
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Sound details updated` };
+                return { success: false, error: attrResult.error };
             }
-            catch (error) {
-                console.error('updateSoundDetails error:', error);
-                try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            splContent = attrResult.content;
+            // Step 3: If a target category was given, move the sound reference
+            if (targetCategory) {
+                const splId = index - 1; // SPL uses 0-based IDs
+                const soundTagRegex = new RegExp(`<Sound\\s+id="${splId}"\\s*/>`, 'g');
+                const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+                if (categoriesMatch) {
+                    let categoriesContent = categoriesMatch[1];
+                    categoriesContent = categoriesContent.replace(soundTagRegex, '');
+                    categoriesContent = categoriesContent.replace(/\n\s*\n\s*\n/g, '\n\n');
+                    const insertResult = this.insertSoundInCategory(categoriesContent, targetCategory, splId, 999999);
+                    if (insertResult.success) {
+                        splContent = splContent.replace(/<Categories>[\s\S]*<\/Categories>/i, `<Categories>${insertResult.content}</Categories>`);
+                    }
+                    else {
+                        console.warn(`[updateSoundDetails] Could not move to category "${targetCategory}": ${insertResult.error}`);
+                    }
                 }
-                catch (e) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to update sound details'
-                };
             }
-        });
+            // Step 4: Write the updated file
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Updated details for sound index ${index}`);
+            // Step 5: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound details updated` };
+        }
+        catch (error) {
+            console.error('updateSoundDetails error:', error);
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to update sound details'
+            };
+        }
     }
     /**
      * Update one or more attributes on the Nth <Sound> element (1-based index)
@@ -861,200 +826,198 @@ class SoundpadClient {
      * @param uncroppedTempPath
      * @param uncroppedOriginalName
      */
-    addSound(tempFilePath_1, originalName_1, categoryName_1, displayName_1) {
-        return __awaiter(this, arguments, void 0, function* (tempFilePath, originalName, categoryName, displayName, artist = '', title = '', durationSeconds = 0, uncroppedTempPath, uncroppedOriginalName) {
+    async addSound(tempFilePath, originalName, categoryName, displayName, artist = '', title = '', durationSeconds = 0, uncroppedTempPath, uncroppedOriginalName) {
+        try {
+            if (!fs.existsSync(this.soundlistPath)) {
+                return { success: false, error: 'Soundlist file not found' };
+            }
+            // Determine permanent storage directory next to soundlist.spl
+            const soundsDir = path.join(path.dirname(this.soundlistPath), 'sounds');
+            if (!fs.existsSync(soundsDir)) {
+                fs.mkdirSync(soundsDir, { recursive: true });
+            }
+            // Build a unique destination filename to avoid collisions
+            const ext = path.extname(originalName);
+            const baseName = path.basename(originalName, ext);
+            let destFileName = originalName;
+            let destPath = path.join(soundsDir, destFileName);
+            let counter = 1;
+            while (fs.existsSync(destPath)) {
+                destFileName = `${baseName} (${counter})${ext}`;
+                destPath = path.join(soundsDir, destFileName);
+                counter++;
+            }
+            // Copy the uploaded temp file to the permanent location
+            fs.copyFileSync(tempFilePath, destPath);
+            // Clean up the temp file
             try {
-                if (!fs.existsSync(this.soundlistPath)) {
-                    return { success: false, error: 'Soundlist file not found' };
-                }
-                // Determine permanent storage directory next to soundlist.spl
-                const soundsDir = path.join(path.dirname(this.soundlistPath), 'sounds');
-                if (!fs.existsSync(soundsDir)) {
-                    fs.mkdirSync(soundsDir, { recursive: true });
-                }
-                // Build a unique destination filename to avoid collisions
-                const ext = path.extname(originalName);
-                const baseName = path.basename(originalName, ext);
-                let destFileName = originalName;
-                let destPath = path.join(soundsDir, destFileName);
-                let counter = 1;
-                while (fs.existsSync(destPath)) {
-                    destFileName = `${baseName} (${counter})${ext}`;
-                    destPath = path.join(soundsDir, destFileName);
-                    counter++;
-                }
-                // Copy the uploaded temp file to the permanent location
-                fs.copyFileSync(tempFilePath, destPath);
-                // Clean up the temp file
+                fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            // If an uncropped original was provided, save it alongside with _uncropped suffix
+            if (uncroppedTempPath && uncroppedOriginalName) {
+                const uncroppedExt = path.extname(uncroppedOriginalName);
+                const uncroppedBaseName = path.basename(destFileName, ext);
+                const uncroppedDestPath = path.join(soundsDir, `${uncroppedBaseName}_uncropped${uncroppedExt}`);
+                fs.copyFileSync(uncroppedTempPath, uncroppedDestPath);
                 try {
-                    fs.unlinkSync(tempFilePath);
+                    fs.unlinkSync(uncroppedTempPath);
                 }
-                catch ( /* ignore */_a) { /* ignore */ }
-                // If an uncropped original was provided, save it alongside with _uncropped suffix
-                if (uncroppedTempPath && uncroppedOriginalName) {
-                    const uncroppedExt = path.extname(uncroppedOriginalName);
-                    const uncroppedBaseName = path.basename(destFileName, ext);
-                    const uncroppedDestPath = path.join(soundsDir, `${uncroppedBaseName}_uncropped${uncroppedExt}`);
-                    fs.copyFileSync(uncroppedTempPath, uncroppedDestPath);
-                    try {
-                        fs.unlinkSync(uncroppedTempPath);
-                    }
-                    catch ( /* ignore */_b) { /* ignore */ }
-                    console.log(`[addSound] Saved uncropped backup: ${uncroppedDestPath}`);
-                }
-                // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                // Step 2: Edit soundlist.spl to add the new sound
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                // Build the display label from the custom name or filename (without extension)
-                const displayLabel = displayName || baseName;
-                const escapedLabel = displayLabel
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
-                const escapedUrl = destPath
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
-                const escapedArtist = artist
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
-                const escapedTitle = title
-                    .replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;')
-                    .replace(/"/g, '&quot;');
-                // Format duration as MM:SS for the SPL tag (Soundpad uses this format)
-                const durationAttr = durationSeconds > 0
-                    ? ` duration="${Math.floor(durationSeconds / 60)}:${String(Math.floor(durationSeconds % 60)).padStart(2, '0')}"`
-                    : '';
-                // Build the new <Sound /> tag to insert into the Soundlist section
-                const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}" artist="${escapedArtist}" title="${escapedTitle}"${durationAttr}/>`;
-                // --- Insert the new sound into the flat <Soundlist> section ---
-                // The SPL file structure is:
-                //   <Soundlist>
-                //     <Sound url="..." .../> <!-- flat list of sound definitions -->
-                //     ...
-                //     <Categories>...</Categories>  <!-- nested inside Soundlist -->
-                //     <Hotbar>...</Hotbar>
-                //   </Soundlist>
-                //
-                // Category references use <Sound id="N"/> where N is a 0-based index
-                // into the flat list of <Sound url="..."/> entries. We must:
-                //   1. Count only <Sound> tags with a url attribute (not id references)
-                //   2. Insert the new sound BEFORE <Categories> (not at end of Soundlist)
-                const categoriesOpenIdx = splContent.indexOf('<Categories>');
-                const soundlistCloseIdx = splContent.lastIndexOf('</Soundlist>');
-                if (soundlistCloseIdx === -1) {
-                    // Relaunch Soundpad before returning error
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: 'Could not find </Soundlist> in soundlist.spl' };
-                }
-                // Count only actual sound definitions (those with a url attribute),
-                // NOT the <Sound id="N"/> category references inside <Categories>.
-                // Search the entire <Soundlist> section since sounds may appear after </Categories>.
-                const soundlistOpenIdx = splContent.indexOf('<Soundlist');
-                const soundlistSection = splContent.slice(soundlistOpenIdx, soundlistCloseIdx);
-                const soundUrlTagRegex = /<Sound\s[^>]*url="[^"]*"[^>]*\/>/gi;
-                let existingSoundCount = 0;
-                while (soundUrlTagRegex.exec(soundlistSection) !== null) {
-                    existingSoundCount++;
-                }
-                const newSoundId = existingSoundCount;
-                // Insert the new sound tag BEFORE <Categories> (or before </Soundlist> if no categories)
-                const insertIdx = categoriesOpenIdx !== -1 ? categoriesOpenIdx : soundlistCloseIdx;
-                splContent =
-                    splContent.slice(0, insertIdx) +
-                        '  ' + newSoundTag + '\n' +
-                        splContent.slice(insertIdx);
-                // Insert the sound reference into the correct category in <Categories>
-                const newSoundRef = `<Sound id="${newSoundId}"/>`;
-                const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-                if (categoriesMatch && categoryName) {
-                    const escapedCatName = categoryName
-                        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                    // Find the category by name – look for <Category ... name="categoryName" ...>
-                    // We need to insert the sound ref before the closing </Category> of the matching category.
-                    // Handle both parent and sub-categories by finding the LAST occurrence of the category
-                    // (sub-categories appear nested inside parents).
-                    const catOpenRegex = new RegExp(`<Category\\s[^>]*name="${escapedCatName}"[^>]*>`, 'gi');
-                    let lastCatMatch = null;
-                    let catMatch;
-                    while ((catMatch = catOpenRegex.exec(splContent)) !== null) {
-                        lastCatMatch = catMatch;
-                    }
-                    if (lastCatMatch) {
-                        // Find the matching </Category> for this opening tag
-                        const afterOpen = lastCatMatch.index + lastCatMatch[0].length;
-                        let depth = 1;
-                        let j = afterOpen;
-                        let closingIdx = -1;
-                        while (j < splContent.length && depth > 0) {
-                            const nextOpen = splContent.indexOf('<Category', j);
-                            const nextClose = splContent.indexOf('</Category>', j);
-                            if (nextClose === -1)
-                                break;
-                            if (nextOpen !== -1 && nextOpen < nextClose) {
-                                // Check if self-closing
-                                const tagEnd = splContent.indexOf('>', nextOpen);
-                                if (tagEnd !== -1 && splContent[tagEnd - 1] !== '/') {
-                                    depth++;
-                                }
-                                j = tagEnd + 1;
-                            }
-                            else {
-                                depth--;
-                                if (depth === 0) {
-                                    closingIdx = nextClose;
-                                }
-                                j = nextClose + '</Category>'.length;
-                            }
-                        }
-                        if (closingIdx !== -1) {
-                            // Insert the sound reference just before </Category>
-                            splContent =
-                                splContent.slice(0, closingIdx) +
-                                    '  ' + newSoundRef + '\n' +
-                                    splContent.slice(closingIdx);
-                        }
-                    }
-                }
-                // Write the updated soundlist.spl
-                fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
-                console.log(`Added sound "${displayLabel}" to category "${categoryName}" in soundlist.spl`);
-                // Step 3: Relaunch Soundpad
+                catch { /* ignore */ }
+                console.log(`[addSound] Saved uncropped backup: ${uncroppedDestPath}`);
+            }
+            // Step 1: Kill Soundpad and wait until it is fully gone before touching the file
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Edit soundlist.spl to add the new sound
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            // Build the display label from the custom name or filename (without extension)
+            const displayLabel = displayName || baseName;
+            const escapedLabel = displayLabel
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const escapedUrl = destPath
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const escapedArtist = artist
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            const escapedTitle = title
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+            // Format duration as MM:SS for the SPL tag (Soundpad uses this format)
+            const durationAttr = durationSeconds > 0
+                ? ` duration="${Math.floor(durationSeconds / 60)}:${String(Math.floor(durationSeconds % 60)).padStart(2, '0')}"`
+                : '';
+            // Build the new <Sound /> tag to insert into the Soundlist section
+            const newSoundTag = `<Sound url="${escapedUrl}" customTag="${escapedLabel}" artist="${escapedArtist}" title="${escapedTitle}"${durationAttr}/>`;
+            // --- Insert the new sound into the flat <Soundlist> section ---
+            // The SPL file structure is:
+            //   <Soundlist>
+            //     <Sound url="..." .../> <!-- flat list of sound definitions -->
+            //     ...
+            //     <Categories>...</Categories>  <!-- nested inside Soundlist -->
+            //     <Hotbar>...</Hotbar>
+            //   </Soundlist>
+            //
+            // Category references use <Sound id="N"/> where N is a 0-based index
+            // into the flat list of <Sound url="..."/> entries. We must:
+            //   1. Count only <Sound> tags with a url attribute (not id references)
+            //   2. Insert the new sound BEFORE <Categories> (not at end of Soundlist)
+            const categoriesOpenIdx = splContent.indexOf('<Categories>');
+            const soundlistCloseIdx = splContent.lastIndexOf('</Soundlist>');
+            if (soundlistCloseIdx === -1) {
+                // Relaunch Soundpad before returning error
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                // Step 4: Wait for Soundpad to become available via its named pipe
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Sound "${displayLabel}" added to "${categoryName}" and Soundpad restarted` };
+                return { success: false, error: 'Could not find </Soundlist> in soundlist.spl' };
             }
-            catch (error) {
-                // Attempt to relaunch Soundpad even on error
-                try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                }
-                catch ( /* ignore */_c) { /* ignore */ }
-                // Clean up temp file on error
-                try {
-                    if (fs.existsSync(tempFilePath))
-                        fs.unlinkSync(tempFilePath);
-                }
-                catch ( /* ignore */_d) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to add sound'
-                };
+            // Count only actual sound definitions (those with a url attribute),
+            // NOT the <Sound id="N"/> category references inside <Categories>.
+            // Search the entire <Soundlist> section since sounds may appear after </Categories>.
+            const soundlistOpenIdx = splContent.indexOf('<Soundlist');
+            const soundlistSection = splContent.slice(soundlistOpenIdx, soundlistCloseIdx);
+            const soundUrlTagRegex = /<Sound\s[^>]*url="[^"]*"[^>]*\/>/gi;
+            let existingSoundCount = 0;
+            while (soundUrlTagRegex.exec(soundlistSection) !== null) {
+                existingSoundCount++;
             }
-        });
+            const newSoundId = existingSoundCount;
+            // Insert the new sound tag BEFORE <Categories> (or before </Soundlist> if no categories)
+            const insertIdx = categoriesOpenIdx !== -1 ? categoriesOpenIdx : soundlistCloseIdx;
+            splContent =
+                splContent.slice(0, insertIdx) +
+                    '  ' + newSoundTag + '\n' +
+                    splContent.slice(insertIdx);
+            // Insert the sound reference into the correct category in <Categories>
+            const newSoundRef = `<Sound id="${newSoundId}"/>`;
+            const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+            if (categoriesMatch && categoryName) {
+                const escapedCatName = categoryName
+                    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                // Find the category by name – look for <Category ... name="categoryName" ...>
+                // We need to insert the sound ref before the closing </Category> of the matching category.
+                // Handle both parent and sub-categories by finding the LAST occurrence of the category
+                // (sub-categories appear nested inside parents).
+                const catOpenRegex = new RegExp(`<Category\\s[^>]*name="${escapedCatName}"[^>]*>`, 'gi');
+                let lastCatMatch = null;
+                let catMatch;
+                while ((catMatch = catOpenRegex.exec(splContent)) !== null) {
+                    lastCatMatch = catMatch;
+                }
+                if (lastCatMatch) {
+                    // Find the matching </Category> for this opening tag
+                    const afterOpen = lastCatMatch.index + lastCatMatch[0].length;
+                    let depth = 1;
+                    let j = afterOpen;
+                    let closingIdx = -1;
+                    while (j < splContent.length && depth > 0) {
+                        const nextOpen = splContent.indexOf('<Category', j);
+                        const nextClose = splContent.indexOf('</Category>', j);
+                        if (nextClose === -1)
+                            break;
+                        if (nextOpen !== -1 && nextOpen < nextClose) {
+                            // Check if self-closing
+                            const tagEnd = splContent.indexOf('>', nextOpen);
+                            if (tagEnd !== -1 && splContent[tagEnd - 1] !== '/') {
+                                depth++;
+                            }
+                            j = tagEnd + 1;
+                        }
+                        else {
+                            depth--;
+                            if (depth === 0) {
+                                closingIdx = nextClose;
+                            }
+                            j = nextClose + '</Category>'.length;
+                        }
+                    }
+                    if (closingIdx !== -1) {
+                        // Insert the sound reference just before </Category>
+                        splContent =
+                            splContent.slice(0, closingIdx) +
+                                '  ' + newSoundRef + '\n' +
+                                splContent.slice(closingIdx);
+                    }
+                }
+            }
+            // Write the updated soundlist.spl
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Added sound "${displayLabel}" to category "${categoryName}" in soundlist.spl`);
+            // Step 3: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 4: Wait for Soundpad to become available via its named pipe
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound "${displayLabel}" added to "${categoryName}" and Soundpad restarted` };
+        }
+        catch (error) {
+            // Attempt to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch { /* ignore */ }
+            // Clean up temp file on error
+            try {
+                if (fs.existsSync(tempFilePath))
+                    fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to add sound'
+            };
+        }
     }
     /**
      * Get the list of categories and sub-categories from soundlist.spl.
@@ -1092,59 +1055,55 @@ class SoundpadClient {
             }
         }
     }
-    restartSoundpadOnly() {
-        return __awaiter(this, void 0, void 0, function* () {
-            // Kill Soundpad and wait until it is fully gone, then relaunch it
-            yield this.killSoundpadAndWait();
-            this.cachedConnectionState = false;
-            this.lastConnectionCheck = 0;
-            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-            // Wait for Soundpad to become available via its named pipe
-            yield this.waitForSoundpadReady(15000, 500);
-            return { success: true, data: 'Soundpad restarting' };
-        });
+    async restartSoundpadOnly() {
+        // Kill Soundpad and wait until it is fully gone, then relaunch it
+        await this.killSoundpadAndWait();
+        this.cachedConnectionState = false;
+        this.lastConnectionCheck = 0;
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        // Wait for Soundpad to become available via its named pipe
+        await this.waitForSoundpadReady(15000, 500);
+        return { success: true, data: 'Soundpad restarting' };
     }
     /**
      * Launch Soundpad if it is not already running.
      * Does NOT kill an existing instance first – this is a "start if not running" helper.
      * Returns success:true once Soundpad is detected on the named pipe (or was already running).
      */
-    launchSoundpad() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Check if already running
-                const alreadyConnected = yield this.quickConnectionCheck();
-                if (alreadyConnected) {
-                    this.cachedConnectionState = true;
-                    this.lastConnectionCheck = Date.now();
-                    return { success: true, data: 'Soundpad is already running' };
-                }
-                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                // Check if the executable exists
-                if (!fs.existsSync(soundpadPath)) {
-                    return { success: false, error: `Soundpad executable not found at ${soundpadPath}` };
-                }
-                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                console.log('[launchSoundpad] Soundpad launched – waiting for pipe…');
-                // Wait up to 15 s for Soundpad to become ready
-                yield this.waitForSoundpadReady(15000, 500);
-                // Final check
-                const ready = yield this.quickConnectionCheck();
-                if (ready) {
-                    this.cachedConnectionState = true;
-                    this.lastConnectionCheck = Date.now();
-                    return { success: true, data: 'Soundpad launched successfully' };
-                }
-                return { success: false, error: 'Soundpad launched but did not become ready in time' };
+    async launchSoundpad() {
+        try {
+            // Check if already running
+            const alreadyConnected = await this.quickConnectionCheck();
+            if (alreadyConnected) {
+                this.cachedConnectionState = true;
+                this.lastConnectionCheck = Date.now();
+                return { success: true, data: 'Soundpad is already running' };
             }
-            catch (error) {
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to launch Soundpad'
-                };
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            // Check if the executable exists
+            if (!fs.existsSync(soundpadPath)) {
+                return { success: false, error: `Soundpad executable not found at ${soundpadPath}` };
             }
-        });
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            console.log('[launchSoundpad] Soundpad launched – waiting for pipe…');
+            // Wait up to 15 s for Soundpad to become ready
+            await this.waitForSoundpadReady(15000, 500);
+            // Final check
+            const ready = await this.quickConnectionCheck();
+            if (ready) {
+                this.cachedConnectionState = true;
+                this.lastConnectionCheck = Date.now();
+                return { success: true, data: 'Soundpad launched successfully' };
+            }
+            return { success: false, error: 'Soundpad launched but did not become ready in time' };
+        }
+        catch (error) {
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to launch Soundpad'
+            };
+        }
     }
     /**
      * Poll the Soundpad named pipe until it responds, or until the timeout expires.
@@ -1154,49 +1113,45 @@ class SoundpadClient {
      * @param timeoutMs  Maximum time to wait (default 15 000 ms)
      * @param intervalMs Polling interval (default 500 ms)
      */
-    waitForSoundpadReady() {
-        return __awaiter(this, arguments, void 0, function* (timeoutMs = 15000, intervalMs = 500) {
-            const start = Date.now();
-            while (Date.now() - start < timeoutMs) {
-                try {
-                    const ready = yield this.quickConnectionCheck();
-                    if (ready) {
-                        // Reset connection cache so subsequent calls see the fresh state
-                        this.cachedConnectionState = true;
-                        this.lastConnectionCheck = Date.now();
-                        console.log(`[addSound] Soundpad ready after ${Date.now() - start}ms`);
-                        return;
-                    }
-                }
-                catch (_a) {
-                    // ignore – Soundpad not ready yet
-                }
-                yield new Promise(resolve => setTimeout(resolve, intervalMs));
-            }
-            console.warn(`[addSound] Soundpad did not become ready within ${timeoutMs}ms`);
-        });
-    }
-    isConnected() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const now = Date.now();
-            // Return cached state if still valid
-            if (this.cachedConnectionState !== null &&
-                (now - this.lastConnectionCheck) < this.connectionCheckCacheMs) {
-                return this.cachedConnectionState;
-            }
+    async waitForSoundpadReady(timeoutMs = 15000, intervalMs = 500) {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
             try {
-                // Use a fast connection check with short timeout
-                const connected = yield this.quickConnectionCheck();
-                this.cachedConnectionState = connected;
-                this.lastConnectionCheck = now;
-                return connected;
+                const ready = await this.quickConnectionCheck();
+                if (ready) {
+                    // Reset connection cache so subsequent calls see the fresh state
+                    this.cachedConnectionState = true;
+                    this.lastConnectionCheck = Date.now();
+                    console.log(`[addSound] Soundpad ready after ${Date.now() - start}ms`);
+                    return;
+                }
             }
-            catch (error) {
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = now;
-                return false;
+            catch {
+                // ignore – Soundpad not ready yet
             }
-        });
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+        console.warn(`[addSound] Soundpad did not become ready within ${timeoutMs}ms`);
+    }
+    async isConnected() {
+        const now = Date.now();
+        // Return cached state if still valid
+        if (this.cachedConnectionState !== null &&
+            (now - this.lastConnectionCheck) < this.connectionCheckCacheMs) {
+            return this.cachedConnectionState;
+        }
+        try {
+            // Use a fast connection check with short timeout
+            const connected = await this.quickConnectionCheck();
+            this.cachedConnectionState = connected;
+            this.lastConnectionCheck = now;
+            return connected;
+        }
+        catch (error) {
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = now;
+            return false;
+        }
     }
     quickConnectionCheck() {
         return new Promise((resolve) => {
@@ -1496,122 +1451,129 @@ class SoundpadClient {
             .replace(/&#(\d+);/g, (_, num) => String.fromCharCode(parseInt(num, 10)))
             .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
     }
-    getCategoryIcons() {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                // Read the soundlist.spl file - always reparse from disk
-                if (!fs.existsSync(this.soundlistPath)) {
-                    console.log('Soundlist file not found at:', this.soundlistPath);
-                    return { success: false, error: 'Soundlist file not found' };
-                }
-                // Get file stats to log when it was last modified
-                const stats = fs.statSync(this.soundlistPath);
-                console.log(`Reparsing category icons from soundlist.spl (last modified: ${stats.mtime.toISOString()})`);
-                // Read file fresh from disk (no caching)
-                const xmlContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                const categoryIcons = this.parseCategoryIcons(xmlContent);
-                console.log(`Parsed ${categoryIcons.length} category icons`);
-                return { success: true, data: categoryIcons };
+    async getCategoryIcons() {
+        try {
+            // Read the soundlist.spl file - always reparse from disk
+            if (!fs.existsSync(this.soundlistPath)) {
+                console.log('Soundlist file not found at:', this.soundlistPath);
+                return { success: false, error: 'Soundlist file not found' };
             }
-            catch (error) {
-                console.error('Error reading category icons:', error);
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to read category icons'
-                };
-            }
-        });
+            // Get file stats to log when it was last modified
+            const stats = fs.statSync(this.soundlistPath);
+            console.log(`Reparsing category icons from soundlist.spl (last modified: ${stats.mtime.toISOString()})`);
+            // Read file fresh from disk (no caching)
+            const xmlContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const categoryIcons = this.parseCategoryIcons(xmlContent);
+            console.log(`Parsed ${categoryIcons.length} category icons`);
+            return { success: true, data: categoryIcons };
+        }
+        catch (error) {
+            console.error('Error reading category icons:', error);
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to read category icons'
+            };
+        }
     }
     parseCategoryIcons(xmlContent) {
         const icons = [];
         // Find the Categories section
-        const categoriesMatch = /<Categories>([\s\S]*?)<\/Categories>/i.exec(xmlContent);
+        const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(xmlContent);
         if (!categoriesMatch) {
             console.log('No Categories section found in soundlist');
             return icons;
         }
         const categoriesContent = categoriesMatch[1];
-        // Parse each Category element
-        const categoryRegex = /<Category\s+([^>]*?)(?:\/>|>[\s\S]*?<\/Category>)/gi;
-        let match;
-        while ((match = categoryRegex.exec(categoriesContent)) !== null) {
-            const attrs = match[1];
+        // Use the robust balanced-tag parser instead of a simple regex
+        // (the regex approach breaks on nested categories)
+        this.collectCategoryIcons(categoriesContent, icons);
+        return icons;
+    }
+    /** Recursively collect icon info from categories and their sub-categories. */
+    collectCategoryIcons(xmlContent, icons) {
+        const topLevel = this.extractTopLevelCategories(xmlContent);
+        for (const { attrs, content } of topLevel) {
+            const hidden = this.extractAttribute(attrs, 'hidden');
+            if (hidden === 'true')
+                continue;
             const name = this.extractAttribute(attrs, 'name');
-            const icon = this.extractAttribute(attrs, 'icon');
-            // Skip categories without a name (like the hidden list category)
             if (!name)
                 continue;
-            // Check if icon is base64 encoded (long string of only base64 chars) or a stock icon name / file path
-            const isBase64 = !!(icon && !icon.startsWith('stock_') && /^[A-Za-z0-9+/=]{20,}$/.test(icon));
+            const icon = this.extractAttribute(attrs, 'icon');
+            // Check if icon is base64 encoded (long string of only base64 chars)
+            // Strip any whitespace before testing, as base64 may contain line breaks
+            const cleanIcon = icon ? icon.replace(/\s/g, '') : '';
+            const isBase64 = !!(cleanIcon && !cleanIcon.startsWith('stock_') && /^[A-Za-z0-9+/=]{20,}$/.test(cleanIcon));
             icons.push({
                 name,
-                icon: icon || '',
+                icon: cleanIcon || '',
                 isBase64
             });
-            console.log(`Category icon found: ${name}, isBase64: ${isBase64}, icon length: ${(icon === null || icon === void 0 ? void 0 : icon.length) || 0}`);
+            console.log(`Category icon found: ${name}, isBase64: ${isBase64}, icon length: ${cleanIcon?.length || 0}`);
+            // Recurse into sub-categories
+            if (content) {
+                this.collectCategoryIcons(content, icons);
+            }
         }
-        return icons;
     }
     /**
      * Update the icon attribute for a category (top-level or sub-category)
      * in soundlist.spl.  Follows the kill → edit → restart pattern.
      */
-    setCategoryIcon(categoryName, iconBase64) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!fs.existsSync(this.soundlistPath)) {
-                return { success: false, error: 'Soundlist file not found' };
-            }
-            try {
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
-                if (!categoriesMatch) {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: 'No Categories section found in soundlist.spl' };
-                }
-                // Match any <Category ... name="categoryName" ...> tag (self-closing or opening)
-                // We need to find the tag and replace/add the icon attribute
-                const escapedName = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const categoryTagRegex = new RegExp(`(<Category\\s+)([^>]*?name="${escapedName}"[^>]*?)(\\s*/?>)`, 'i');
-                const tagMatch = categoryTagRegex.exec(splContent);
-                if (!tagMatch) {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: `Category "${categoryName}" not found in soundlist.spl` };
-                }
-                const [fullMatch, prefix, attrs, suffix] = tagMatch;
-                // Replace existing icon attribute or add one
-                let newAttrs;
-                if (/\bicon="[^"]*"/i.test(attrs)) {
-                    newAttrs = attrs.replace(/\bicon="[^"]*"/i, `icon="${iconBase64}"`);
-                }
-                else {
-                    newAttrs = attrs + ` icon="${iconBase64}"`;
-                }
-                splContent = splContent.replace(fullMatch, prefix + newAttrs + suffix);
-                fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
-                console.log(`Updated icon for category "${categoryName}" (base64 length: ${iconBase64.length})`);
+    async setCategoryIcon(categoryName, iconBase64) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+            if (!categoriesMatch) {
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Category "${categoryName}" icon updated` };
+                return { success: false, error: 'No Categories section found in soundlist.spl' };
             }
-            catch (error) {
-                console.error('setCategoryIcon error:', error);
-                try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                }
-                catch (e) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to set category icon'
-                };
+            // Match any <Category ... name="categoryName" ...> tag (self-closing or opening)
+            // We need to find the tag and replace/add the icon attribute
+            const escapedName = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const categoryTagRegex = new RegExp(`(<Category\\s+)([^>]*?name="${escapedName}"[^>]*?)(\\s*/?>)`, 'i');
+            const tagMatch = categoryTagRegex.exec(splContent);
+            if (!tagMatch) {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                return { success: false, error: `Category "${categoryName}" not found in soundlist.spl` };
             }
-        });
+            const [fullMatch, prefix, attrs, suffix] = tagMatch;
+            // Replace existing icon attribute or add one
+            let newAttrs;
+            if (/\bicon="[^"]*"/i.test(attrs)) {
+                newAttrs = attrs.replace(/\bicon="[^"]*"/i, `icon="${iconBase64}"`);
+            }
+            else {
+                newAttrs = attrs + ` icon="${iconBase64}"`;
+            }
+            splContent = splContent.replace(fullMatch, prefix + newAttrs + suffix);
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`Updated icon for category "${categoryName}" (base64 length: ${iconBase64.length})`);
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Category "${categoryName}" icon updated` };
+        }
+        catch (error) {
+            console.error('setCategoryIcon error:', error);
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to set category icon'
+            };
+        }
     }
     /**
      * Parse the <Categories> section of soundlist.spl to build a map of
@@ -1672,121 +1634,119 @@ class SoundpadClient {
      * Restore the uncropped backup for a sound: replace the cropped file with
      * the _uncropped version, then restart Soundpad so it picks up the change.
      */
-    deleteSound(soundIndex) {
-        return __awaiter(this, void 0, void 0, function* () {
-            if (!fs.existsSync(this.soundlistPath)) {
-                return { success: false, error: 'Soundlist file not found' };
+    async deleteSound(soundIndex) {
+        if (!fs.existsSync(this.soundlistPath)) {
+            return { success: false, error: 'Soundlist file not found' };
+        }
+        try {
+            // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
+            const splId = soundIndex - 1;
+            // Step 1: Kill Soundpad so we can safely edit the file
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Step 2: Read soundlist.spl
+            let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+            // Step 3: Find the Nth <Sound url="..." .../> definition tag (0-based)
+            const soundUrlTagRegex = /<Sound\s[^>]*url="([^"]*)"[^>]*\/>/gi;
+            let match;
+            let count = 0;
+            let soundDefStart = -1;
+            let soundDefEnd = -1;
+            let soundFilePath = '';
+            while ((match = soundUrlTagRegex.exec(splContent)) !== null) {
+                if (count === splId) {
+                    soundDefStart = match.index;
+                    soundDefEnd = match.index + match[0].length;
+                    soundFilePath = match[1]
+                        .replace(/&amp;/g, '&')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&quot;/g, '"');
+                    break;
+                }
+                count++;
             }
-            try {
-                // SPL file uses 0-based IDs; Soundpad API uses 1-based indices
-                const splId = soundIndex - 1;
-                // Step 1: Kill Soundpad so we can safely edit the file
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                // Step 2: Read soundlist.spl
-                let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
-                // Step 3: Find the Nth <Sound url="..." .../> definition tag (0-based)
-                const soundUrlTagRegex = /<Sound\s[^>]*url="([^"]*)"[^>]*\/>/gi;
-                let match;
-                let count = 0;
-                let soundDefStart = -1;
-                let soundDefEnd = -1;
-                let soundFilePath = '';
-                while ((match = soundUrlTagRegex.exec(splContent)) !== null) {
-                    if (count === splId) {
-                        soundDefStart = match.index;
-                        soundDefEnd = match.index + match[0].length;
-                        soundFilePath = match[1]
-                            .replace(/&amp;/g, '&')
-                            .replace(/&lt;/g, '<')
-                            .replace(/&gt;/g, '>')
-                            .replace(/&quot;/g, '"');
-                        break;
-                    }
-                    count++;
-                }
-                if (soundDefStart === -1) {
-                    // Relaunch Soundpad before returning error
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                    return { success: false, error: `Sound definition at index ${soundIndex} not found in soundlist.spl` };
-                }
-                // Step 4: Remove the sound definition tag (and surrounding whitespace/newline)
-                // Eat the preceding whitespace on the same line and the trailing newline
-                let removeStart = soundDefStart;
-                while (removeStart > 0 && splContent[removeStart - 1] === ' ') {
-                    removeStart--;
-                }
-                let removeEnd = soundDefEnd;
-                if (splContent[removeEnd] === '\r')
-                    removeEnd++;
-                if (splContent[removeEnd] === '\n')
-                    removeEnd++;
-                splContent = splContent.slice(0, removeStart) + splContent.slice(removeEnd);
-                // Step 5: Remove all <Sound id="splId"/> references from Categories and Hotbar
-                const soundRefRegex = new RegExp(`[ \\t]*<Sound\\s+id="${splId}"\\s*/>[ \\t]*\\r?\\n?`, 'g');
-                splContent = splContent.replace(soundRefRegex, '');
-                // Step 6: Renumber all <Sound id="N"/> where N > splId (decrement by 1)
-                splContent = splContent.replace(/<Sound\s+id="(\d+)"\s*\/>/g, (_full, idStr) => {
-                    const id = parseInt(idStr, 10);
-                    if (id > splId) {
-                        return `<Sound id="${id - 1}"/>`;
-                    }
-                    return _full;
-                });
-                // Step 7: Write the updated file
-                fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
-                console.log(`[deleteSound] Removed sound index ${soundIndex} (splId=${splId}) from soundlist.spl`);
-                // Step 8: Delete the physical audio file and any _uncropped backup
-                if (soundFilePath && fs.existsSync(soundFilePath)) {
-                    try {
-                        fs.unlinkSync(soundFilePath);
-                        console.log(`[deleteSound] Deleted audio file: ${soundFilePath}`);
-                    }
-                    catch (e) {
-                        console.warn(`[deleteSound] Failed to delete audio file: ${soundFilePath}`, e);
-                    }
-                    // Delete _uncropped backup if it exists
-                    const ext = path.extname(soundFilePath);
-                    const base = path.basename(soundFilePath, ext);
-                    const dir = path.dirname(soundFilePath);
-                    const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
-                    for (const aExt of audioExts) {
-                        const uncroppedPath = path.join(dir, `${base}_uncropped${aExt}`);
-                        if (fs.existsSync(uncroppedPath)) {
-                            try {
-                                fs.unlinkSync(uncroppedPath);
-                                console.log(`[deleteSound] Deleted uncropped backup: ${uncroppedPath}`);
-                            }
-                            catch (e) {
-                                console.warn(`[deleteSound] Failed to delete uncropped backup: ${uncroppedPath}`, e);
-                            }
-                            break;
-                        }
-                    }
-                }
-                // Step 9: Relaunch Soundpad
+            if (soundDefStart === -1) {
+                // Relaunch Soundpad before returning error
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                // Step 10: Wait for Soundpad to become available
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Sound "${path.basename(soundFilePath)}" deleted successfully` };
+                return { success: false, error: `Sound definition at index ${soundIndex} not found in soundlist.spl` };
             }
-            catch (error) {
-                console.error('deleteSound error:', error);
-                // Try to relaunch Soundpad even on error
-                try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 4: Remove the sound definition tag (and surrounding whitespace/newline)
+            // Eat the preceding whitespace on the same line and the trailing newline
+            let removeStart = soundDefStart;
+            while (removeStart > 0 && splContent[removeStart - 1] === ' ') {
+                removeStart--;
+            }
+            let removeEnd = soundDefEnd;
+            if (splContent[removeEnd] === '\r')
+                removeEnd++;
+            if (splContent[removeEnd] === '\n')
+                removeEnd++;
+            splContent = splContent.slice(0, removeStart) + splContent.slice(removeEnd);
+            // Step 5: Remove all <Sound id="splId"/> references from Categories and Hotbar
+            const soundRefRegex = new RegExp(`[ \\t]*<Sound\\s+id="${splId}"\\s*/>[ \\t]*\\r?\\n?`, 'g');
+            splContent = splContent.replace(soundRefRegex, '');
+            // Step 6: Renumber all <Sound id="N"/> where N > splId (decrement by 1)
+            splContent = splContent.replace(/<Sound\s+id="(\d+)"\s*\/>/g, (_full, idStr) => {
+                const id = parseInt(idStr, 10);
+                if (id > splId) {
+                    return `<Sound id="${id - 1}"/>`;
                 }
-                catch (e) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to delete sound'
-                };
+                return _full;
+            });
+            // Step 7: Write the updated file
+            fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+            console.log(`[deleteSound] Removed sound index ${soundIndex} (splId=${splId}) from soundlist.spl`);
+            // Step 8: Delete the physical audio file and any _uncropped backup
+            if (soundFilePath && fs.existsSync(soundFilePath)) {
+                try {
+                    fs.unlinkSync(soundFilePath);
+                    console.log(`[deleteSound] Deleted audio file: ${soundFilePath}`);
+                }
+                catch (e) {
+                    console.warn(`[deleteSound] Failed to delete audio file: ${soundFilePath}`, e);
+                }
+                // Delete _uncropped backup if it exists
+                const ext = path.extname(soundFilePath);
+                const base = path.basename(soundFilePath, ext);
+                const dir = path.dirname(soundFilePath);
+                const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+                for (const aExt of audioExts) {
+                    const uncroppedPath = path.join(dir, `${base}_uncropped${aExt}`);
+                    if (fs.existsSync(uncroppedPath)) {
+                        try {
+                            fs.unlinkSync(uncroppedPath);
+                            console.log(`[deleteSound] Deleted uncropped backup: ${uncroppedPath}`);
+                        }
+                        catch (e) {
+                            console.warn(`[deleteSound] Failed to delete uncropped backup: ${uncroppedPath}`, e);
+                        }
+                        break;
+                    }
+                }
             }
-        });
+            // Step 9: Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Step 10: Wait for Soundpad to become available
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound "${path.basename(soundFilePath)}" deleted successfully` };
+        }
+        catch (error) {
+            console.error('deleteSound error:', error);
+            // Try to relaunch Soundpad even on error
+            try {
+                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            }
+            catch (e) { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to delete sound'
+            };
+        }
     }
     /**
      * Resolve the filesystem path of the Nth sound in soundlist.spl.
@@ -1817,164 +1777,161 @@ class SoundpadClient {
      * Kills Soundpad, overwrites (or replaces with new extension), cleans up
      * any _uncropped backup, and relaunches Soundpad.
      */
-    updateSoundFile(soundIndex, tempFilePath, originalName) {
-        return __awaiter(this, void 0, void 0, function* () {
-            try {
-                const currentPath = this.getSoundFilePath(soundIndex);
-                if (!currentPath) {
-                    try {
-                        fs.unlinkSync(tempFilePath);
-                    }
-                    catch ( /* ignore */_a) { /* ignore */ }
-                    return { success: false, error: `Sound at index ${soundIndex} not found in soundlist.spl` };
-                }
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                const currentExt = path.extname(currentPath).toLowerCase();
-                const newExt = path.extname(originalName).toLowerCase();
-                if (currentExt === newExt) {
-                    // Same extension — overwrite in place
-                    fs.copyFileSync(tempFilePath, currentPath);
-                }
-                else {
-                    // Different extension — write new file, update SPL url, remove old file
-                    const dir = path.dirname(currentPath);
-                    const base = path.basename(currentPath, currentExt);
-                    const newPath = path.join(dir, `${base}${newExt}`);
-                    fs.copyFileSync(tempFilePath, newPath);
-                    if (fs.existsSync(this.soundlistPath)) {
-                        let spl = fs.readFileSync(this.soundlistPath, 'utf-8');
-                        const escapedOld = currentPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
-                        spl = spl.replace(new RegExp(escapedOld, 'g'), newPath);
-                        fs.writeFileSync(this.soundlistPath, spl, 'utf-8');
-                    }
-                    try {
-                        fs.unlinkSync(currentPath);
-                    }
-                    catch ( /* ignore */_b) { /* ignore */ }
-                }
-                // Clean up temp file
+    async updateSoundFile(soundIndex, tempFilePath, originalName) {
+        try {
+            const currentPath = this.getSoundFilePath(soundIndex);
+            if (!currentPath) {
                 try {
                     fs.unlinkSync(tempFilePath);
                 }
-                catch ( /* ignore */_c) { /* ignore */ }
-                // Remove any _uncropped backup (user is deliberately replacing the audio)
-                const ext = path.extname(currentPath);
-                const base = path.basename(currentPath, ext);
+                catch { /* ignore */ }
+                return { success: false, error: `Sound at index ${soundIndex} not found in soundlist.spl` };
+            }
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            const currentExt = path.extname(currentPath).toLowerCase();
+            const newExt = path.extname(originalName).toLowerCase();
+            if (currentExt === newExt) {
+                // Same extension — overwrite in place
+                fs.copyFileSync(tempFilePath, currentPath);
+            }
+            else {
+                // Different extension — write new file, update SPL url, remove old file
                 const dir = path.dirname(currentPath);
-                const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
-                for (const aExt of audioExts) {
-                    const uncroppedPath = path.join(dir, `${base}_uncropped${aExt}`);
-                    if (fs.existsSync(uncroppedPath)) {
-                        try {
-                            fs.unlinkSync(uncroppedPath);
-                        }
-                        catch ( /* ignore */_d) { /* ignore */ }
-                        console.log(`[updateSoundFile] Removed uncropped backup: ${uncroppedPath}`);
-                        break;
-                    }
+                const base = path.basename(currentPath, currentExt);
+                const newPath = path.join(dir, `${base}${newExt}`);
+                fs.copyFileSync(tempFilePath, newPath);
+                if (fs.existsSync(this.soundlistPath)) {
+                    let spl = fs.readFileSync(this.soundlistPath, 'utf-8');
+                    const escapedOld = currentPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
+                    spl = spl.replace(new RegExp(escapedOld, 'g'), newPath);
+                    fs.writeFileSync(this.soundlistPath, spl, 'utf-8');
                 }
-                console.log(`[updateSoundFile] Replaced audio for sound index ${soundIndex}`);
-                // Relaunch Soundpad
-                const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                yield this.waitForSoundpadReady(15000, 500);
-                return { success: true, data: `Sound file updated successfully` };
-            }
-            catch (error) {
-                // Try to relaunch Soundpad even on error
                 try {
-                    const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
-                    (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+                    fs.unlinkSync(currentPath);
                 }
-                catch ( /* ignore */_e) { /* ignore */ }
-                try {
-                    if (fs.existsSync(tempFilePath))
-                        fs.unlinkSync(tempFilePath);
-                }
-                catch ( /* ignore */_f) { /* ignore */ }
-                return {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Failed to update sound file'
-                };
+                catch { /* ignore */ }
             }
-        });
-    }
-    resetCrop(soundUrl) {
-        return __awaiter(this, void 0, void 0, function* () {
+            // Clean up temp file
             try {
-                const soundPath = soundUrl.replace(/\//g, path.sep);
-                const ext = path.extname(soundPath);
-                const base = path.basename(soundPath, ext);
-                const dir = path.dirname(soundPath);
-                // Find the _uncropped backup (may have a different extension than the cropped file)
-                const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
-                let uncroppedPath = '';
-                for (const aExt of audioExts) {
-                    const candidate = path.join(dir, `${base}_uncropped${aExt}`);
-                    if (fs.existsSync(candidate)) {
-                        uncroppedPath = candidate;
-                        break;
-                    }
-                }
-                if (!uncroppedPath) {
-                    return { success: false, error: 'No uncropped backup found for this sound' };
-                }
-                // Kill Soundpad so we can safely modify the file
-                yield this.killSoundpadAndWait();
-                this.cachedConnectionState = false;
-                this.lastConnectionCheck = 0;
-                // Replace the cropped file with the uncropped backup
-                const uncroppedExt = path.extname(uncroppedPath);
-                if (ext === uncroppedExt) {
-                    // Same extension — just overwrite
-                    fs.copyFileSync(uncroppedPath, soundPath);
-                }
-                else {
-                    // Different extension — write new file, update SPL reference, remove old cropped file
-                    const newSoundPath = path.join(dir, `${base}${uncroppedExt}`);
-                    fs.copyFileSync(uncroppedPath, newSoundPath);
-                    // Update the URL in soundlist.spl
-                    if (fs.existsSync(this.soundlistPath)) {
-                        let spl = fs.readFileSync(this.soundlistPath, 'utf-8');
-                        const escapedOld = soundPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
-                        spl = spl.replace(new RegExp(escapedOld, 'g'), newSoundPath);
-                        fs.writeFileSync(this.soundlistPath, spl, 'utf-8');
-                    }
-                    // Remove old cropped file (different extension)
+                fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            // Remove any _uncropped backup (user is deliberately replacing the audio)
+            const ext = path.extname(currentPath);
+            const base = path.basename(currentPath, ext);
+            const dir = path.dirname(currentPath);
+            const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+            for (const aExt of audioExts) {
+                const uncroppedPath = path.join(dir, `${base}_uncropped${aExt}`);
+                if (fs.existsSync(uncroppedPath)) {
                     try {
-                        fs.unlinkSync(soundPath);
+                        fs.unlinkSync(uncroppedPath);
                     }
-                    catch ( /* ignore */_a) { /* ignore */ }
+                    catch { /* ignore */ }
+                    console.log(`[updateSoundFile] Removed uncropped backup: ${uncroppedPath}`);
+                    break;
                 }
-                // Remove the uncropped backup since it's been restored
-                try {
-                    fs.unlinkSync(uncroppedPath);
-                }
-                catch ( /* ignore */_b) { /* ignore */ }
-                console.log(`[resetCrop] Restored uncropped audio for: ${soundPath}`);
-                // Relaunch Soundpad
+            }
+            console.log(`[updateSoundFile] Replaced audio for sound index ${soundIndex}`);
+            // Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            await this.waitForSoundpadReady(15000, 500);
+            return { success: true, data: `Sound file updated successfully` };
+        }
+        catch (error) {
+            // Try to relaunch Soundpad even on error
+            try {
                 const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
                 (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
-                // Wait for Soundpad to respond
-                const timeout = 15000;
-                const start = Date.now();
-                while (Date.now() - start < timeout) {
-                    const connected = yield this.isConnected();
-                    if (connected)
-                        break;
-                    yield new Promise(r => setTimeout(r, 500));
+            }
+            catch { /* ignore */ }
+            try {
+                if (fs.existsSync(tempFilePath))
+                    fs.unlinkSync(tempFilePath);
+            }
+            catch { /* ignore */ }
+            return {
+                success: false,
+                error: error instanceof Error ? error.message : 'Failed to update sound file'
+            };
+        }
+    }
+    async resetCrop(soundUrl) {
+        try {
+            const soundPath = soundUrl.replace(/\//g, path.sep);
+            const ext = path.extname(soundPath);
+            const base = path.basename(soundPath, ext);
+            const dir = path.dirname(soundPath);
+            // Find the _uncropped backup (may have a different extension than the cropped file)
+            const audioExts = ['.mp3', '.wav', '.ogg', '.flac', '.aac', '.wma', '.m4a', '.opus', '.aiff', '.ape'];
+            let uncroppedPath = '';
+            for (const aExt of audioExts) {
+                const candidate = path.join(dir, `${base}_uncropped${aExt}`);
+                if (fs.existsSync(candidate)) {
+                    uncroppedPath = candidate;
+                    break;
                 }
-                return { success: true, data: 'Crop reset successfully' };
             }
-            catch (error) {
-                const errMsg = error instanceof Error ? error.message : String(error);
-                console.error('[resetCrop] Error:', errMsg);
-                return { success: false, error: errMsg };
+            if (!uncroppedPath) {
+                return { success: false, error: 'No uncropped backup found for this sound' };
             }
-        });
+            // Kill Soundpad so we can safely modify the file
+            await this.killSoundpadAndWait();
+            this.cachedConnectionState = false;
+            this.lastConnectionCheck = 0;
+            // Replace the cropped file with the uncropped backup
+            const uncroppedExt = path.extname(uncroppedPath);
+            if (ext === uncroppedExt) {
+                // Same extension — just overwrite
+                fs.copyFileSync(uncroppedPath, soundPath);
+            }
+            else {
+                // Different extension — write new file, update SPL reference, remove old cropped file
+                const newSoundPath = path.join(dir, `${base}${uncroppedExt}`);
+                fs.copyFileSync(uncroppedPath, newSoundPath);
+                // Update the URL in soundlist.spl
+                if (fs.existsSync(this.soundlistPath)) {
+                    let spl = fs.readFileSync(this.soundlistPath, 'utf-8');
+                    const escapedOld = soundPath.replace(/\\/g, '\\\\').replace(/[.*+?^${}()|[\]]/g, '\\$&');
+                    spl = spl.replace(new RegExp(escapedOld, 'g'), newSoundPath);
+                    fs.writeFileSync(this.soundlistPath, spl, 'utf-8');
+                }
+                // Remove old cropped file (different extension)
+                try {
+                    fs.unlinkSync(soundPath);
+                }
+                catch { /* ignore */ }
+            }
+            // Remove the uncropped backup since it's been restored
+            try {
+                fs.unlinkSync(uncroppedPath);
+            }
+            catch { /* ignore */ }
+            console.log(`[resetCrop] Restored uncropped audio for: ${soundPath}`);
+            // Relaunch Soundpad
+            const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+            (0, child_process_1.spawn)(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+            // Wait for Soundpad to respond
+            const timeout = 15000;
+            const start = Date.now();
+            while (Date.now() - start < timeout) {
+                const connected = await this.isConnected();
+                if (connected)
+                    break;
+                await new Promise(r => setTimeout(r, 500));
+            }
+            return { success: true, data: 'Crop reset successfully' };
+        }
+        catch (error) {
+            const errMsg = error instanceof Error ? error.message : String(error);
+            console.error('[resetCrop] Error:', errMsg);
+            return { success: false, error: errMsg };
+        }
     }
 }
 exports.SoundpadClient = SoundpadClient;
 exports.default = SoundpadClient;
+//# sourceMappingURL=soundpad-client.js.map

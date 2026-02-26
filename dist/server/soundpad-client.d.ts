@@ -186,6 +186,13 @@ export declare class SoundpadClient {
     private decodeXmlEntities;
     getCategoryIcons(): Promise<SoundpadResponse>;
     private parseCategoryIcons;
+    /** Recursively collect icon info from categories and their sub-categories. */
+    private collectCategoryIcons;
+    /**
+     * Update the icon attribute for a category (top-level or sub-category)
+     * in soundlist.spl.  Follows the kill → edit → restart pattern.
+     */
+    setCategoryIcon(categoryName: string, iconBase64: string): Promise<SoundpadResponse>;
     /**
      * Parse the <Categories> section of soundlist.spl to build a map of
      * sound index -> { category, parentCategory }.

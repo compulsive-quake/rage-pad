@@ -32,15 +32,6 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -115,9 +106,9 @@ else {
     console.warn(`[config-watch] soundlist.spl not found at ${soundlistPath}; watcher not started`);
 }
 // Get connection status
-router.get('/status', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/status', async (req, res) => {
     try {
-        const isConnected = yield soundpadClient.isConnected();
+        const isConnected = await soundpadClient.isConnected();
         res.json({ connected: isConnected });
     }
     catch (error) {
@@ -126,11 +117,11 @@ router.get('/status', (req, res) => __awaiter(void 0, void 0, void 0, function* 
             error: 'Failed to check connection status'
         });
     }
-}));
+});
 // Get all sounds
-router.get('/sounds', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/sounds', async (req, res) => {
     try {
-        const result = yield soundpadClient.getSoundList();
+        const result = await soundpadClient.getSoundList();
         if (result.success) {
             res.json(result.data);
         }
@@ -141,12 +132,12 @@ router.get('/sounds', (req, res) => __awaiter(void 0, void 0, void 0, function* 
     catch (error) {
         res.status(500).json({ error: 'Failed to get sounds' });
     }
-}));
+});
 // Search sounds
-router.get('/sounds/search', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/sounds/search', async (req, res) => {
     try {
         const query = req.query.q || '';
-        const result = yield soundpadClient.searchSounds(query);
+        const result = await soundpadClient.searchSounds(query);
         if (result.success) {
             res.json(result.data);
         }
@@ -157,10 +148,9 @@ router.get('/sounds/search', (req, res) => __awaiter(void 0, void 0, void 0, fun
     catch (error) {
         res.status(500).json({ error: 'Failed to search sounds' });
     }
-}));
+});
 // Play a sound by index
-router.post('/sounds/:index/play', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+router.post('/sounds/:index/play', async (req, res) => {
     try {
         const index = parseInt(req.params.index, 10);
         if (isNaN(index)) {
@@ -168,14 +158,14 @@ router.post('/sounds/:index/play', (req, res) => __awaiter(void 0, void 0, void 
             return;
         }
         const { speakersOnly = false, micOnly = false } = req.body;
-        const result = yield soundpadClient.playSound(index, speakersOnly, micOnly);
+        const result = await soundpadClient.playSound(index, speakersOnly, micOnly);
         if (result.success) {
             res.json({ message: 'Sound playing', data: result.data });
         }
         else {
             // Check if the error is due to Soundpad not running (ENOENT pipe error)
-            const isSoundpadNotRunning = ((_a = result.error) === null || _a === void 0 ? void 0 : _a.includes('ENOENT')) ||
-                ((_b = result.error) === null || _b === void 0 ? void 0 : _b.includes('sp_remote_control'));
+            const isSoundpadNotRunning = result.error?.includes('ENOENT') ||
+                result.error?.includes('sp_remote_control');
             if (isSoundpadNotRunning) {
                 res.status(503).json({ error: result.error, soundpadNotRunning: true });
             }
@@ -194,11 +184,11 @@ router.post('/sounds/:index/play', (req, res) => __awaiter(void 0, void 0, void 
             res.status(500).json({ error: errMsg });
         }
     }
-}));
+});
 // Stop current sound
-router.post('/stop', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/stop', async (req, res) => {
     try {
-        const result = yield soundpadClient.stopSound();
+        const result = await soundpadClient.stopSound();
         if (result.success) {
             res.json({ message: 'Sound stopped' });
         }
@@ -209,11 +199,11 @@ router.post('/stop', (req, res) => __awaiter(void 0, void 0, void 0, function* (
     catch (error) {
         res.status(500).json({ error: 'Failed to stop sound' });
     }
-}));
+});
 // Toggle pause
-router.post('/pause', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/pause', async (req, res) => {
     try {
-        const result = yield soundpadClient.togglePause();
+        const result = await soundpadClient.togglePause();
         if (result.success) {
             res.json({ message: 'Pause toggled' });
         }
@@ -224,16 +214,16 @@ router.post('/pause', (req, res) => __awaiter(void 0, void 0, void 0, function* 
     catch (error) {
         res.status(500).json({ error: 'Failed to toggle pause' });
     }
-}));
+});
 // Set volume
-router.post('/volume', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/volume', async (req, res) => {
     try {
         const { volume } = req.body;
         if (typeof volume !== 'number' || volume < 0 || volume > 100) {
             res.status(400).json({ error: 'Volume must be a number between 0 and 100' });
             return;
         }
-        const result = yield soundpadClient.setVolume(volume);
+        const result = await soundpadClient.setVolume(volume);
         if (result.success) {
             res.json({ message: 'Volume set', volume });
         }
@@ -244,9 +234,9 @@ router.post('/volume', (req, res) => __awaiter(void 0, void 0, void 0, function*
     catch (error) {
         res.status(500).json({ error: 'Failed to set volume' });
     }
-}));
+});
 // Rename a sound by index
-router.post('/sounds/:index/rename', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/sounds/:index/rename', async (req, res) => {
     try {
         const index = parseInt(req.params.index, 10);
         if (isNaN(index)) {
@@ -258,7 +248,7 @@ router.post('/sounds/:index/rename', (req, res) => __awaiter(void 0, void 0, voi
             res.status(400).json({ error: 'Title must be a non-empty string' });
             return;
         }
-        const result = yield soundpadClient.renameSound(index, title.trim());
+        const result = await soundpadClient.renameSound(index, title.trim());
         if (result.success) {
             res.json({ message: 'Sound renamed', data: result.data });
         }
@@ -269,9 +259,9 @@ router.post('/sounds/:index/rename', (req, res) => __awaiter(void 0, void 0, voi
     catch (error) {
         res.status(500).json({ error: 'Failed to rename sound' });
     }
-}));
+});
 // Update a sound's details (tag, artist, title, and optionally move to a different category)
-router.post('/sounds/:index/update-details', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/sounds/:index/update-details', async (req, res) => {
     try {
         const index = parseInt(req.params.index, 10);
         if (isNaN(index)) {
@@ -284,7 +274,7 @@ router.post('/sounds/:index/update-details', (req, res) => __awaiter(void 0, voi
             return;
         }
         sseSuppressed = true;
-        const result = yield soundpadClient.updateSoundDetails(index, customTag.trim(), typeof artist === 'string' ? artist : '', typeof title === 'string' ? title : '', typeof category === 'string' && category.trim() ? category.trim() : undefined);
+        const result = await soundpadClient.updateSoundDetails(index, customTag.trim(), typeof artist === 'string' ? artist : '', typeof title === 'string' ? title : '', typeof category === 'string' && category.trim() ? category.trim() : undefined);
         sseSuppressed = false;
         if (result.success) {
             notifySseClients();
@@ -298,9 +288,9 @@ router.post('/sounds/:index/update-details', (req, res) => __awaiter(void 0, voi
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to update sound details' });
     }
-}));
+});
 // Delete a sound by index (removes from SPL, deletes file, restarts Soundpad)
-router.delete('/sounds/:index', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.delete('/sounds/:index', async (req, res) => {
     try {
         const index = parseInt(req.params.index, 10);
         if (isNaN(index)) {
@@ -309,7 +299,7 @@ router.delete('/sounds/:index', (req, res) => __awaiter(void 0, void 0, void 0, 
         }
         // Suppress SSE while Soundpad is being restarted
         sseSuppressed = true;
-        const result = yield soundpadClient.deleteSound(index);
+        const result = await soundpadClient.deleteSound(index);
         // Re-enable SSE and notify clients
         sseSuppressed = false;
         if (result.success) {
@@ -324,9 +314,9 @@ router.delete('/sounds/:index', (req, res) => __awaiter(void 0, void 0, void 0, 
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to delete sound' });
     }
-}));
+});
 // Reorder a sound (move to a different category/position)
-router.post('/sounds/reorder', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/sounds/reorder', async (req, res) => {
     try {
         const { soundIndex, targetCategory, targetPosition } = req.body;
         if (typeof soundIndex !== 'number' || isNaN(soundIndex)) {
@@ -343,7 +333,7 @@ router.post('/sounds/reorder', (req, res) => __awaiter(void 0, void 0, void 0, f
         }
         // Suppress SSE while Soundpad is being restarted
         sseSuppressed = true;
-        const result = yield soundpadClient.reorderSound(soundIndex, targetCategory.trim(), targetPosition);
+        const result = await soundpadClient.reorderSound(soundIndex, targetCategory.trim(), targetPosition);
         // Re-enable SSE and notify clients
         sseSuppressed = false;
         if (result.success) {
@@ -358,9 +348,9 @@ router.post('/sounds/reorder', (req, res) => __awaiter(void 0, void 0, void 0, f
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to reorder sound' });
     }
-}));
+});
 // Reorder a category (move to a different position in the category list)
-router.post('/categories/reorder', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/categories/reorder', async (req, res) => {
     try {
         const { categoryName, targetPosition } = req.body;
         if (typeof categoryName !== 'string' || !categoryName.trim()) {
@@ -372,7 +362,7 @@ router.post('/categories/reorder', (req, res) => __awaiter(void 0, void 0, void 
             return;
         }
         sseSuppressed = true;
-        const result = yield soundpadClient.reorderCategory(categoryName.trim(), targetPosition);
+        const result = await soundpadClient.reorderCategory(categoryName.trim(), targetPosition);
         sseSuppressed = false;
         if (result.success) {
             notifySseClients();
@@ -386,11 +376,11 @@ router.post('/categories/reorder', (req, res) => __awaiter(void 0, void 0, void 
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to reorder category' });
     }
-}));
+});
 // Launch Soundpad if it is not already running
-router.post('/launch-soundpad', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/launch-soundpad', async (req, res) => {
     try {
-        const result = yield soundpadClient.launchSoundpad();
+        const result = await soundpadClient.launchSoundpad();
         if (result.success) {
             res.json({ message: result.data });
         }
@@ -401,9 +391,9 @@ router.post('/launch-soundpad', (req, res) => __awaiter(void 0, void 0, void 0, 
     catch (error) {
         res.status(500).json({ error: 'Failed to launch Soundpad' });
     }
-}));
+});
 // Restart Soundpad (optionally with rename: renames the tag in soundlist.spl then kills/relaunches Soundpad)
-router.post('/restart', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/restart', async (req, res) => {
     try {
         const index = req.body.index !== undefined ? parseInt(req.body.index, 10) : undefined;
         const { title } = req.body;
@@ -415,7 +405,7 @@ router.post('/restart', (req, res) => __awaiter(void 0, void 0, void 0, function
         // Suppress SSE while Soundpad is being restarted
         sseSuppressed = true;
         if (hasRename) {
-            const result = yield soundpadClient.restartSoundpad(index, title.trim());
+            const result = await soundpadClient.restartSoundpad(index, title.trim());
             sseSuppressed = false;
             if (result.success) {
                 console.log('[restart] Soundpad restarted with rename – notifying SSE clients');
@@ -428,7 +418,7 @@ router.post('/restart', (req, res) => __awaiter(void 0, void 0, void 0, function
         }
         else {
             // Plain restart without rename
-            const result = yield soundpadClient.restartSoundpadOnly();
+            const result = await soundpadClient.restartSoundpadOnly();
             sseSuppressed = false;
             if (result.success) {
                 console.log('[restart] Soundpad restarted – notifying SSE clients');
@@ -444,9 +434,9 @@ router.post('/restart', (req, res) => __awaiter(void 0, void 0, void 0, function
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to restart Soundpad' });
     }
-}));
+});
 // Serve category images from local file system
-router.get('/category-image', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/category-image', async (req, res) => {
     try {
         const imagePath = req.query.path;
         if (!imagePath) {
@@ -483,11 +473,11 @@ router.get('/category-image', (req, res) => __awaiter(void 0, void 0, void 0, fu
         console.error('Error serving category image:', error);
         res.status(500).json({ error: 'Failed to serve image' });
     }
-}));
+});
 // Get category icons from soundlist.spl
-router.get('/category-icons', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/category-icons', async (req, res) => {
     try {
-        const result = yield soundpadClient.getCategoryIcons();
+        const result = await soundpadClient.getCategoryIcons();
         if (result.success) {
             res.json(result.data);
         }
@@ -498,9 +488,9 @@ router.get('/category-icons', (req, res) => __awaiter(void 0, void 0, void 0, fu
     catch (error) {
         res.status(500).json({ error: 'Failed to get category icons' });
     }
-}));
+});
 // Update a category's icon (base64 image data)
-router.put('/category-icon', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.put('/category-icon', async (req, res) => {
     try {
         const { categoryName, iconBase64 } = req.body;
         if (typeof categoryName !== 'string' || !categoryName.trim()) {
@@ -512,7 +502,7 @@ router.put('/category-icon', (req, res) => __awaiter(void 0, void 0, void 0, fun
             return;
         }
         sseSuppressed = true;
-        const result = yield soundpadClient.setCategoryIcon(categoryName.trim(), iconBase64.trim());
+        const result = await soundpadClient.setCategoryIcon(categoryName.trim(), iconBase64.trim());
         sseSuppressed = false;
         if (result.success) {
             notifySseClients();
@@ -526,9 +516,9 @@ router.put('/category-icon', (req, res) => __awaiter(void 0, void 0, void 0, fun
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to update category icon' });
     }
-}));
+});
 // Get categories list (for add-sound modal dropdown)
-router.get('/categories', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/categories', async (req, res) => {
     try {
         const categories = soundpadClient.getCategoriesList();
         res.json(categories);
@@ -537,17 +527,16 @@ router.get('/categories', (req, res) => __awaiter(void 0, void 0, void 0, functi
         console.error('Error getting categories:', error);
         res.status(500).json({ error: 'Failed to get categories' });
     }
-}));
+});
 // Add a new sound file to Soundpad
 const addSoundUpload = upload.fields([
     { name: 'soundFile', maxCount: 1 },
     { name: 'originalFile', maxCount: 1 },
 ]);
-router.post('/sounds/add', addSoundUpload, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b, _c;
+router.post('/sounds/add', addSoundUpload, async (req, res) => {
     const files = req.files;
-    const soundFile = (_a = files === null || files === void 0 ? void 0 : files['soundFile']) === null || _a === void 0 ? void 0 : _a[0];
-    const originalFile = (_b = files === null || files === void 0 ? void 0 : files['originalFile']) === null || _b === void 0 ? void 0 : _b[0];
+    const soundFile = files?.['soundFile']?.[0];
+    const originalFile = files?.['originalFile']?.[0];
     try {
         if (!soundFile) {
             res.status(400).json({ error: 'No sound file uploaded' });
@@ -559,17 +548,17 @@ router.post('/sounds/add', addSoundUpload, (req, res) => __awaiter(void 0, void 
             try {
                 fs.unlinkSync(soundFile.path);
             }
-            catch ( /* ignore */_d) { /* ignore */ }
+            catch { /* ignore */ }
             if (originalFile)
                 try {
                     fs.unlinkSync(originalFile.path);
                 }
-                catch ( /* ignore */_e) { /* ignore */ }
+                catch { /* ignore */ }
             res.status(400).json({ error: 'Category name is required' });
             return;
         }
         // Optional custom display name provided by the user
-        const displayName = ((_c = req.body.displayName) === null || _c === void 0 ? void 0 : _c.trim()) || undefined;
+        const displayName = req.body.displayName?.trim() || undefined;
         // Optional artist and title metadata
         const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
         const title = typeof req.body.title === 'string' ? req.body.title : '';
@@ -579,7 +568,7 @@ router.post('/sounds/add', addSoundUpload, (req, res) => __awaiter(void 0, void 
         // The file watcher would otherwise fire before Soundpad is back up,
         // causing the client to hit a dead pipe and get an empty sound list.
         sseSuppressed = true;
-        const result = yield soundpadClient.addSound(soundFile.path, soundFile.originalname, categoryName, displayName, artist, title, durationSeconds, originalFile ? originalFile.path : undefined, originalFile ? originalFile.originalname : undefined);
+        const result = await soundpadClient.addSound(soundFile.path, soundFile.originalname, categoryName, displayName, artist, title, durationSeconds, originalFile ? originalFile.path : undefined, originalFile ? originalFile.originalname : undefined);
         // Re-enable SSE and notify clients now that Soundpad is ready
         sseSuppressed = false;
         if (result.success) {
@@ -600,13 +589,13 @@ router.post('/sounds/add', addSoundUpload, (req, res) => __awaiter(void 0, void 
             try {
                 fs.unlinkSync(soundFile.path);
             }
-            catch ( /* ignore */_f) { /* ignore */ }
+            catch { /* ignore */ }
         }
         if (originalFile) {
             try {
                 fs.unlinkSync(originalFile.path);
             }
-            catch ( /* ignore */_g) { /* ignore */ }
+            catch { /* ignore */ }
         }
         // Handle multer errors specifically
         if (error instanceof multer_1.default.MulterError) {
@@ -623,9 +612,9 @@ router.post('/sounds/add', addSoundUpload, (req, res) => __awaiter(void 0, void 
         }
         res.status(500).json({ error: 'Failed to add sound' });
     }
-}));
+});
 // Stream a sound's audio file by index
-router.get('/sounds/:index/audio', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/sounds/:index/audio', async (req, res) => {
     try {
         const index = parseInt(req.params.index, 10);
         if (isNaN(index)) {
@@ -662,9 +651,9 @@ router.get('/sounds/:index/audio', (req, res) => __awaiter(void 0, void 0, void 
         console.error('Error serving sound audio:', error);
         res.status(500).json({ error: 'Failed to serve sound audio' });
     }
-}));
+});
 // Update a sound's audio file by index
-router.post('/sounds/:index/update-file', upload.single('soundFile'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/sounds/:index/update-file', upload.single('soundFile'), async (req, res) => {
     const soundFile = req.file;
     try {
         const index = parseInt(req.params.index, 10);
@@ -673,7 +662,7 @@ router.post('/sounds/:index/update-file', upload.single('soundFile'), (req, res)
                 try {
                     fs.unlinkSync(soundFile.path);
                 }
-                catch ( /* ignore */_a) { /* ignore */ }
+                catch { /* ignore */ }
             res.status(400).json({ error: 'Invalid sound index' });
             return;
         }
@@ -682,7 +671,7 @@ router.post('/sounds/:index/update-file', upload.single('soundFile'), (req, res)
             return;
         }
         sseSuppressed = true;
-        const result = yield soundpadClient.updateSoundFile(index, soundFile.path, soundFile.originalname);
+        const result = await soundpadClient.updateSoundFile(index, soundFile.path, soundFile.originalname);
         sseSuppressed = false;
         if (result.success) {
             console.log('[sounds/update-file] Sound file updated – notifying SSE clients');
@@ -699,7 +688,7 @@ router.post('/sounds/:index/update-file', upload.single('soundFile'), (req, res)
             try {
                 fs.unlinkSync(soundFile.path);
             }
-            catch ( /* ignore */_b) { /* ignore */ }
+            catch { /* ignore */ }
         }
         if (error instanceof multer_1.default.MulterError) {
             if (error.code === 'LIMIT_FILE_SIZE') {
@@ -715,9 +704,9 @@ router.post('/sounds/:index/update-file', upload.single('soundFile'), (req, res)
         }
         res.status(500).json({ error: 'Failed to update sound file' });
     }
-}));
+});
 // Return list of sound URLs that have uncropped backups
-router.get('/sounds/uncropped-list', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get('/sounds/uncropped-list', async (req, res) => {
     try {
         const soundsDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Leppsoft', 'sounds');
         if (!fs.existsSync(soundsDir)) {
@@ -746,9 +735,9 @@ router.get('/sounds/uncropped-list', (req, res) => __awaiter(void 0, void 0, voi
     catch (error) {
         res.status(500).json({ error: 'Failed to list uncropped backups' });
     }
-}));
+});
 // Restore the uncropped backup for a sound
-router.post('/sounds/reset-crop', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/sounds/reset-crop', async (req, res) => {
     try {
         const { url: soundUrl } = req.body;
         if (!soundUrl || typeof soundUrl !== 'string') {
@@ -756,7 +745,7 @@ router.post('/sounds/reset-crop', (req, res) => __awaiter(void 0, void 0, void 0
             return;
         }
         sseSuppressed = true;
-        const result = yield soundpadClient.resetCrop(soundUrl);
+        const result = await soundpadClient.resetCrop(soundUrl);
         sseSuppressed = false;
         if (result.success) {
             console.log('[sounds/reset-crop] Crop reset successfully – notifying SSE clients');
@@ -771,7 +760,7 @@ router.post('/sounds/reset-crop', (req, res) => __awaiter(void 0, void 0, void 0
         sseSuppressed = false;
         res.status(500).json({ error: 'Failed to reset crop' });
     }
-}));
+});
 /** Resolve the path to the yt-dlp binary. In Tauri builds the RAGE_PAD_YT_DLP
  *  env var points to the bundled exe; in dev mode fall back to the build dir
  *  or assume yt-dlp is on PATH. */
@@ -797,7 +786,7 @@ function runYtDlp(args) {
     });
 }
 // YouTube audio fetch endpoint (uses yt-dlp binary)
-router.post('/youtube/fetch', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/youtube/fetch', async (req, res) => {
     try {
         const { url } = req.body;
         if (!url || typeof url !== 'string') {
@@ -810,7 +799,7 @@ router.post('/youtube/fetch', (req, res) => __awaiter(void 0, void 0, void 0, fu
         let videoTitle = 'youtube_audio';
         let videoDurationSeconds = 0;
         try {
-            const metaJson = yield runYtDlp([
+            const metaJson = await runYtDlp([
                 '--no-download', '-j', '--no-warnings', videoUrl
             ]);
             const meta = JSON.parse(metaJson);
@@ -824,7 +813,7 @@ router.post('/youtube/fetch', (req, res) => __awaiter(void 0, void 0, void 0, fu
         // Use yt-dlp's output template; the actual extension is determined by format
         const outTemplate = path.join(tmpDir, `${safeTitle}.%(ext)s`);
         // Step 2: Download best audio natively (m4a/webm — no ffmpeg needed)
-        yield runYtDlp([
+        await runYtDlp([
             '-f', 'bestaudio[ext=m4a]/bestaudio',
             '-o', outTemplate,
             '--no-playlist',
@@ -856,7 +845,7 @@ router.post('/youtube/fetch', (req, res) => __awaiter(void 0, void 0, void 0, fu
         try {
             fs.unlinkSync(outPath);
         }
-        catch ( /* ignore */_a) { /* ignore */ }
+        catch { /* ignore */ }
         const fileName = `${safeTitle}.${ext}`;
         res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
@@ -870,7 +859,7 @@ router.post('/youtube/fetch', (req, res) => __awaiter(void 0, void 0, void 0, fu
         const message = error instanceof Error ? error.message : 'Failed to fetch YouTube audio';
         res.status(500).json({ error: message });
     }
-}));
+});
 // SSE endpoint: client subscribes here to receive reload events
 router.get('/config-watch', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
@@ -891,3 +880,4 @@ router.get('/config-watch', (req, res) => {
     });
 });
 exports.default = router;
+//# sourceMappingURL=routes.js.map

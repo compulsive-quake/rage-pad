@@ -1723,7 +1723,7 @@ export class SoundpadClient {
     const icons: CategoryIcon[] = [];
 
     // Find the Categories section
-    const categoriesMatch = /<Categories>([\s\S]*?)<\/Categories>/i.exec(xmlContent);
+    const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(xmlContent);
     if (!categoriesMatch) {
       console.log('No Categories section found in soundlist');
       return icons;
@@ -1731,31 +1731,47 @@ export class SoundpadClient {
 
     const categoriesContent = categoriesMatch[1];
 
-    // Parse each Category element
-    const categoryRegex = /<Category\s+([^>]*?)(?:\/>|>[\s\S]*?<\/Category>)/gi;
-    let match;
+    // Use the robust balanced-tag parser instead of a simple regex
+    // (the regex approach breaks on nested categories)
+    this.collectCategoryIcons(categoriesContent, icons);
 
-    while ((match = categoryRegex.exec(categoriesContent)) !== null) {
-      const attrs = match[1];
+    return icons;
+  }
+
+  /** Recursively collect icon info from categories and their sub-categories. */
+  private collectCategoryIcons(
+    xmlContent: string,
+    icons: CategoryIcon[]
+  ): void {
+    const topLevel = this.extractTopLevelCategories(xmlContent);
+
+    for (const { attrs, content } of topLevel) {
+      const hidden = this.extractAttribute(attrs, 'hidden');
+      if (hidden === 'true') continue;
+
       const name = this.extractAttribute(attrs, 'name');
-      const icon = this.extractAttribute(attrs, 'icon');
-
-      // Skip categories without a name (like the hidden list category)
       if (!name) continue;
 
-      // Check if icon is base64 encoded (long string of only base64 chars) or a stock icon name / file path
-      const isBase64 = !!(icon && !icon.startsWith('stock_') && /^[A-Za-z0-9+/=]{20,}$/.test(icon));
+      const icon = this.extractAttribute(attrs, 'icon');
+
+      // Check if icon is base64 encoded (long string of only base64 chars)
+      // Strip any whitespace before testing, as base64 may contain line breaks
+      const cleanIcon = icon ? icon.replace(/\s/g, '') : '';
+      const isBase64 = !!(cleanIcon && !cleanIcon.startsWith('stock_') && /^[A-Za-z0-9+/=]{20,}$/.test(cleanIcon));
 
       icons.push({
         name,
-        icon: icon || '',
+        icon: cleanIcon || '',
         isBase64
       });
 
-      console.log(`Category icon found: ${name}, isBase64: ${isBase64}, icon length: ${icon?.length || 0}`);
-    }
+      console.log(`Category icon found: ${name}, isBase64: ${isBase64}, icon length: ${cleanIcon?.length || 0}`);
 
-    return icons;
+      // Recurse into sub-categories
+      if (content) {
+        this.collectCategoryIcons(content, icons);
+      }
+    }
   }
 
   /**

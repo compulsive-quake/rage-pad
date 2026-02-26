@@ -1096,6 +1096,8 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
     this.cdr.markForCheck();
   }
 
+  private static readonly MAX_ICON_SIZE = 512;
+
   onIconDrop(event: DragEvent, categoryName: string): void {
     event.preventDefault();
     event.stopPropagation();
@@ -1108,16 +1110,31 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
     const file = files[0];
     if (!ContentComponent.ALLOWED_IMAGE_TYPES.includes(file.type)) return;
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      // Strip the data:image/...;base64, prefix to get raw base64
+    const img = new Image();
+    img.onload = () => {
+      const max = ContentComponent.MAX_ICON_SIZE;
+      let { width, height } = img;
+
+      // Downscale if either dimension exceeds the limit
+      if (width > max || height > max) {
+        const scale = Math.min(max / width, max / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL('image/png');
       const base64 = dataUrl.split(',')[1];
       if (base64) {
         this.updateCategoryIcon.emit({ categoryName, iconBase64: base64 });
       }
     };
-    reader.readAsDataURL(file);
+    img.src = URL.createObjectURL(file);
   }
 
 }
