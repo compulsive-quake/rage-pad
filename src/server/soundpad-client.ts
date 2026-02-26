@@ -1759,6 +1759,78 @@ export class SoundpadClient {
   }
 
   /**
+   * Update the icon attribute for a category (top-level or sub-category)
+   * in soundlist.spl.  Follows the kill → edit → restart pattern.
+   */
+  async setCategoryIcon(categoryName: string, iconBase64: string): Promise<SoundpadResponse> {
+    if (!fs.existsSync(this.soundlistPath)) {
+      return { success: false, error: 'Soundlist file not found' };
+    }
+
+    try {
+      await this.killSoundpadAndWait();
+      this.cachedConnectionState = false;
+      this.lastConnectionCheck = 0;
+
+      let splContent = fs.readFileSync(this.soundlistPath, 'utf-8');
+
+      const categoriesMatch = /<Categories>([\s\S]*)<\/Categories>/i.exec(splContent);
+      if (!categoriesMatch) {
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        return { success: false, error: 'No Categories section found in soundlist.spl' };
+      }
+
+      // Match any <Category ... name="categoryName" ...> tag (self-closing or opening)
+      // We need to find the tag and replace/add the icon attribute
+      const escapedName = categoryName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const categoryTagRegex = new RegExp(
+        `(<Category\\s+)([^>]*?name="${escapedName}"[^>]*?)(\\s*/?>)`,
+        'i'
+      );
+
+      const tagMatch = categoryTagRegex.exec(splContent);
+      if (!tagMatch) {
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+        return { success: false, error: `Category "${categoryName}" not found in soundlist.spl` };
+      }
+
+      const [fullMatch, prefix, attrs, suffix] = tagMatch;
+
+      // Replace existing icon attribute or add one
+      let newAttrs: string;
+      if (/\bicon="[^"]*"/i.test(attrs)) {
+        newAttrs = attrs.replace(/\bicon="[^"]*"/i, `icon="${iconBase64}"`);
+      } else {
+        newAttrs = attrs + ` icon="${iconBase64}"`;
+      }
+
+      splContent = splContent.replace(fullMatch, prefix + newAttrs + suffix);
+
+      fs.writeFileSync(this.soundlistPath, splContent, 'utf-8');
+      console.log(`Updated icon for category "${categoryName}" (base64 length: ${iconBase64.length})`);
+
+      const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+      spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+
+      await this.waitForSoundpadReady(15000, 500);
+
+      return { success: true, data: `Category "${categoryName}" icon updated` };
+    } catch (error) {
+      console.error('setCategoryIcon error:', error);
+      try {
+        const soundpadPath = 'C:\\Program Files\\Soundpad\\Soundpad.exe';
+        spawn(soundpadPath, [], { detached: true, stdio: 'ignore' }).unref();
+      } catch (e) { /* ignore */ }
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Failed to set category icon'
+      };
+    }
+  }
+
+  /**
    * Parse the <Categories> section of soundlist.spl to build a map of
    * sound index -> { category, parentCategory }.
    * The SPL file uses <Sound id="N"/> references (1-based index) inside

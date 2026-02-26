@@ -69,7 +69,12 @@
              #categoryElement>
           <!-- Category Divider -->
           <div class="category-divider">
-            <div class="category-icon" [class.has-image]="hasValidImage(category)">
+            <div class="category-icon"
+                 [class.has-image]="hasValidImage(category)"
+                 [class.icon-drag-over]="iconDragOverCategory === category.name"
+                 (dragover)="onIconDragOver($event, category.name)"
+                 (dragleave)="onIconDragLeave($event)"
+                 (drop)="onIconDrop($event, category.name)">
               <img *ngIf="hasValidImage(category)" [src]="category.image" alt="{{ category.name }}" (error)="onImageError(category)" />
               <svg *ngIf="!hasValidImage(category)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
@@ -132,7 +137,12 @@
                  *ngFor="let subCategory of category.subCategories; trackBy: trackByCategory">
               <!-- Sub-category Divider -->
               <div class="sub-category-divider">
-                <div class="sub-category-icon" [class.has-image]="hasValidImage(subCategory)">
+                <div class="sub-category-icon"
+                     [class.has-image]="hasValidImage(subCategory)"
+                     [class.icon-drag-over]="iconDragOverCategory === subCategory.name"
+                     (dragover)="onIconDragOver($event, subCategory.name)"
+                     (dragleave)="onIconDragLeave($event)"
+                     (drop)="onIconDrop($event, subCategory.name)">
                   <img *ngIf="hasValidImage(subCategory)" [src]="subCategory.image" alt="{{ subCategory.name }}" (error)="onImageError(subCategory)" />
                   <svg *ngIf="!hasValidImage(subCategory)" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
                     <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>

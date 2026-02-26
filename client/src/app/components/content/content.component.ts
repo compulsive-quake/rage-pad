@@ -42,12 +42,14 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Output() reorderCategory = new EventEmitter<{ categoryName: string; targetPosition: number }>();
   @Output() dragStateChange = new EventEmitter<boolean>();
   @Output() soundContextMenu = new EventEmitter<{ sound: Sound; event: MouseEvent }>();
+  @Output() updateCategoryIcon = new EventEmitter<{ categoryName: string; iconBase64: string }>();
 
   @ViewChild('mainContent') mainContent!: ElementRef;
   @ViewChild('categoryNavList') categoryNavList!: ElementRef;
   @ViewChild('scrollEndSpacer') scrollEndSpacer!: ElementRef<HTMLElement>;
 
   isDragging = false;
+  iconDragOverCategory: string | null = null;
 
   // Category reorder drag state
   categoryDraggingIdx = -1;
@@ -1066,6 +1068,56 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
 
   onSoundContextMenu(event: { sound: Sound; event: MouseEvent }): void {
     this.soundContextMenu.emit(event);
+  }
+
+  // ── Category icon drag-and-drop ──
+
+  private static readonly ALLOWED_IMAGE_TYPES = [
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+    'image/bmp', 'image/x-icon', 'image/svg+xml'
+  ];
+
+  onIconDragOver(event: DragEvent, categoryName: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+    if (this.iconDragOverCategory !== categoryName) {
+      this.iconDragOverCategory = categoryName;
+      this.cdr.markForCheck();
+    }
+  }
+
+  onIconDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.iconDragOverCategory = null;
+    this.cdr.markForCheck();
+  }
+
+  onIconDrop(event: DragEvent, categoryName: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.iconDragOverCategory = null;
+    this.cdr.markForCheck();
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!ContentComponent.ALLOWED_IMAGE_TYPES.includes(file.type)) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      // Strip the data:image/...;base64, prefix to get raw base64
+      const base64 = dataUrl.split(',')[1];
+      if (base64) {
+        this.updateCategoryIcon.emit({ categoryName, iconBase64: base64 });
+      }
+    };
+    reader.readAsDataURL(file);
   }
 
 }
