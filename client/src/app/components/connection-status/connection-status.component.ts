@@ -10,7 +10,7 @@ import { CommonModule } from '@angular/common';
       class="connection-status"
       [class.connected]="isConnected"
       [class.disconnected]="!isConnected"
-      [title]="isConnected ? 'Connected to Soundpad' : 'Disconnected'"
+      [title]="isConnected ? 'Connected to Audio engine' : 'Disconnected'"
     >
       <div class="status-indicator"></div>
     </div>

@@ -31,14 +31,14 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() filteredSounds: Sound[] = [];
   @Input() isLoading = false;
   @Input() searchQuery = '';
-  @Input() currentlyPlayingIndex: number | null = null;
+  @Input() currentlyPlayingId: number | null = null;
   @Input() isRenameMode = false;
   @Input() isReorderMode = false;
   @Input() activeCategory = '';
   @Output() playSound = new EventEmitter<Sound>();
   @Output() openRenameModal = new EventEmitter<Sound>();
   @Output() activeCategoryChange = new EventEmitter<string>();
-  @Output() reorderSound = new EventEmitter<{ soundIndex: number; targetCategory: string; targetPosition: number }>();
+  @Output() reorderSound = new EventEmitter<{ soundId: number; targetCategory: string; targetPosition: number }>();
   @Output() reorderCategory = new EventEmitter<{ categoryName: string; targetPosition: number }>();
   @Output() dragStateChange = new EventEmitter<boolean>();
   @Output() soundContextMenu = new EventEmitter<{ sound: Sound; event: MouseEvent }>();
@@ -350,7 +350,7 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       targetSounds.unshift(sound);
 
       this.reorderSound.emit({
-        soundIndex: sound.index,
+        soundId: sound.id,
         targetCategory: targetCategoryName,
         targetPosition: 0
       });
@@ -386,7 +386,7 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       const targetCategory = event.container.data.category;
       const targetPosition = event.currentIndex;
       this.reorderSound.emit({
-        soundIndex: sound.index,
+        soundId: sound.id,
         targetCategory,
         targetPosition
       });
@@ -1050,7 +1050,7 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   }
 
   trackByIndex(index: number, sound: Sound): number {
-    return sound.index;
+    return sound.id;
   }
 
   getTotalSoundCount(category: Category): number {

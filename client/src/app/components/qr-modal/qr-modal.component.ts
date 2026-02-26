@@ -1,7 +1,7 @@
 import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { take } from 'rxjs';
-import { SoundpadService } from '../../services/soundpad.service';
+import { SoundService } from '../../services/sound.service';
 
 @Component({
   selector: 'app-qr-modal',
@@ -20,7 +20,7 @@ export class QrModalComponent implements OnChanges {
   error = '';
   private mouseDownOnOverlay = false;
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundService: SoundService) {}
 
   onOverlayMouseDown(event: MouseEvent): void {
     this.mouseDownOnOverlay = event.target === event.currentTarget;
@@ -46,7 +46,7 @@ export class QrModalComponent implements OnChanges {
   private loadQrCode(): void {
     this.isLoading = true;
     this.error = '';
-    this.soundpadService.getQrCode()
+    this.soundService.getQrCode()
       .pipe(take(1))
       .subscribe({
         next: (data) => {

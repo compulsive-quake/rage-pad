@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { SoundpadService } from '../../services/soundpad.service';
+import { SoundService } from '../../services/sound.service';
 import { Sound, CategoryIcon } from '../../models/sound.model';
 import { CategorySelectComponent } from '../category-select/category-select.component';
 import { WaveformPreviewComponent } from '../waveform-preview/waveform-preview.component';
@@ -56,12 +56,12 @@ export class AddSoundModalComponent implements OnChanges {
 
   private readonly ALLOWED_AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|wma|m4a|opus|aiff|ape)$/i;
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundService: SoundService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen) {
       this.resetState();
-      this.soundpadService.getCategories()
+      this.soundService.getCategories()
         .pipe(take(1))
         .subscribe({
           next: (cats) => {
@@ -246,7 +246,7 @@ export class AddSoundModalComponent implements OnChanges {
     this.showYoutubeRetryBtn = false;
     this.youtubeFetchAttempts++;
 
-    this.soundpadService.fetchYoutubeAudio(url)
+    this.soundService.fetchYoutubeAudio(url)
       .pipe(take(1))
       .subscribe({
         next: ({ file, title, durationSeconds }) => {
@@ -357,7 +357,7 @@ export class AddSoundModalComponent implements OnChanges {
       (this.addSoundCategories.length > 0 ? this.addSoundCategories[0].name : '');
 
     if (!category) {
-      this.addSoundError = 'No categories available. Please create a category in Soundpad first.';
+      this.addSoundError = 'No categories available. Please create a category first.';
       return;
     }
 
@@ -378,7 +378,7 @@ export class AddSoundModalComponent implements OnChanges {
 
     const durationSeconds = this.previewDuration > 0 ? Math.round(this.previewDuration) : undefined;
 
-    this.soundpadService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds, this.originalUncroppedFile)
+    this.soundService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds, this.originalUncroppedFile)
       .pipe(take(1))
       .subscribe({
         next: () => {

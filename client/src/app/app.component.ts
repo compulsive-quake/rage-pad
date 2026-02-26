@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
 import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
-import { SoundpadService, AppSettings } from './services/soundpad.service';
+import { SoundService, AppSettings } from './services/sound.service';
 import { Sound, ConnectionStatus, Category, CategoryIcon } from './models/sound.model';
 import { HeaderComponent } from './components/header/header.component';
 import { FooterComponent } from './components/footer/footer.component';
@@ -44,14 +44,13 @@ export class AppComponent implements OnInit, OnDestroy {
   categories: Category[] = [];
   isConnected = false;
   isLoading = true;
-  currentlyPlayingIndex: number | null = null;
+  currentlyPlayingId: number | null = null;
   isActuallyPlaying = false;
   isPaused = false;
   volume = 100;
   playbackMode: 'both' | 'mic' | 'speakers' = 'both';
   searchQuery = '';
   isSettingsModalOpen = false;
-  isRestarting = false;
   isRenameMode = false;
   isReorderMode = false;
 
@@ -82,18 +81,8 @@ export class AppComponent implements OnInit, OnDestroy {
   soundToDelete: Sound | null = null;
   isDeleting = false;
 
-  // Config-watch toggle
-  configWatchEnabled: boolean;
+  // SSE config-watch
   private configWatchSub: Subscription | null = null;
-
-  // Auto-launch
-  autoLaunchEnabled: boolean;
-  isLaunching = false;
-  private launchFailCount = 0;
-  launchRetryCountdown = 0;
-  launchErrorMessage = '';
-  private launchRetryTimer: any = null;
-  private launchCountdownTimer: any = null;
 
   // Wake Lock
   keepAwakeEnabled: boolean = false;
@@ -142,13 +131,16 @@ export class AppComponent implements OnInit, OnDestroy {
   categoryIconsMap: Map<string, CategoryIcon> = new Map();
   categoryOrder: string[] = [];
 
+  // Web Audio API for speaker playback
+  private audioContext: AudioContext | null = null;
+  private currentAudioSource: AudioBufferSourceNode | null = null;
+  private gainNode: GainNode | null = null;
+
   private destroy$ = new Subject<void>();
   private searchSubject$ = new Subject<string>();
   private playbackTimer: any = null;
 
-  constructor(private soundpadService: SoundpadService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
-    this.configWatchEnabled = false;
-    this.autoLaunchEnabled = true;
+  constructor(private soundService: SoundService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
     this.autoUpdateCheckEnabled = true;
     this.serverPort = Number(window.location.port) || 8088;
   }
@@ -160,11 +152,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     // Load settings from the server DB, then initialise features
-    this.soundpadService.getSettings()
+    this.soundService.getSettings()
       .pipe(take(1))
       .subscribe((settings: AppSettings) => {
-        this.configWatchEnabled = settings.configWatchEnabled;
-        this.autoLaunchEnabled = settings.autoLaunchEnabled;
         this.keepAwakeEnabled = settings.keepAwakeEnabled;
         this.idleTimeoutEnabled = settings.idleTimeoutEnabled;
         this.wakeMinutes = settings.wakeMinutes;
@@ -186,21 +176,14 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private initializeAfterSettingsLoad(): void {
-    this.soundpadService.getConnectionStatus()
+    this.soundService.getConnectionStatus()
       .pipe(takeUntil(this.destroy$))
       .subscribe((status: ConnectionStatus) => {
         this.isConnected = status.connected;
-
-        if (status.connected) {
-          this.clearLaunchRetry();
-        } else if (!status.connected && this.autoLaunchEnabled && !this.isLaunching && !this.launchRetryTimer) {
-          this.attemptAutoLaunch();
-        }
       });
 
-    if (this.configWatchEnabled) {
-      this.startConfigWatch();
-    }
+    // Always listen for SSE reload events
+    this.startConfigWatch();
 
     if (this.keepAwakeEnabled) {
       this.acquireWakeLock();
@@ -213,10 +196,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private startConfigWatch(): void {
     this.stopConfigWatch();
-    this.configWatchSub = this.soundpadService.listenForConfigChanges()
+    this.configWatchSub = this.soundService.listenForConfigChanges()
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        console.log('[config-watch] soundlist.spl changed – reloading sounds');
+        console.log('[config-watch] Data changed – reloading sounds');
         if (this.isDragActive) {
           this.pendingReload = true;
         } else {
@@ -232,105 +215,6 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  toggleConfigWatch(): void {
-    this.configWatchEnabled = !this.configWatchEnabled;
-    if (this.configWatchEnabled) {
-      this.startConfigWatch();
-    } else {
-      this.stopConfigWatch();
-    }
-  }
-
-  // ── Auto-launch ──────────────────────────────────────────────────────────
-
-  toggleAutoLaunch(): void {
-    this.autoLaunchEnabled = !this.autoLaunchEnabled;
-    if (!this.autoLaunchEnabled) {
-      this.clearLaunchRetry();
-    } else if (!this.isConnected && !this.isLaunching) {
-      this.attemptAutoLaunch();
-    }
-  }
-
-  attemptAutoLaunch(): void {
-    if (this.isLaunching || this.isConnected) return;
-
-    this.isLaunching = true;
-    this.launchErrorMessage = '';
-    this.launchRetryCountdown = 0;
-    this.clearLaunchRetry();
-
-    this.soundpadService.launchSoundpad()
-      .pipe(take(1))
-      .subscribe({
-        next: (result: any) => {
-          this.isLaunching = false;
-          if (result?.error) {
-            this.onLaunchFailed(result.error);
-          } else {
-            this.launchFailCount = 0;
-            this.launchErrorMessage = '';
-            this.soundpadService.checkConnection().pipe(take(1)).subscribe(status => {
-              this.isConnected = status.connected;
-              if (status.connected) {
-                this.clearLaunchRetry();
-                this.loadSounds();
-              }
-            });
-          }
-        },
-        error: (err: any) => {
-          this.isLaunching = false;
-          this.onLaunchFailed(err?.message || 'Failed to launch Soundpad');
-        }
-      });
-  }
-
-  private onLaunchFailed(errorMsg: string): void {
-    this.launchFailCount++;
-    const baseDelay = 5;
-    const delaySec = Math.min(baseDelay * Math.pow(2, this.launchFailCount - 1), 60);
-
-    this.launchErrorMessage = `Failed to start Soundpad: ${errorMsg}`;
-    this.launchRetryCountdown = delaySec;
-
-    if (!this.autoLaunchEnabled) return;
-
-    this.launchCountdownTimer = setInterval(() => {
-      this.launchRetryCountdown = Math.max(this.launchRetryCountdown - 1, 0);
-      this.cdr.detectChanges();
-    }, 1000);
-
-    this.launchRetryTimer = setTimeout(() => {
-      if (this.launchCountdownTimer) {
-        clearInterval(this.launchCountdownTimer);
-        this.launchCountdownTimer = null;
-      }
-      if (this.autoLaunchEnabled && !this.isConnected) {
-        this.attemptAutoLaunch();
-      }
-    }, delaySec * 1000);
-  }
-
-  private clearLaunchRetry(): void {
-    if (this.launchRetryTimer) {
-      clearTimeout(this.launchRetryTimer);
-      this.launchRetryTimer = null;
-    }
-    if (this.launchCountdownTimer) {
-      clearInterval(this.launchCountdownTimer);
-      this.launchCountdownTimer = null;
-    }
-    this.launchRetryCountdown = 0;
-    this.launchErrorMessage = '';
-    this.isLaunching = false;
-  }
-
-  manualLaunchSoundpad(): void {
-    this.launchFailCount = 0;
-    this.attemptAutoLaunch();
-  }
-
   // ── Update check ────────────────────────────────────────────────────────
 
   private startUpdateCheck(): void {
@@ -338,7 +222,7 @@ export class AppComponent implements OnInit, OnDestroy {
     const intervalMs = this.updateCheckIntervalMinutes * 60 * 1000;
     this.updateCheckSub = timer(0, intervalMs).pipe(
       takeUntil(this.destroy$),
-      switchMap(() => this.soundpadService.checkForUpdate())
+      switchMap(() => this.soundService.checkForUpdate())
     ).subscribe(info => {
       if (info.updateAvailable && info.latestVersion !== this.latestVersion) {
         this.updateDismissed = false;
@@ -362,7 +246,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   manualUpdateCheck(): void {
     this.isCheckingForUpdate = true;
-    this.soundpadService.checkForUpdate()
+    this.soundService.checkForUpdate()
       .pipe(take(1))
       .subscribe(info => {
         this.isCheckingForUpdate = false;
@@ -377,10 +261,10 @@ export class AppComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopConfigWatch();
-    this.clearLaunchRetry();
     this.stopUpdateCheck();
     this.releaseWakeLock();
     this.clearWakeTimers();
+    this.stopWebAudio();
     this.destroy$.next();
     this.destroy$.complete();
     if (this.playbackTimer) {
@@ -395,8 +279,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     forkJoin({
-      sounds: this.soundpadService.getSounds().pipe(take(1)),
-      categoryIcons: this.soundpadService.getCategoryIcons().pipe(take(1))
+      sounds: this.soundService.getSounds().pipe(take(1)),
+      categoryIcons: this.soundService.getCategoryIcons().pipe(take(1))
     }).subscribe({
       next: ({ sounds, categoryIcons }) => {
         if (sounds.length === 0 && this.sounds.length > 0) {
@@ -451,9 +335,6 @@ export class AppComponent implements OnInit, OnDestroy {
     if (!categoryIcon || !categoryIcon.icon) return '';
     if (categoryIcon.isBase64) {
       return `data:image/png;base64,${categoryIcon.icon}`;
-    }
-    if (!categoryIcon.icon.startsWith('stock_')) {
-      return this.soundpadService.getCategoryImageUrl(categoryIcon.icon);
     }
     return '';
   }
@@ -519,24 +400,18 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   playSound(sound: Sound): void {
-    this.soundpadService.playSound(sound.index, this.playbackMode === 'speakers', this.playbackMode === 'mic')
+    const speakersOnly = this.playbackMode === 'speakers';
+    const micOnly = this.playbackMode === 'mic';
+
+    this.soundService.playSound(sound.id, speakersOnly, micOnly)
       .pipe(take(1))
       .subscribe({
         next: (result: any) => {
-          if (result?.soundpadNotRunning) {
-            this.isConnected = false;
-            if (this.autoLaunchEnabled && !this.isLaunching) {
-              this.attemptAutoLaunch();
-            } else if (!this.autoLaunchEnabled) {
-              this.launchErrorMessage = 'Soundpad is not running';
-            }
-            return;
-          }
           if (result?.error) {
             console.error('Failed to play sound:', result.error);
             return;
           }
-          this.currentlyPlayingIndex = sound.index;
+          this.currentlyPlayingId = sound.id;
           this.isActuallyPlaying = true;
           this.isPaused = false;
 
@@ -546,11 +421,76 @@ export class AppComponent implements OnInit, OnDestroy {
           this.playbackTimeRemaining = this.currentSoundDuration;
 
           this.startProgressTimer();
+
+          // Web Audio API playback for speakers/both modes
+          if (!micOnly) {
+            this.playWebAudio(sound.id);
+          }
         },
         error: (err) => {
           console.error('Failed to play sound:', err);
         }
       });
+  }
+
+  // ── Web Audio API (speaker playback) ───────────────────────────────────
+
+  private playWebAudio(soundId: number): void {
+    this.stopWebAudio();
+
+    this.soundService.getSoundAudio(soundId).pipe(take(1)).subscribe({
+      next: async (file: File) => {
+        try {
+          if (!this.audioContext) {
+            this.audioContext = new AudioContext();
+          }
+          if (this.audioContext.state === 'suspended') {
+            await this.audioContext.resume();
+          }
+
+          const arrayBuffer = await file.arrayBuffer();
+          const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+
+          this.currentAudioSource = this.audioContext.createBufferSource();
+          this.currentAudioSource.buffer = audioBuffer;
+
+          this.gainNode = this.audioContext.createGain();
+          this.gainNode.gain.value = this.volume / 100;
+
+          this.currentAudioSource.connect(this.gainNode);
+          this.gainNode.connect(this.audioContext.destination);
+
+          this.currentAudioSource.onended = () => {
+            this.ngZone.run(() => {
+              if (this.currentlyPlayingId === soundId) {
+                this.currentlyPlayingId = null;
+                this.isActuallyPlaying = false;
+                this.playbackProgress = 0;
+                this.playbackTimeRemaining = 0;
+                if (this.playbackTimer) {
+                  clearInterval(this.playbackTimer);
+                  this.playbackTimer = null;
+                }
+              }
+            });
+          };
+
+          this.currentAudioSource.start();
+        } catch (err) {
+          console.error('[web-audio] Failed to play:', err);
+        }
+      },
+      error: (err) => {
+        console.error('[web-audio] Failed to fetch audio:', err);
+      }
+    });
+  }
+
+  private stopWebAudio(): void {
+    if (this.currentAudioSource) {
+      try { this.currentAudioSource.stop(); } catch { /* already stopped */ }
+      this.currentAudioSource = null;
+    }
   }
 
   parseDuration(duration: string): number {
@@ -569,13 +509,13 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.playbackTimer = setInterval(() => {
-      if (this.currentlyPlayingIndex !== null && !this.isPaused && this.currentSoundDuration > 0) {
+      if (this.currentlyPlayingId !== null && !this.isPaused && this.currentSoundDuration > 0) {
         const elapsed = (Date.now() - this.playbackStartTime) / 1000;
         this.playbackProgress = Math.min((elapsed / this.currentSoundDuration) * 100, 100);
         this.playbackTimeRemaining = Math.max(this.currentSoundDuration - elapsed, 0);
 
         if (this.playbackTimeRemaining <= 0) {
-          this.currentlyPlayingIndex = null;
+          this.currentlyPlayingId = null;
           this.isActuallyPlaying = false;
           this.playbackProgress = 0;
           this.playbackTimeRemaining = 0;
@@ -587,15 +527,16 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   stopSound(): void {
-    this.soundpadService.stopSound()
+    this.soundService.stopSound()
       .pipe(take(1))
       .subscribe({
         next: () => {
-          this.currentlyPlayingIndex = null;
+          this.currentlyPlayingId = null;
           this.isActuallyPlaying = false;
           this.isPaused = false;
           this.playbackProgress = 0;
           this.playbackTimeRemaining = 0;
+          this.stopWebAudio();
           if (this.playbackTimer) {
             clearInterval(this.playbackTimer);
             this.playbackTimer = null;
@@ -608,7 +549,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   togglePause(): void {
-    this.soundpadService.togglePause()
+    this.soundService.togglePause()
       .pipe(take(1))
       .subscribe({
         next: () => {
@@ -625,7 +566,13 @@ export class AppComponent implements OnInit, OnDestroy {
 
   setVolume(volume: number): void {
     this.volume = volume;
-    this.soundpadService.setVolume(volume)
+
+    // Update Web Audio gain
+    if (this.gainNode) {
+      this.gainNode.gain.value = volume / 100;
+    }
+
+    this.soundService.setVolume(volume)
       .pipe(take(1))
       .subscribe({
         error: (err) => {
@@ -647,9 +594,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onSaveSettings(payload: SettingsPayload): void {
-    // Persist non-port settings to the server DB
     const { serverPort: _port, ...settingsToSave } = payload;
-    this.soundpadService.saveSettings(settingsToSave)
+    this.soundService.saveSettings(settingsToSave)
       .pipe(take(1))
       .subscribe(() => {
         this.applySettingsSideEffects(payload);
@@ -657,24 +603,6 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   private applySettingsSideEffects(payload: SettingsPayload): void {
-    if (payload.configWatchEnabled !== this.configWatchEnabled) {
-      this.configWatchEnabled = payload.configWatchEnabled;
-      if (this.configWatchEnabled) {
-        this.startConfigWatch();
-      } else {
-        this.stopConfigWatch();
-      }
-    }
-
-    if (payload.autoLaunchEnabled !== this.autoLaunchEnabled) {
-      this.autoLaunchEnabled = payload.autoLaunchEnabled;
-      if (!this.autoLaunchEnabled) {
-        this.clearLaunchRetry();
-      } else if (!this.isConnected && !this.isLaunching) {
-        this.attemptAutoLaunch();
-      }
-    }
-
     if (payload.keepAwakeEnabled !== this.keepAwakeEnabled) {
       this.keepAwakeEnabled = payload.keepAwakeEnabled;
       if (this.keepAwakeEnabled) {
@@ -724,31 +652,22 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  /**
-   * Ask the server to move to a new port, poll until it confirms, then
-   * redirect the browser so both the UI *and* API are on the new port.
-   * The server persists the new port to the settings DB via /api/change-port.
-   */
   private migrateServerPort(newPort: number): void {
     this.isPortChanging = true;
     this.portChangeError = '';
 
-    this.soundpadService.changeServerPort(newPort)
+    this.soundService.changeServerPort(newPort)
       .pipe(take(1))
       .subscribe({
         next: () => {
-          // Poll the new port to confirm the server is hosting there
           let attempts = 0;
           const poll = () => {
             attempts++;
-            this.soundpadService.verifyNewPort(newPort)
+            this.soundService.verifyNewPort(newPort)
               .pipe(take(1))
               .subscribe(ok => {
                 if (ok) {
                   this.isPortChanging = false;
-
-                  // Redirect the browser so the page (and therefore all API
-                  // calls via window.location.origin) uses the new port.
                   const url = new URL(window.location.href);
                   url.port = String(newPort);
                   window.location.href = url.toString();
@@ -757,17 +676,14 @@ export class AppComponent implements OnInit, OnDestroy {
                 } else {
                   this.isPortChanging = false;
                   this.portChangeError = `Server not reachable on port ${newPort}`;
-                  console.error(`[port-change] Server not reachable on port ${newPort}`);
                 }
               });
           };
-          // Give the server a moment to spin up on the new port
           setTimeout(poll, 600);
         },
         error: (err: any) => {
           this.isPortChanging = false;
           this.portChangeError = err?.error?.error || `Failed to change port`;
-          console.error('[port-change] Failed:', this.portChangeError);
         }
       });
   }
@@ -792,8 +708,8 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  onReorderSound(event: { soundIndex: number; targetCategory: string; targetPosition: number }): void {
-    this.soundpadService.reorderSound(event.soundIndex, event.targetCategory, event.targetPosition)
+  onReorderSound(event: { soundId: number; targetCategory: string; targetPosition: number }): void {
+    this.soundService.reorderSound(event.soundId, event.targetCategory, event.targetPosition)
       .pipe(take(1))
       .subscribe({
         next: (result: any) => {
@@ -816,7 +732,7 @@ export class AppComponent implements OnInit, OnDestroy {
       this.categoryOrder.splice(event.targetPosition, 0, event.categoryName);
     }
 
-    this.soundpadService.reorderCategory(event.categoryName, event.targetPosition)
+    this.soundService.reorderCategory(event.categoryName, event.targetPosition)
       .pipe(take(1))
       .subscribe({
         next: (result: any) => {
@@ -833,7 +749,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   onUpdateCategoryIcon(event: { categoryName: string; iconBase64: string }): void {
-    this.soundpadService.updateCategoryIcon(event.categoryName, event.iconBase64)
+    this.soundService.updateCategoryIcon(event.categoryName, event.iconBase64)
       .pipe(take(1))
       .subscribe({
         next: (result: any) => {
@@ -958,7 +874,7 @@ export class AppComponent implements OnInit, OnDestroy {
     if (!this.soundToDelete || this.isDeleting) return;
     this.isDeleting = true;
 
-    this.soundpadService.deleteSound(this.soundToDelete.index)
+    this.soundService.deleteSound(this.soundToDelete.id)
       .pipe(take(1))
       .subscribe({
         next: (result: any) => {
@@ -976,29 +892,6 @@ export class AppComponent implements OnInit, OnDestroy {
           this.isDeleting = false;
           this.isDeleteConfirmOpen = false;
           this.soundToDelete = null;
-        }
-      });
-  }
-
-  // ── Restart Soundpad ──────────────────────────────────────────────────────
-
-  restartSoundpad(): void {
-    if (this.isRestarting) return;
-
-    this.isRestarting = true;
-    this.soundpadService.restartSoundpad()
-      .pipe(take(1))
-      .subscribe({
-        next: (response) => {
-          console.log('Restart command sent:', response);
-          setTimeout(() => {
-            this.isRestarting = false;
-            this.isSettingsModalOpen = false;
-          }, 2000);
-        },
-        error: (err) => {
-          console.error('Failed to restart Soundpad:', err);
-          this.isRestarting = false;
         }
       });
   }

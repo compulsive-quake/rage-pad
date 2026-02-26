@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { SoundpadService } from '../../services/soundpad.service';
+import { SoundService } from '../../services/sound.service';
 import { Sound } from '../../models/sound.model';
 import { WaveformPreviewComponent } from '../waveform-preview/waveform-preview.component';
 
@@ -38,7 +38,7 @@ export class EditSoundModalComponent implements OnChanges {
   showCopyNameDialog = false;
   copyName = '';
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundService: SoundService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen && this.sound) {
@@ -67,7 +67,7 @@ export class EditSoundModalComponent implements OnChanges {
     this.isLoading = true;
     this.errorMessage = '';
 
-    this.soundpadService.getSoundAudio(this.sound.index)
+    this.soundService.getSoundAudio(this.sound.id)
       .pipe(take(1))
       .subscribe({
         next: (file) => {
@@ -125,7 +125,7 @@ export class EditSoundModalComponent implements OnChanges {
     this.isSaving = true;
     this.errorMessage = '';
 
-    this.soundpadService.updateSoundFile(this.sound.index, this.audioFile)
+    this.soundService.updateSoundFile(this.sound.id, this.audioFile)
       .pipe(take(1))
       .subscribe({
         next: () => {
@@ -174,7 +174,7 @@ export class EditSoundModalComponent implements OnChanges {
     this.isSaving = true;
     this.errorMessage = '';
 
-    this.soundpadService.addSound(
+    this.soundService.addSound(
       this.audioFile,
       this.sound.category,
       finalName,

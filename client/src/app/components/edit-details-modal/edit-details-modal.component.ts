@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { SoundpadService } from '../../services/soundpad.service';
+import { SoundService } from '../../services/sound.service';
 import { Sound, CategoryIcon } from '../../models/sound.model';
 import { CategorySelectComponent } from '../category-select/category-select.component';
 
@@ -32,12 +32,12 @@ export class EditDetailsModalComponent implements OnChanges {
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundService: SoundService) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen && this.sound) {
       this.prefillFromSound(this.sound);
-      this.soundpadService.getCategories()
+      this.soundService.getCategories()
         .pipe(take(1))
         .subscribe({
           next: (cats) => { this.categories = cats; },
@@ -125,8 +125,8 @@ export class EditDetailsModalComponent implements OnChanges {
     // Only pass category if it changed from the original
     const categoryChanged = this.editCategory !== this.sound.category;
 
-    this.soundpadService.updateSoundDetails(
-      this.sound.index,
+    this.soundService.updateSoundDetails(
+      this.sound.id,
       tag,
       this.editArtist.trim(),
       this.editTitle.trim(),

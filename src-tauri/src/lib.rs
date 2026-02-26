@@ -33,6 +33,9 @@ pub fn run() {
             // yt-dlp binary lives next to server-bundle.js in the resource dir
             let yt_dlp_path = resource_dir.join("yt-dlp.exe");
 
+            // Audio engine binary bundled alongside the server
+            let audio_engine_path = resource_dir.join("ragepad-audio-engine.exe");
+
             let (mut rx, _child) = app
                 .shell()
                 .sidecar("ragepad-server")?
@@ -41,6 +44,7 @@ pub fn run() {
                 .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
                 .env("RAGE_PAD_DATA_DIR", data_dir.to_str().unwrap_or(""))
                 .env("RAGE_PAD_YT_DLP", yt_dlp_path.to_str().unwrap_or(""))
+                .env("RAGE_PAD_AUDIO_ENGINE", audio_engine_path.to_str().unwrap_or(""))
                 .spawn()?;
 
             // Drain sidecar stdout/stderr into a log file for debugging.

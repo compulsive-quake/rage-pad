@@ -6,7 +6,9 @@ import os from 'os';
 import https from 'https';
 import { spawn } from 'child_process';
 import QRCode from 'qrcode';
-import soundpadRoutes from './routes';
+import { initRoutes } from './routes';
+import { SoundDb } from './sound-db';
+import { AudioEngine } from './audio-engine';
 
 import { getSetting, getAllSettings, setSetting, updateSettings, closeDb } from './database';
 
@@ -57,6 +59,43 @@ function setupLogging(): void {
 
 setupLogging();
 
+// ── Initialize SQLite database ──────────────────────────────────────────────
+
+const dataDir = process.env['RAGE_PAD_DATA_DIR']
+  ? path.resolve(process.env['RAGE_PAD_DATA_DIR'])
+  : path.resolve(__dirname, '../../data');
+
+const dbPath = path.join(dataDir, 'ragepad.db');
+const soundsDir = path.join(dataDir, 'sounds');
+const soundDb = new SoundDb(dbPath, soundsDir);
+
+// ── Initialize audio engine ─────────────────────────────────────────────────
+
+const audioEngine = new AudioEngine();
+audioEngine.start();
+
+// Apply saved audio device settings
+const savedInputDevice = getSetting('audioInputDevice');
+const savedOutputDevice = getSetting('audioOutputDevice');
+
+if (savedInputDevice) {
+  audioEngine.setInputDevice(savedInputDevice).catch(err => {
+    console.warn(`[audio-engine] Could not restore input device "${savedInputDevice}":`, err.message);
+  });
+}
+if (savedOutputDevice) {
+  audioEngine.setOutputDevice(savedOutputDevice).catch(err => {
+    console.warn(`[audio-engine] Could not restore output device "${savedOutputDevice}":`, err.message);
+  });
+}
+
+audioEngine.on('exit', (code: number | null) => {
+  console.warn(`[audio-engine] Process exited (code ${code}), restarting...`);
+  setTimeout(() => audioEngine.start(), 1000);
+});
+
+// ── Express app ─────────────────────────────────────────────────────────────
+
 const app: Application = express();
 const startupPort = Number(process.env.PORT) || getSetting('serverPort');
 let currentPort = startupPort;
@@ -73,11 +112,10 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // API Routes
-app.use('/api', soundpadRoutes);
+const routes = initRoutes(soundDb, audioEngine);
+app.use('/api', routes);
 
 // Serve Angular static files in production.
-// When packaged as a Tauri sidecar, RAGE_PAD_CLIENT_DIST points to the
-// Angular build that Tauri bundles as resources alongside the installer.
 const clientDistPath = process.env['RAGE_PAD_CLIENT_DIST']
   ? path.resolve(process.env['RAGE_PAD_CLIENT_DIST'])
   : path.join(__dirname, '../../client/dist/rage-pad-client/browser');
@@ -118,7 +156,6 @@ app.get('/api/qr-code', async (_req: Request, res: Response) => {
 
 // ── Update download & install ────────────────────────────────────────────────
 
-/** Follow redirects and stream the response, calling `onResponse` with the final response. */
 function httpsGetFollowRedirects(url: string, onResponse: (res: import('http').IncomingMessage) => void, onError: (err: Error) => void): void {
   https.get(url, { headers: { 'User-Agent': 'RagePad' } }, (res) => {
     if ((res.statusCode === 301 || res.statusCode === 302) && res.headers.location) {
@@ -131,7 +168,6 @@ function httpsGetFollowRedirects(url: string, onResponse: (res: import('http').I
 
 let downloadedInstallerPath = '';
 
-// SSE endpoint: downloads the installer and streams progress events
 app.get('/api/download-update', (req: Request, res: Response) => {
   const downloadUrl = req.query['url'] as string;
   if (!downloadUrl) {
@@ -190,7 +226,6 @@ app.get('/api/download-update', (req: Request, res: Response) => {
   });
 });
 
-// Launch the downloaded installer visibly so the user sees the NSIS GUI
 app.post('/api/launch-installer', (_req: Request, res: Response) => {
   if (!downloadedInstallerPath || !fs.existsSync(downloadedInstallerPath)) {
     res.status(400).json({ error: 'No downloaded installer found' });
@@ -199,7 +234,6 @@ app.post('/api/launch-installer', (_req: Request, res: Response) => {
   spawn(`"${downloadedInstallerPath}"`, [], { detached: true, stdio: 'ignore', shell: true }).unref();
   res.json({ ok: true });
 
-  // Give the response time to flush, then exit so the installer can replace files
   setTimeout(() => process.exit(0), 500);
 });
 
@@ -214,6 +248,19 @@ app.put('/api/settings', (req: Request, res: Response) => {
   // Port changes go through /api/change-port — strip it here
   delete body.serverPort;
   const updated = updateSettings(body);
+
+  // Apply audio device changes immediately
+  if (body.audioInputDevice !== undefined) {
+    audioEngine.setInputDevice(body.audioInputDevice).catch(err => {
+      console.warn(`[settings] Could not set input device:`, err.message);
+    });
+  }
+  if (body.audioOutputDevice !== undefined) {
+    audioEngine.setOutputDevice(body.audioOutputDevice).catch(err => {
+      console.warn(`[settings] Could not set output device:`, err.message);
+    });
+  }
+
   res.json(updated);
 });
 
@@ -232,18 +279,18 @@ app.post('/api/change-port', (req: Request, res: Response) => {
     return;
   }
 
-  // Try to start a new listener on the requested port
   const newServer = app.listen(newPort, () => {
     const oldPort = currentPort;
     currentPort = newPort;
 
-    // Persist the new port to the database
     setSetting('serverPort', newPort);
 
-    // Re-attach graceful-shutdown handlers to the new server instance
     const shutdownNew = () => {
-      closeDb();
-      newServer.close(() => process.exit(0));
+      audioEngine.stop().then(() => {
+        soundDb.close();
+        closeDb();
+        newServer.close(() => process.exit(0));
+      });
     };
     process.removeAllListeners('SIGTERM');
     process.removeAllListeners('SIGINT');
@@ -253,12 +300,10 @@ app.post('/api/change-port', (req: Request, res: Response) => {
     console.log(`[port-change] Switched from port ${oldPort} to ${newPort}`);
     res.json({ port: newPort, message: `Server moved to port ${newPort}` });
 
-    // Close the old listener after a short delay so the response can flush
     setTimeout(() => {
       server.close(() => {
         console.log(`[port-change] Old listener on port ${oldPort} closed`);
       });
-      // Promote the new server so future port-changes close the right one
       server = newServer;
     }, 500);
   });
@@ -272,13 +317,12 @@ app.post('/api/change-port', (req: Request, res: Response) => {
 });
 
 // Health check endpoint
-app.get('/health', (req: Request, res: Response) => {
+app.get('/health', (_req: Request, res: Response) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Catch-all route for Angular routing (SPA)
 app.get('*', (req: Request, res: Response) => {
-  // Only serve index.html for non-API routes
   if (!req.path.startsWith('/api')) {
     res.sendFile(path.join(clientDistPath, 'index.html'));
   } else {
@@ -299,13 +343,16 @@ app.use((err: Error, req: Request, res: Response) => {
 let server = app.listen(startupPort, () => {
   console.log(`Rage Pad server running on http://localhost:${startupPort}`);
   console.log(`API available at http://localhost:${startupPort}/api`);
-  console.log(`Soundpad integration ready`);
+  console.log(`Audio engine ready`);
 });
 
-// Graceful shutdown so nodemon can restart cleanly without EADDRINUSE
+// Graceful shutdown
 const shutdown = () => {
-  closeDb();
-  server.close(() => process.exit(0));
+  audioEngine.stop().then(() => {
+    soundDb.close();
+    closeDb();
+    server.close(() => process.exit(0));
+  });
 };
 process.on('SIGTERM', shutdown);
 process.on('SIGINT', shutdown);

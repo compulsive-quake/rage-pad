@@ -2,17 +2,18 @@ import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { APP_VERSION, SoundpadService } from '../../services/soundpad.service';
+import { APP_VERSION, SoundService } from '../../services/sound.service';
+import { AudioDevices } from '../../models/sound.model';
 
 export interface SettingsPayload {
-  configWatchEnabled: boolean;
-  autoLaunchEnabled: boolean;
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
   wakeMinutes: number;
   autoUpdateCheckEnabled: boolean;
   updateCheckIntervalMinutes: number;
   serverPort: number;
+  audioInputDevice: string;
+  audioOutputDevice: string;
 }
 
 @Component({
@@ -23,9 +24,6 @@ export interface SettingsPayload {
   styleUrls: ['./settings.component.scss']
 })
 export class SettingsComponent implements OnInit, OnChanges {
-  // Current (committed) values from parent
-  @Input() configWatchEnabled = false;
-  @Input() autoLaunchEnabled = false;
   @Input() keepAwakeEnabled = false;
   @Input() idleTimeoutEnabled = false;
   @Input() wakeMinutes = 30;
@@ -34,20 +32,15 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() serverPort = 8088;
   @Input() isPortChanging = false;
   @Input() portChangeError = '';
-  @Input() isRestarting = false;
   @Input() isCheckingForUpdate = false;
   @Input() latestVersion = '';
   @Input() updateAvailable = false;
 
-  // Events
   @Output() saveSettings = new EventEmitter<SettingsPayload>();
-  @Output() restartSoundpad = new EventEmitter<void>();
   @Output() closeSettings = new EventEmitter<void>();
   @Output() checkForUpdates = new EventEmitter<void>();
 
-  // Draft (pending) values – user edits these
-  draftConfigWatch = false;
-  draftAutoLaunch = false;
+  // Draft (pending) values
   draftKeepAwake = false;
   draftIdleTimeout = false;
   draftWakeMinutes = 30;
@@ -55,6 +48,13 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftUpdateCheckInterval = 60;
   intervalPreset: string = '60';
   draftServerPort = 8088;
+  draftInputDevice = '';
+  draftOutputDevice = '';
+
+  // Audio devices
+  audioDevices: AudioDevices = { input: [], output: [] };
+  currentInputDevice = '';
+  currentOutputDevice = '';
 
   // Version
   readonly appVersion = APP_VERSION;
@@ -70,32 +70,28 @@ export class SettingsComponent implements OnInit, OnChanges {
   qrServerUrl = '';
   isLoadingQr = false;
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundService: SoundService) {}
 
   ngOnInit(): void {
     this.loadQrCode();
+    this.loadAudioDevices();
+    this.loadAudioSettings();
     this.snapshotDraft();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
-    // When parent updates inputs (e.g. after a save), re-snapshot
-    if (changes['configWatchEnabled'] || changes['autoLaunchEnabled'] ||
-        changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes'] ||
+    if (changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes'] ||
         changes['autoUpdateCheckEnabled'] || changes['updateCheckIntervalMinutes'] || changes['serverPort']) {
       this.snapshotDraft();
     }
 
-    // When a manual update check finishes (isCheckingForUpdate goes true→false), show dialog if up to date
     const checkChange = changes['isCheckingForUpdate'];
     if (checkChange && checkChange.previousValue === true && checkChange.currentValue === false && !this.updateAvailable) {
       this.showVersionDialog = true;
     }
   }
 
-  /** Copy current committed values into draft state */
   private snapshotDraft(): void {
-    this.draftConfigWatch = this.configWatchEnabled;
-    this.draftAutoLaunch = this.autoLaunchEnabled;
     this.draftKeepAwake = this.keepAwakeEnabled;
     this.draftIdleTimeout = this.idleTimeoutEnabled;
     this.draftWakeMinutes = this.wakeMinutes;
@@ -104,29 +100,22 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.intervalPreset = [30, 60, 1440].includes(this.updateCheckIntervalMinutes)
       ? String(this.updateCheckIntervalMinutes) : 'custom';
     this.draftServerPort = this.serverPort;
+    this.draftInputDevice = this.currentInputDevice;
+    this.draftOutputDevice = this.currentOutputDevice;
   }
 
-  /** Whether any draft value differs from the committed value */
   get hasChanges(): boolean {
-    return this.draftConfigWatch !== this.configWatchEnabled ||
-           this.draftAutoLaunch !== this.autoLaunchEnabled ||
-           this.draftKeepAwake !== this.keepAwakeEnabled ||
+    return this.draftKeepAwake !== this.keepAwakeEnabled ||
            this.draftIdleTimeout !== this.idleTimeoutEnabled ||
            this.draftWakeMinutes !== this.wakeMinutes ||
            this.draftAutoUpdateCheck !== this.autoUpdateCheckEnabled ||
            this.draftUpdateCheckInterval !== this.updateCheckIntervalMinutes ||
-           this.draftServerPort !== this.serverPort;
+           this.draftServerPort !== this.serverPort ||
+           this.draftInputDevice !== this.currentInputDevice ||
+           this.draftOutputDevice !== this.currentOutputDevice;
   }
 
   // ── Draft change handlers ──────────────────────────────────────────────
-
-  onToggleConfigWatch(): void {
-    this.draftConfigWatch = !this.draftConfigWatch;
-  }
-
-  onToggleAutoLaunch(): void {
-    this.draftAutoLaunch = !this.draftAutoLaunch;
-  }
 
   onToggleKeepAwake(): void {
     this.draftKeepAwake = !this.draftKeepAwake;
@@ -159,6 +148,14 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftServerPort = value;
   }
 
+  onInputDeviceChange(device: string): void {
+    this.draftInputDevice = device;
+  }
+
+  onOutputDeviceChange(device: string): void {
+    this.draftOutputDevice = device;
+  }
+
   onCheckForUpdates(): void {
     this.checkForUpdates.emit();
   }
@@ -170,22 +167,19 @@ export class SettingsComponent implements OnInit, OnChanges {
   // ── Save ───────────────────────────────────────────────────────────────
 
   onSave(): void {
+    this.currentInputDevice = this.draftInputDevice;
+    this.currentOutputDevice = this.draftOutputDevice;
+
     this.saveSettings.emit({
-      configWatchEnabled: this.draftConfigWatch,
-      autoLaunchEnabled: this.draftAutoLaunch,
       keepAwakeEnabled: this.draftKeepAwake,
       idleTimeoutEnabled: this.draftIdleTimeout,
       wakeMinutes: this.draftWakeMinutes,
       autoUpdateCheckEnabled: this.draftAutoUpdateCheck,
       updateCheckIntervalMinutes: this.draftUpdateCheckInterval,
-      serverPort: this.draftServerPort
+      serverPort: this.draftServerPort,
+      audioInputDevice: this.draftInputDevice,
+      audioOutputDevice: this.draftOutputDevice,
     });
-  }
-
-  // ── Restart (immediate action, not a setting) ─────────────────────────
-
-  onRestartSoundpad(): void {
-    this.restartSoundpad.emit();
   }
 
   // ── Close with unsaved-changes guard ──────────────────────────────────
@@ -200,7 +194,7 @@ export class SettingsComponent implements OnInit, OnChanges {
 
   onDiscardConfirm(): void {
     this.showDiscardDialog = false;
-    this.snapshotDraft(); // reset draft to committed values
+    this.snapshotDraft();
     this.closeSettings.emit();
   }
 
@@ -212,7 +206,7 @@ export class SettingsComponent implements OnInit, OnChanges {
 
   private loadQrCode(): void {
     this.isLoadingQr = true;
-    this.soundpadService.getQrCode()
+    this.soundService.getQrCode()
       .pipe(take(1))
       .subscribe({
         next: (data) => {
@@ -223,6 +217,27 @@ export class SettingsComponent implements OnInit, OnChanges {
         error: () => {
           this.isLoadingQr = false;
         }
+      });
+  }
+
+  // ── Audio devices ──────────────────────────────────────────────────────
+
+  private loadAudioDevices(): void {
+    this.soundService.getAudioDevices()
+      .pipe(take(1))
+      .subscribe(devices => {
+        this.audioDevices = devices;
+      });
+  }
+
+  private loadAudioSettings(): void {
+    this.soundService.getSettings()
+      .pipe(take(1))
+      .subscribe(settings => {
+        this.currentInputDevice = settings.audioInputDevice || '';
+        this.currentOutputDevice = settings.audioOutputDevice || '';
+        this.draftInputDevice = this.currentInputDevice;
+        this.draftOutputDevice = this.currentOutputDevice;
       });
   }
 }

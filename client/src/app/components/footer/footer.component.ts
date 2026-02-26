@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
 import { ConnectionStatusComponent } from '../connection-status/connection-status.component';
-import { SoundpadService } from '../../services/soundpad.service';
+import { SoundService } from '../../services/sound.service';
 
 @Component({
   selector: 'app-footer',
@@ -14,21 +14,12 @@ import { SoundpadService } from '../../services/soundpad.service';
 })
 export class FooterComponent {
   @Input() isConnected = false;
-  @Input() currentlyPlayingIndex: number | null = null;
+  @Input() currentlyPlayingId: number | null = null;
   @Input() isPaused = false;
   @Input() playbackProgress = 0;
   @Input() playbackTimeRemaining = 0;
   @Input() volume = 100;
   @Input() playbackMode: 'both' | 'mic' | 'speakers' = 'both';
-
-  /** Whether auto-launch is enabled (controls visibility of manual start button) */
-  @Input() autoLaunchEnabled = true;
-  /** True while a launch attempt is in progress */
-  @Input() isLaunching = false;
-  /** Error message to show in the footer when auto-launch fails */
-  @Input() launchErrorMessage = '';
-  /** Seconds remaining until the next auto-launch retry */
-  @Input() launchRetryCountdown = 0;
 
   /** Update notification inputs */
   @Input() updateAvailable = false;
@@ -45,12 +36,9 @@ export class FooterComponent {
   @Output() togglePause = new EventEmitter<void>();
   @Output() volumeChange = new EventEmitter<number>();
   @Output() playbackModeChange = new EventEmitter<'both' | 'mic' | 'speakers'>();
-  /** Emitted when the user clicks the manual "Start Soundpad" button */
-  @Output() manualLaunch = new EventEmitter<void>();
-  /** Emitted when the user dismisses the update banner */
   @Output() dismissUpdate = new EventEmitter<void>();
 
-  constructor(private soundpadService: SoundpadService, private ngZone: NgZone) {}
+  constructor(private soundService: SoundService, private ngZone: NgZone) {}
 
   onStop(): void {
     this.stop.emit();
@@ -66,10 +54,6 @@ export class FooterComponent {
 
   onSetPlaybackMode(mode: 'both' | 'mic' | 'speakers'): void {
     this.playbackModeChange.emit(mode);
-  }
-
-  onManualLaunch(): void {
-    this.manualLaunch.emit();
   }
 
   onDismissUpdate(): void {
@@ -102,7 +86,6 @@ export class FooterComponent {
 
     es.addEventListener('error', (e: any) => {
       this.ngZone.run(() => {
-        // SSE 'error' can fire for both custom error events and connection loss
         if (e.data) {
           const data = JSON.parse(e.data);
           this.downloadError = data.message || 'Download failed';
@@ -116,7 +99,7 @@ export class FooterComponent {
   }
 
   onLaunchInstaller(): void {
-    this.soundpadService.launchInstaller()
+    this.soundService.launchInstaller()
       .pipe(take(1))
       .subscribe({
         error: () => {

@@ -11,39 +11,34 @@ export interface UpdateInfo {
   latestVersion: string;
   downloadUrl: string;
 }
-import { Sound, ConnectionStatus, CategoryIcon } from '../models/sound.model';
+import { Sound, ConnectionStatus, CategoryIcon, AudioDevices } from '../models/sound.model';
 
 export interface AppSettings {
-  configWatchEnabled: boolean;
-  autoLaunchEnabled: boolean;
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
   wakeMinutes: number;
   autoUpdateCheckEnabled: boolean;
   updateCheckIntervalMinutes: number;
   serverPort: number;
+  audioInputDevice: string;
+  audioOutputDevice: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  configWatchEnabled: false,
-  autoLaunchEnabled: true,
   keepAwakeEnabled: false,
   idleTimeoutEnabled: false,
   wakeMinutes: 30,
   autoUpdateCheckEnabled: true,
   updateCheckIntervalMinutes: 60,
   serverPort: 8088,
+  audioInputDevice: '',
+  audioOutputDevice: '',
 };
 
 @Injectable({
   providedIn: 'root'
 })
-export class SoundpadService implements OnDestroy {
-  /**
-   * API base URL.  The UI and API are co-hosted on the same Express
-   * server, so `window.location.origin` is always the correct base.
-   * After a port-change redirect, origin automatically reflects the new port.
-   */
+export class SoundService implements OnDestroy {
   private get apiUrl(): string {
     return `${window.location.origin}/api`;
   }
@@ -53,21 +48,17 @@ export class SoundpadService implements OnDestroy {
   private destroy$ = new Subject<void>();
 
   constructor(private http: HttpClient, private ngZone: NgZone) {
-    // Check connection status periodically
     this.startConnectionCheck();
   }
 
-  /** The port the page (and therefore the API) is currently served from. */
   get port(): number {
     return Number(window.location.port) || 8088;
   }
 
-  /** Ask the server (on its current port) to move to a new port. */
   changeServerPort(newPort: number): Observable<{ port: number; message: string }> {
     return this.http.post<{ port: number; message: string }>(`${this.apiUrl}/change-port`, { port: newPort });
   }
 
-  /** Verify that the server is reachable on the given port. */
   verifyNewPort(port: number): Observable<boolean> {
     const url = `http://${window.location.hostname}:${port}/api/status`;
     return this.http.get<ConnectionStatus>(url).pipe(
@@ -76,14 +67,8 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  /** Fetch a QR code data-URL for the server's LAN address. */
   getQrCode(): Observable<{ url: string; qrDataUrl: string }> {
     return this.http.get<{ url: string; qrDataUrl: string }>(`${this.apiUrl}/qr-code`);
-  }
-
-  /** Build a category-image URL using the current origin. */
-  getCategoryImageUrl(path: string): string {
-    return `${window.location.origin}/api/category-image?path=${encodeURIComponent(path)}`;
   }
 
   getSettings(): Observable<AppSettings> {
@@ -112,7 +97,6 @@ export class SoundpadService implements OnDestroy {
       this.connectionStatus$.next(status);
     });
 
-    // Initial check
     this.checkConnection().pipe(take(1)).subscribe(status => {
       this.connectionStatus$.next(status);
     });
@@ -142,14 +126,10 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  playSound(index: number, speakersOnly = false, micOnly = false): Observable<any> {
-    return this.http.post(`${this.apiUrl}/sounds/${index}/play`, { speakersOnly, micOnly }).pipe(
+  playSound(id: number, speakersOnly = false, micOnly = false): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/${id}/play`, { speakersOnly, micOnly }).pipe(
       catchError(error => {
         console.error('Failed to play sound:', error);
-        const body = error?.error;
-        if (body?.soundpadNotRunning) {
-          return of({ error: 'Soundpad is not running', soundpadNotRunning: true });
-        }
         return of({ error: 'Failed to play sound' });
       })
     );
@@ -182,8 +162,8 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  updateSoundDetails(index: number, customTag: string, artist: string, title: string, category?: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/sounds/${index}/update-details`, {
+  updateSoundDetails(id: number, customTag: string, artist: string, title: string, category?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/${id}/update-details`, {
       customTag, artist, title, category
     }).pipe(
       catchError(error => {
@@ -193,8 +173,8 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  renameSound(index: number, title: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/sounds/${index}/rename`, { title }).pipe(
+  renameSound(id: number, title: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/${id}/rename`, { title }).pipe(
       catchError(error => {
         console.error('Failed to rename sound:', error);
         return of({ error: 'Failed to rename sound' });
@@ -202,8 +182,8 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  deleteSound(index: number): Observable<any> {
-    return this.http.delete(`${this.apiUrl}/sounds/${index}`).pipe(
+  deleteSound(id: number): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/sounds/${id}`).pipe(
       catchError(error => {
         console.error('Failed to delete sound:', error);
         return of({ error: 'Failed to delete sound' });
@@ -223,33 +203,15 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  reorderSound(soundIndex: number, targetCategory: string, targetPosition: number): Observable<any> {
+  reorderSound(soundId: number, targetCategory: string, targetPosition: number): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/reorder`, {
-      soundIndex,
+      soundId,
       targetCategory,
       targetPosition
     }).pipe(
       catchError(error => {
         console.error('Failed to reorder sound:', error);
         return of({ error: 'Failed to reorder sound' });
-      })
-    );
-  }
-
-  restartSoundpad(index?: number, title?: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/restart`, { index, title }).pipe(
-      catchError(error => {
-        console.error('Failed to restart Soundpad:', error);
-        return of({ error: 'Failed to restart Soundpad' });
-      })
-    );
-  }
-
-  launchSoundpad(): Observable<any> {
-    return this.http.post(`${this.apiUrl}/launch-soundpad`, {}).pipe(
-      catchError(error => {
-        console.error('Failed to launch Soundpad:', error);
-        return of({ error: 'Failed to launch Soundpad' });
       })
     );
   }
@@ -279,8 +241,8 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  getCategories(): Observable<{ name: string; parentCategory: string }[]> {
-    return this.http.get<{ name: string; parentCategory: string }[]>(`${this.apiUrl}/categories`).pipe(
+  getCategories(): Observable<{ id: number; name: string; parentCategory: string }[]> {
+    return this.http.get<{ id: number; name: string; parentCategory: string }[]>(`${this.apiUrl}/categories`).pipe(
       catchError(() => of([]))
     );
   }
@@ -298,27 +260,23 @@ export class SoundpadService implements OnDestroy {
     if (cropEndSec !== undefined) {
       formData.append('cropEnd', String(cropEndSec));
     }
-    // Always send artist and title (even as empty strings) so the server can write them to the SPL tag
     formData.append('artist', artist ?? '');
     formData.append('title', title ?? '');
     if (durationSeconds !== undefined && durationSeconds > 0) {
       formData.append('durationSeconds', String(durationSeconds));
     }
-    // Send the original uncropped file so the server can save a backup
     if (originalFile) {
       formData.append('originalFile', originalFile);
     }
     return this.http.post(`${this.apiUrl}/sounds/add`, formData);
   }
 
-  /** Get list of sound URLs that have uncropped backups. */
   getUncroppedList(): Observable<{ urls: string[] }> {
     return this.http.get<{ urls: string[] }>(`${this.apiUrl}/sounds/uncropped-list`).pipe(
       catchError(() => of({ urls: [] }))
     );
   }
 
-  /** Restore the uncropped backup for a sound (replaces cropped file, restarts Soundpad). */
   resetCrop(soundUrl: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/reset-crop`, { url: soundUrl }).pipe(
       catchError(error => {
@@ -328,26 +286,18 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  /**
-   * Returns an Observable that emits once every time the server detects a
-   * change to soundlist.spl.  The Observable completes when the caller
-   * unsubscribes (the underlying EventSource is closed automatically).
-   */
   listenForConfigChanges(): Observable<void> {
     return new Observable<void>(observer => {
       const es = new EventSource(`${this.apiUrl}/config-watch`);
 
       es.addEventListener('reload', () => {
-        // EventSource callbacks run outside Angular's zone – bring them back in
         this.ngZone.run(() => observer.next());
       });
 
       es.onerror = () => {
-        // Don't complete – the browser will auto-reconnect; just log
         console.warn('[config-watch] SSE connection error; browser will retry');
       };
 
-      // Teardown: close the EventSource when the subscriber unsubscribes
       return () => es.close();
     });
   }
@@ -369,35 +319,45 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  /** Launch the downloaded installer and shut down the server. */
   launchInstaller(): Observable<{ ok: boolean }> {
     return this.http.post<{ ok: boolean }>(`${this.apiUrl}/launch-installer`, {});
   }
 
-  private isNewerVersion(latest: string, current: string): boolean {
-    const latestParts = latest.split('.').map(Number);
-    const currentParts = current.split('.').map(Number);
-    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
-      const l = latestParts[i] || 0;
-      const c = currentParts[i] || 0;
-      if (l > c) return true;
-      if (l < c) return false;
-    }
-    return false;
+  // ── Audio devices ──────────────────────────────────────────────────────────
+
+  getAudioDevices(): Observable<AudioDevices> {
+    return this.http.get<AudioDevices>(`${this.apiUrl}/audio/devices`).pipe(
+      catchError(() => of({ input: [], output: [] }))
+    );
   }
 
-  /**
-   * Fetches a sound's audio file from the server as a File object.
-   */
-  getSoundAudio(index: number): Observable<File> {
-    return this.http.get(`${this.apiUrl}/sounds/${index}/audio`, {
+  setInputDevice(deviceName: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/audio/input-device`, { deviceName }).pipe(
+      catchError(error => {
+        console.error('Failed to set input device:', error);
+        return of({ error: 'Failed to set input device' });
+      })
+    );
+  }
+
+  setOutputDevice(deviceName: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/audio/output-device`, { deviceName }).pipe(
+      catchError(error => {
+        console.error('Failed to set output device:', error);
+        return of({ error: 'Failed to set output device' });
+      })
+    );
+  }
+
+  getSoundAudio(id: number): Observable<File> {
+    return this.http.get(`${this.apiUrl}/sounds/${id}/audio`, {
       responseType: 'blob',
       observe: 'response',
     }).pipe(
       map(response => {
         const blob = response.body as Blob;
         const contentDisposition = response.headers.get('Content-Disposition') || '';
-        let fileName = `sound_${index}.wav`;
+        let fileName = `sound_${id}.wav`;
         const match = contentDisposition.match(/filename="([^"]+)"/);
         if (match) {
           try {
@@ -411,19 +371,12 @@ export class SoundpadService implements OnDestroy {
     );
   }
 
-  /**
-   * Uploads a replacement audio file for an existing sound.
-   */
-  updateSoundFile(index: number, file: File): Observable<any> {
+  updateSoundFile(id: number, file: File): Observable<any> {
     const formData = new FormData();
     formData.append('soundFile', file);
-    return this.http.post(`${this.apiUrl}/sounds/${index}/update-file`, formData);
+    return this.http.post(`${this.apiUrl}/sounds/${id}/update-file`, formData);
   }
 
-  /**
-   * Fetches audio from a YouTube URL.
-   * Returns an Observable that emits { file: File, title: string, durationSeconds: number }.
-   */
   fetchYoutubeAudio(url: string): Observable<{ file: File; title: string; durationSeconds: number }> {
     return this.http.post(`${this.apiUrl}/youtube/fetch`, { url }, {
       responseType: 'blob',
@@ -431,12 +384,9 @@ export class SoundpadService implements OnDestroy {
     }).pipe(
       map(response => {
         const blob = response.body as Blob;
-        // Extract title from response header
         const encodedTitle = response.headers.get('X-Video-Title') || '';
         const title = encodedTitle ? decodeURIComponent(encodedTitle) : 'YouTube Audio';
-        // Extract duration from response header
         const durationSeconds = parseInt(response.headers.get('X-Video-Duration') || '0', 10) || 0;
-        // Extract filename from Content-Disposition header
         const contentDisposition = response.headers.get('Content-Disposition') || '';
         let fileName = 'youtube_audio.m4a';
         const match = contentDisposition.match(/filename="([^"]+)"/);
@@ -451,5 +401,17 @@ export class SoundpadService implements OnDestroy {
         return { file, title, durationSeconds };
       })
     );
+  }
+
+  private isNewerVersion(latest: string, current: string): boolean {
+    const latestParts = latest.split('.').map(Number);
+    const currentParts = current.split('.').map(Number);
+    for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
+      const l = latestParts[i] || 0;
+      const c = currentParts[i] || 0;
+      if (l > c) return true;
+      if (l < c) return false;
+    }
+    return false;
   }
 }

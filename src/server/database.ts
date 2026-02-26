@@ -4,25 +4,25 @@ import fs from 'fs';
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface AppSettings {
-  configWatchEnabled: boolean;
-  autoLaunchEnabled: boolean;
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
   wakeMinutes: number;
   autoUpdateCheckEnabled: boolean;
   updateCheckIntervalMinutes: number;
   serverPort: number;
+  audioInputDevice: string;
+  audioOutputDevice: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
-  configWatchEnabled: false,
-  autoLaunchEnabled: true,
   keepAwakeEnabled: false,
   idleTimeoutEnabled: false,
   wakeMinutes: 30,
   autoUpdateCheckEnabled: true,
   updateCheckIntervalMinutes: 60,
   serverPort: 8088,
+  audioInputDevice: '',
+  audioOutputDevice: '',
 };
 
 // ── Data dir & file path ─────────────────────────────────────────────────────

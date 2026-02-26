@@ -36,7 +36,8 @@
       "../client/dist/rage-pad-client/browser/*": "client-dist/",
       "binaries/server-bundle.js": "server-bundle.js",
       "binaries/node_modules/**/*": "node_modules/",
-      "binaries/yt-dlp.exe": "yt-dlp.exe"
+      "binaries/yt-dlp.exe": "yt-dlp.exe",
+      "../audio-engine/target/release/ragepad-audio-engine.exe": "ragepad-audio-engine.exe"
     },
     "windows": {
       "nsis": {

@@ -19,22 +19,33 @@ if (fs.existsSync(TARGET_NM)) {
   fs.rmSync(TARGET_NM, { recursive: true, force: true });
 }
 
-// Scan the bundle for the browserify pattern: "package-name": void 0
-// This pattern indicates packages that were externalized by a pre-bundled
-// dependency and need to be available via require() at runtime.
+// Scan the bundle for packages that need to be available at runtime:
+// 1. Browserify pattern: "package-name": void 0
+// 2. esbuild --external pattern: require("package-name")
 console.log('Scanning bundle for unresolved runtime dependencies...');
 
 const bundleContent = fs.readFileSync(BUNDLE, 'utf8');
-const pattern = /"([^"]+)":\s*void\s*0/g;
 const externalPackages = new Set();
 let match;
 
-while ((match = pattern.exec(bundleContent)) !== null) {
+// Pattern 1: browserify externals
+const voidPattern = /"([^"]+)":\s*void\s*0/g;
+while ((match = voidPattern.exec(bundleContent)) !== null) {
   const pkg = match[1];
-  // Skip relative paths, absolute paths, and Node builtins
   if (pkg.startsWith('.') || pkg.startsWith('/')) continue;
   if (BUILTINS.has(pkg)) continue;
   externalPackages.add(pkg);
+}
+
+// Pattern 2: esbuild --external requires (bare specifiers only)
+const requirePattern = /require\("([^.\/][^"]*)"\)/g;
+while ((match = requirePattern.exec(bundleContent)) !== null) {
+  const pkg = match[1];
+  if (BUILTINS.has(pkg)) continue;
+  // Get the top-level package name (handle scoped packages)
+  const parts = pkg.split('/');
+  const topLevel = pkg.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+  externalPackages.add(topLevel);
 }
 
 if (externalPackages.size === 0) {

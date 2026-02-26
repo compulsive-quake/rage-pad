@@ -1,5 +1,5 @@
 export interface Sound {
-  index: number;
+  id: number;
   title: string;
   url: string;
   artist: string;
@@ -11,8 +11,9 @@ export interface Sound {
   parentCategory: string;
   categoryImage: string;
   categoryIndex: number; // position of this sound within its category (0-based)
-  customTag?: string;    // raw customTag attribute from SPL
-  rawTitle?: string;     // raw title attribute from SPL (distinct from computed title)
+  customTag?: string;    // display name
+  rawTitle?: string;     // raw title (distinct from computed title)
+  hasUncropped?: boolean;
 }
 
 export interface Category {
@@ -31,4 +32,9 @@ export interface CategoryIcon {
   name: string;
   icon: string;
   isBase64: boolean;
+}
+
+export interface AudioDevices {
+  input: string[];
+  output: string[];
 }

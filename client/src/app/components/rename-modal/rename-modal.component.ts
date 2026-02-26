@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, OnChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { SoundpadService } from '../../services/soundpad.service';
+import { SoundService } from '../../services/sound.service';
 import { Sound } from '../../models/sound.model';
 
 @Component({
@@ -24,7 +24,7 @@ export class RenameModalComponent implements OnChanges {
   renameValue = '';
   private mouseDownOnOverlay = false;
 
-  constructor(private soundpadService: SoundpadService) {}
+  constructor(private soundService: SoundService) {}
 
   onOverlayMouseDown(event: MouseEvent): void {
     this.mouseDownOnOverlay = event.target === event.currentTarget;
@@ -60,7 +60,7 @@ export class RenameModalComponent implements OnChanges {
     const sound = this.sound;
     const newTitle = this.renameValue.trim();
 
-    this.soundpadService.restartSoundpad(sound.index, newTitle)
+    this.soundService.renameSound(sound.id, newTitle)
       .pipe(take(1))
       .subscribe({
         next: () => {

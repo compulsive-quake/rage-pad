@@ -20,7 +20,7 @@
     [filteredSounds]="filteredSounds"
     [isLoading]="isLoading"
     [searchQuery]="searchQuery"
-    [currentlyPlayingIndex]="currentlyPlayingIndex"
+    [currentlyPlayingId]="currentlyPlayingId"
     [isRenameMode]="isRenameMode"
     [isReorderMode]="isReorderMode"
     [activeCategory]="activeCategory"
@@ -36,12 +36,9 @@
 
   <app-settings
     *ngIf="isSettingsModalOpen"
-    [configWatchEnabled]="configWatchEnabled"
-    [autoLaunchEnabled]="autoLaunchEnabled"
     [keepAwakeEnabled]="keepAwakeEnabled"
     [idleTimeoutEnabled]="idleTimeoutEnabled"
     [wakeMinutes]="wakeMinutes"
-    [isRestarting]="isRestarting"
     [serverPort]="serverPort"
     [isPortChanging]="isPortChanging"
     [portChangeError]="portChangeError"
@@ -51,7 +48,6 @@
     [latestVersion]="latestVersion"
     [updateAvailable]="updateAvailable"
     (saveSettings)="onSaveSettings($event)"
-    (restartSoundpad)="restartSoundpad()"
     (closeSettings)="toggleSettingsModal()"
     (checkForUpdates)="manualUpdateCheck()"
   ></app-settings>
@@ -59,16 +55,12 @@
   <!-- Footer with Playback Controls -->
   <app-footer
     [isConnected]="isConnected"
-    [currentlyPlayingIndex]="currentlyPlayingIndex"
+    [currentlyPlayingId]="currentlyPlayingId"
     [isPaused]="isPaused"
     [playbackProgress]="playbackProgress"
     [playbackTimeRemaining]="playbackTimeRemaining"
     [volume]="volume"
     [playbackMode]="playbackMode"
-    [autoLaunchEnabled]="autoLaunchEnabled"
-    [isLaunching]="isLaunching"
-    [launchErrorMessage]="launchErrorMessage"
-    [launchRetryCountdown]="launchRetryCountdown"
     [updateAvailable]="updateAvailable && !updateDismissed"
     [latestVersion]="latestVersion"
     [downloadUrl]="downloadUrl"
@@ -76,7 +68,6 @@
     (togglePause)="togglePause()"
     (volumeChange)="setVolume($event)"
     (playbackModeChange)="setPlaybackMode($event)"
-    (manualLaunch)="manualLaunchSoundpad()"
     (dismissUpdate)="dismissUpdate()"
   ></app-footer>
 
@@ -139,7 +130,7 @@
     <div class="delete-confirm-dialog" (click)="$event.stopPropagation()">
       <h3>Delete Sound</h3>
       <p>Are you sure you want to delete <strong>{{ soundToDelete?.title }}</strong>?</p>
-      <p class="delete-warning">This will remove the sound from Soundpad and permanently delete the audio file.</p>
+      <p class="delete-warning">This will permanently delete the sound and its audio file.</p>
       <div class="delete-confirm-actions">
         <button class="btn-cancel" (click)="cancelDelete()" [disabled]="isDeleting">Cancel</button>
         <button class="btn-delete" (click)="confirmDelete()" [disabled]="isDeleting">
