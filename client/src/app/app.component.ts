@@ -535,6 +535,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private stopWebAudio(): void {
     if (this.currentAudioSource) {
+      this.currentAudioSource.onended = null;
       try { this.currentAudioSource.stop(); } catch { /* already stopped */ }
       this.currentAudioSource = null;
     }
@@ -811,6 +812,28 @@ export class AppComponent implements OnInit, OnDestroy {
           console.error('Failed to update category icon:', err);
         }
       });
+  }
+
+  onUpdateSoundIcon(event: { sound: Sound; iconBase64: string }): void {
+    this.soundService.updateSoundDetails(
+      event.sound.id,
+      event.sound.customTag || event.sound.title,
+      event.sound.artist,
+      undefined,
+      event.iconBase64,
+      undefined
+    ).pipe(take(1)).subscribe({
+      next: (result: any) => {
+        if (result?.error) {
+          console.error('Failed to update sound icon:', result.error);
+        } else {
+          this.loadSounds(true);
+        }
+      },
+      error: (err: any) => {
+        console.error('Failed to update sound icon:', err);
+      }
+    });
   }
 
   onDragStateChange(isDragging: boolean): void {

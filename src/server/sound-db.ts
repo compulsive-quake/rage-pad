@@ -16,6 +16,9 @@ export interface SoundRow {
   category_id: number;
   sort_order: number;
   has_uncropped: number;
+  icon: string;
+  icon_is_base64: number;
+  hide_title: number;
 }
 
 export interface CategoryRow {
@@ -44,6 +47,9 @@ export interface Sound {
   categoryIndex: number;
   customTag?: string;
   hasUncropped?: boolean;
+  icon?: string;
+  iconIsBase64?: boolean;
+  hideTitle?: boolean;
 }
 
 export interface CategoryIcon {
@@ -106,6 +112,14 @@ export class SoundDb {
     if (columns.some(c => c.name === 'raw_title')) {
       this.db.exec('ALTER TABLE sounds DROP COLUMN raw_title');
     }
+
+    // Migration: add icon columns to sounds if missing
+    const colNames = new Set(columns.map(c => c.name));
+    if (!colNames.has('icon')) {
+      this.db.exec("ALTER TABLE sounds ADD COLUMN icon TEXT NOT NULL DEFAULT ''");
+      this.db.exec("ALTER TABLE sounds ADD COLUMN icon_is_base64 INTEGER NOT NULL DEFAULT 0");
+      this.db.exec("ALTER TABLE sounds ADD COLUMN hide_title INTEGER NOT NULL DEFAULT 0");
+    }
   }
 
   // ── Sound file paths ─────────────────────────────────────────────────────
@@ -161,14 +175,17 @@ export class SoundDb {
     durationMs?: number;
     categoryId: number;
     hasUncropped?: boolean;
+    icon?: string;
+    iconIsBase64?: boolean;
+    hideTitle?: boolean;
   }): number {
     const maxOrder = this.db.prepare(
       'SELECT COALESCE(MAX(sort_order), -1) AS m FROM sounds WHERE category_id = ?'
     ).get(params.categoryId) as { m: number };
 
     const result = this.db.prepare(`
-      INSERT INTO sounds (title, file_name, artist, duration_ms, category_id, sort_order, has_uncropped)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sounds (title, file_name, artist, duration_ms, category_id, sort_order, has_uncropped, icon, icon_is_base64, hide_title)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       params.title,
       params.fileName,
@@ -176,7 +193,10 @@ export class SoundDb {
       params.durationMs || 0,
       params.categoryId,
       maxOrder.m + 1,
-      params.hasUncropped ? 1 : 0
+      params.hasUncropped ? 1 : 0,
+      params.icon || '',
+      params.iconIsBase64 ? 1 : 0,
+      params.hideTitle ? 1 : 0
     );
 
     return result.lastInsertRowid as number;
@@ -191,6 +211,9 @@ export class SoundDb {
     title?: string;
     artist?: string;
     categoryId?: number;
+    icon?: string;
+    iconIsBase64?: boolean;
+    hideTitle?: boolean;
   }): boolean {
     const sound = this.db.prepare('SELECT * FROM sounds WHERE id = ?').get(id) as SoundRow | undefined;
     if (!sound) return false;
@@ -198,6 +221,9 @@ export class SoundDb {
     const newTitle = params.title !== undefined ? params.title : sound.title;
     const newArtist = params.artist !== undefined ? params.artist : sound.artist;
     const newCategoryId = params.categoryId !== undefined ? params.categoryId : sound.category_id;
+    const newIcon = params.icon !== undefined ? params.icon : sound.icon;
+    const newIconIsBase64 = params.iconIsBase64 !== undefined ? (params.iconIsBase64 ? 1 : 0) : sound.icon_is_base64;
+    const newHideTitle = params.hideTitle !== undefined ? (params.hideTitle ? 1 : 0) : sound.hide_title;
 
     // If changing category, put at end of new category
     let newSortOrder = sound.sort_order;
@@ -209,9 +235,9 @@ export class SoundDb {
     }
 
     const result = this.db.prepare(`
-      UPDATE sounds SET title = ?, artist = ?, category_id = ?, sort_order = ?
+      UPDATE sounds SET title = ?, artist = ?, category_id = ?, sort_order = ?, icon = ?, icon_is_base64 = ?, hide_title = ?
       WHERE id = ?
-    `).run(newTitle, newArtist, newCategoryId, newSortOrder, id);
+    `).run(newTitle, newArtist, newCategoryId, newSortOrder, newIcon, newIconIsBase64, newHideTitle, id);
 
     return result.changes > 0;
   }
@@ -409,6 +435,9 @@ export class SoundDb {
       categoryIndex: row.sort_order,
       customTag: row.title,
       hasUncropped,
+      icon: row.icon || undefined,
+      iconIsBase64: row.icon_is_base64 === 1 || undefined,
+      hideTitle: row.hide_title === 1 || undefined,
     };
   }
 

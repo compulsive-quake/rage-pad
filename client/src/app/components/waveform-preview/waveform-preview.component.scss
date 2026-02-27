@@ -552,10 +552,15 @@
   flex-shrink: 0;
   margin-right: 0.25rem;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: rgba(231, 76, 60, 0.25);
     border-color: #e74c3c;
     color: #e74c3c;
+  }
+
+  &:disabled {
+    opacity: 0.35;
+    cursor: default;
   }
 }
 

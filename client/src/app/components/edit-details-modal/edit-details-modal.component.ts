@@ -24,6 +24,10 @@ export class EditDetailsModalComponent implements OnChanges {
   editTag = '';
   editArtist = '';
   editCategory = '';
+  editIcon = '';
+  editIconIsBase64 = false;
+  editHideTitle = false;
+  iconPreviewUrl = '';
   categories: { name: string; parentCategory: string }[] = [];
   errorMessage = '';
   isSaving = false;
@@ -49,6 +53,12 @@ export class EditDetailsModalComponent implements OnChanges {
     this.editTag = sound.customTag || sound.title || '';
     this.editArtist = sound.artist || '';
     this.editCategory = sound.category || '';
+    this.editIcon = sound.icon || '';
+    this.editIconIsBase64 = sound.iconIsBase64 || false;
+    this.editHideTitle = sound.hideTitle || false;
+    this.iconPreviewUrl = this.editIcon
+      ? (this.editIconIsBase64 ? `data:image/png;base64,${this.editIcon}` : this.editIcon)
+      : '';
     this.errorMessage = '';
     this.isSaving = false;
     this.showArtistSuggestions = false;
@@ -109,6 +119,59 @@ export class EditDetailsModalComponent implements OnChanges {
     this.editCategory = categoryName;
   }
 
+  private static readonly ALLOWED_IMAGE_TYPES = [
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+    'image/bmp', 'image/x-icon', 'image/svg+xml'
+  ];
+  private static readonly MAX_ICON_SIZE = 256;
+
+  onIconSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    if (!EditDetailsModalComponent.ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      this.errorMessage = 'Unsupported image type';
+      return;
+    }
+
+    const img = new Image();
+    img.onload = () => {
+      const max = EditDetailsModalComponent.MAX_ICON_SIZE;
+      let { width, height } = img;
+      if (width > max || height > max) {
+        const scale = Math.min(max / width, max / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64 = dataUrl.split(',')[1];
+      if (base64) {
+        this.editIcon = base64;
+        this.editIconIsBase64 = true;
+        this.iconPreviewUrl = dataUrl;
+      }
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+
+    // Reset file input so the same file can be selected again
+    input.value = '';
+  }
+
+  removeIcon(): void {
+    this.editIcon = '';
+    this.editIconIsBase64 = false;
+    this.iconPreviewUrl = '';
+  }
+
   save(): void {
     if (!this.sound || this.isSaving) return;
     const tag = this.editTag.trim();
@@ -123,11 +186,25 @@ export class EditDetailsModalComponent implements OnChanges {
     // Only pass category if it changed from the original
     const categoryChanged = this.editCategory !== this.sound.category;
 
+    // Determine icon value: undefined means no change, empty string means remove
+    let iconValue: string | undefined;
+    const originalIcon = this.sound.icon || '';
+    if (this.editIcon !== originalIcon) {
+      iconValue = this.editIcon;
+    }
+
+    // Determine hideTitle value
+    const hideTitleValue = this.editHideTitle !== (this.sound.hideTitle || false)
+      ? this.editHideTitle
+      : undefined;
+
     this.soundService.updateSoundDetails(
       this.sound.id,
       tag,
       this.editArtist.trim(),
-      categoryChanged ? this.editCategory : undefined
+      categoryChanged ? this.editCategory : undefined,
+      iconValue,
+      hideTitleValue
     ).pipe(take(1)).subscribe({
       next: (result: any) => {
         this.isSaving = false;

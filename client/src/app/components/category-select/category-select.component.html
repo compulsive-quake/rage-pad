@@ -48,7 +48,7 @@
       </span>
       <span class="custom-category-name create-label">Create new…</span>
     </li>
-    <li class="custom-category-create-input" *ngIf="isCreating" (mousedown)="$event.preventDefault()">
+    <li class="custom-category-create-input" *ngIf="isCreating" (mousedown)="onCreateRowMousedown($event)">
       <div class="new-category-input-row">
         <input
           #newCategoryInput

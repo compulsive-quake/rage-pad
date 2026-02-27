@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, ElementRef, ViewChild } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, ElementRef, ViewChild, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take, Subscription } from 'rxjs';
@@ -45,6 +45,9 @@ export class AddSoundModalComponent implements OnChanges {
   private youtubeRetryTimer: any = null;
   private youtubeSubscription: Subscription | null = null;
 
+  addSoundIcon = '';
+  addSoundIconPreviewUrl = '';
+
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
 
@@ -69,7 +72,7 @@ export class AddSoundModalComponent implements OnChanges {
 
   private readonly ALLOWED_AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|wma|m4a|opus|aiff|ape)$/i;
 
-  constructor(private soundService: SoundService) {}
+  constructor(private soundService: SoundService, private cdr: ChangeDetectorRef) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen) {
@@ -99,6 +102,8 @@ export class AddSoundModalComponent implements OnChanges {
     this.addSoundError = '';
     this.isDragOver = false;
     this.isAddingSound = false;
+    this.addSoundIcon = '';
+    this.addSoundIconPreviewUrl = '';
     this.showArtistSuggestions = false;
     this.filteredArtistSuggestions = [];
     this.youtubeUrl = '';
@@ -329,6 +334,8 @@ export class AddSoundModalComponent implements OnChanges {
     this.addSoundFile = null;
     this.addSoundName = '';
     this.addSoundArtist = '';
+    this.addSoundIcon = '';
+    this.addSoundIconPreviewUrl = '';
     this.youtubeUrl = '';
     this.youtubeFetchError = '';
     this.youtubeDurationSeconds = 0;
@@ -365,6 +372,9 @@ export class AddSoundModalComponent implements OnChanges {
             this.youtubePhase = event.phase;
           } else if (event.type === 'metadata') {
             this.youtubeTitle = event.title || '';
+            if (event.thumbnail) {
+              this.fetchThumbnailAsIcon(event.thumbnail);
+            }
           } else if (event.type === 'progress') {
             this.youtubeProgressPercent = event.percent || 0;
             this.youtubeSpeed = event.speed || '';
@@ -456,6 +466,107 @@ export class AddSoundModalComponent implements OnChanges {
     // This is now handled by the waveform-preview component internally
   }
 
+  // ── Icon ─────────────────────────────────────────────────────────────────
+
+  private static readonly ALLOWED_IMAGE_TYPES = [
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+    'image/bmp', 'image/x-icon', 'image/svg+xml'
+  ];
+  private static readonly MAX_ICON_SIZE = 256;
+
+  onIconSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+
+    const file = input.files[0];
+    if (!AddSoundModalComponent.ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      this.addSoundError = 'Unsupported image type';
+      return;
+    }
+    this.processIconFile(file);
+    input.value = '';
+  }
+
+  removeIcon(): void {
+    this.addSoundIcon = '';
+    this.addSoundIconPreviewUrl = '';
+  }
+
+  private processIconFile(file: Blob): void {
+    const img = new Image();
+    img.onload = () => {
+      const max = AddSoundModalComponent.MAX_ICON_SIZE;
+      let { width, height } = img;
+      if (width > max || height > max) {
+        const scale = Math.min(max / width, max / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64 = dataUrl.split(',')[1];
+      if (base64) {
+        this.addSoundIcon = base64;
+        this.addSoundIconPreviewUrl = dataUrl;
+        this.cdr.detectChanges();
+      }
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
+  }
+
+  private fetchThumbnailAsIcon(thumbnailUrl: string): void {
+    // Don't overwrite a manually chosen icon
+    if (this.addSoundIcon) return;
+
+    // Fetch through server proxy to avoid CORS issues
+    const proxyUrl = `${window.location.origin}/api/proxy-image?url=${encodeURIComponent(thumbnailUrl)}`;
+
+    fetch(proxyUrl)
+      .then(res => { if (res.ok) return res.blob(); throw new Error(); })
+      .then(blob => {
+        const img = new Image();
+        img.onload = () => {
+          // Don't overwrite if user chose an icon while we were loading
+          if (this.addSoundIcon) {
+            URL.revokeObjectURL(img.src);
+            return;
+          }
+
+          const max = AddSoundModalComponent.MAX_ICON_SIZE;
+          let { width, height } = img;
+          if (width > max || height > max) {
+            const scale = Math.min(max / width, max / height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, width, height);
+
+          const dataUrl = canvas.toDataURL('image/png');
+          const base64 = dataUrl.split(',')[1];
+          if (base64) {
+            this.addSoundIcon = base64;
+            this.addSoundIconPreviewUrl = dataUrl;
+            this.cdr.detectChanges();
+          }
+          URL.revokeObjectURL(img.src);
+        };
+        img.src = URL.createObjectURL(blob);
+      })
+      .catch(() => { /* thumbnail not available — ignore */ });
+  }
+
   get hasPendingCrop(): boolean {
     return this.cropStart !== 0 || this.cropEnd !== 1;
   }
@@ -512,7 +623,7 @@ export class AddSoundModalComponent implements OnChanges {
 
     const durationSeconds = this.previewDuration > 0 ? Math.round(this.previewDuration) : undefined;
 
-    this.soundService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, durationSeconds, this.originalUncroppedFile)
+    this.soundService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, durationSeconds, this.originalUncroppedFile, this.addSoundIcon || undefined)
       .pipe(take(1))
       .subscribe({
         next: () => {

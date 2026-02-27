@@ -1,21 +1,57 @@
 <div class="modal-overlay" *ngIf="isOpen" (click)="close()">
   <div class="modal-content edit-details-modal-content" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2>Rename Sound</h2>
+      <h2>Edit Details</h2>
       <button class="close-btn" (click)="close()">&times;</button>
     </div>
     <div class="modal-body edit-details-modal-body">
       <div class="form-fields">
-        <!-- Row 1: Tag -->
-        <div class="form-fields-row">
-          <!-- Tag -->
-          <div class="form-field-col">
-            <label class="category-label">Tag <span class="required-star">*</span></label>
+        <!-- Title (full width) -->
+        <div class="form-field-col form-field-title">
+          <label class="category-label">Title <span class="required-star">*</span></label>
+          <input
+            type="text"
+            class="sound-name-input"
+            [(ngModel)]="editTag"
+            placeholder="Enter title (required)"
+          />
+        </div>
+
+        <!-- Icon -->
+        <div class="icon-upload-row">
+          <label class="category-label">Icon</label>
+          <div class="icon-upload-controls">
+            <img
+              *ngIf="iconPreviewUrl"
+              [src]="iconPreviewUrl"
+              class="icon-preview"
+              alt="Icon preview"
+            />
+            <div
+              *ngIf="!iconPreviewUrl"
+              class="icon-preview icon-placeholder"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+              </svg>
+            </div>
+            <button
+              type="button"
+              class="icon-upload-btn"
+              (click)="iconFileInput.click()"
+            >Choose Image</button>
+            <button
+              type="button"
+              class="icon-remove-btn"
+              *ngIf="iconPreviewUrl"
+              (click)="removeIcon()"
+            >Remove</button>
             <input
-              type="text"
-              class="sound-name-input"
-              [(ngModel)]="editTag"
-              placeholder="Enter tag (required)"
+              #iconFileInput
+              type="file"
+              accept="image/*"
+              style="display: none"
+              (change)="onIconSelected($event)"
             />
           </div>
         </div>
@@ -63,6 +99,15 @@
               (selectionChange)="onCategoryChange($event)"
             ></app-category-select>
           </div>
+        </div>
+
+        <!-- Hide Title Toggle -->
+        <div class="hide-title-row">
+          <label class="category-label hide-title-label">Hide title</label>
+          <label class="toggle-switch">
+            <input type="checkbox" [(ngModel)]="editHideTitle" />
+            <span class="toggle-slider"></span>
+          </label>
         </div>
 
         <!-- Error message -->

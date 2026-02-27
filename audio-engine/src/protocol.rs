@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn default_volume() -> f32 {
+    1.0
+}
+
 /// Commands sent from the Node.js server to the audio engine via stdin (JSON, one per line).
 #[derive(Debug, Deserialize)]
 #[serde(tag = "cmd", rename_all = "snake_case")]
@@ -14,7 +18,11 @@ pub enum Command {
     SetOutputDevice { device_name: String },
 
     /// Decode and play an audio file, mixed on top of the live microphone capture.
-    Play { file_path: String, volume: f32 },
+    Play {
+        file_path: String,
+        #[serde(default = "default_volume")]
+        volume: f32,
+    },
 
     /// Stop all playback immediately.
     Stop,

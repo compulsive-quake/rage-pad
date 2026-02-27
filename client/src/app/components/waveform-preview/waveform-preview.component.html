@@ -135,7 +135,7 @@
     </div>
 
     <div class="volume-controls">
-      <button *ngIf="volumeGain !== 1.0" class="volume-reset-btn" (click)="resetVolume()" title="Reset to original volume">Reset</button>
+      <button class="volume-reset-btn" (click)="resetVolume()" [disabled]="volumeGain === 1.0" title="Reset to original volume">Reset</button>
       <div class="volume-slider-wrapper">
         <input
           type="range"

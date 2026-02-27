@@ -18,6 +18,7 @@ export interface YoutubeFetchProgress {
   phase?: 'metadata' | 'downloading' | 'processing';
   title?: string;
   durationSeconds?: number;
+  thumbnail?: string;
   percent?: number;
   totalSize?: string;
   speed?: string;
@@ -200,9 +201,9 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  updateSoundDetails(id: number, customTag: string, artist: string, category?: string): Observable<any> {
+  updateSoundDetails(id: number, customTag: string, artist: string, category?: string, icon?: string, hideTitle?: boolean): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/${id}/update-details`, {
-      customTag, artist, category
+      customTag, artist, category, icon, hideTitle
     }).pipe(
       catchError(error => {
         console.error('Failed to update sound details:', error);
@@ -285,7 +286,7 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, durationSeconds?: number, originalFile?: File | null): Observable<any> {
+  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, durationSeconds?: number, originalFile?: File | null, icon?: string): Observable<any> {
     const formData = new FormData();
     formData.append('soundFile', file);
     formData.append('category', category);
@@ -304,6 +305,9 @@ export class SoundService implements OnDestroy {
     }
     if (originalFile) {
       formData.append('originalFile', originalFile);
+    }
+    if (icon) {
+      formData.append('icon', icon);
     }
     return this.http.post(`${this.apiUrl}/sounds/add`, formData);
   }

@@ -13,8 +13,15 @@ import { Sound } from '../../models/sound.model';
       [class.playing]="isPlaying"
       [class.rename-mode]="isRenameMode"
       [class.queued]="queuePositions.length > 0"
+      [class.has-icon]="iconUrl"
+      [class.hide-title]="sound.hideTitle"
+      [class.icon-drag-over]="isIconDragOver"
+      [style.backgroundImage]="iconUrl ? 'url(' + iconUrl + ')' : ''"
       (click)="onClick()"
       (contextmenu)="onContextMenu($event)"
+      (dragover)="onDragOver($event)"
+      (dragleave)="onDragLeave($event)"
+      (drop)="onDrop($event)"
     >
       <span class="sound-title">{{ sound.title }}</span>
       <span class="rename-badge" *ngIf="isRenameMode" title="Click to rename">
@@ -142,6 +149,57 @@ import { Sound } from '../../models/sound.model';
       border-color: rgba(230, 126, 34, 0.5);
     }
 
+    .sound-button.icon-drag-over {
+      border-color: #f39c12;
+      box-shadow: 0 0 16px rgba(243, 156, 18, 0.4);
+    }
+
+    .sound-button.has-icon {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .sound-button.has-icon:hover {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-color: transparent;
+    }
+
+    .sound-button.has-icon.playing {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+
+    .has-icon .sound-title {
+      text-shadow: 0 1px 4px rgba(0,0,0,0.9), 0 0 2px rgba(0,0,0,0.95);
+      font-weight: 700;
+    }
+
+    .sound-button.hide-title .sound-title {
+      display: none;
+    }
+
+    .sound-button.has-icon.playing::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(74, 26, 107, 0.5);
+      border-radius: 11px;
+      pointer-events: none;
+    }
+
+    .sound-button.has-icon:hover::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(42, 42, 62, 0.35);
+      border-radius: 11px;
+      pointer-events: none;
+    }
+
   `]
 })
 export class SoundCardComponent {
@@ -152,6 +210,23 @@ export class SoundCardComponent {
   @Output() play = new EventEmitter<Sound>();
   @Output() rename = new EventEmitter<Sound>();
   @Output() soundContextMenu = new EventEmitter<{ sound: Sound; event: MouseEvent }>();
+  @Output() iconDropped = new EventEmitter<{ sound: Sound; iconBase64: string }>();
+
+  isIconDragOver = false;
+
+  private static readonly ALLOWED_IMAGE_TYPES = [
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp',
+    'image/bmp', 'image/x-icon', 'image/svg+xml'
+  ];
+  private static readonly MAX_ICON_SIZE = 256;
+
+  get iconUrl(): string {
+    if (!this.sound.icon) return '';
+    if (this.sound.iconIsBase64) {
+      return `data:image/png;base64,${this.sound.icon}`;
+    }
+    return this.sound.icon;
+  }
 
   onClick(): void {
     if (this.isRenameMode) {
@@ -164,6 +239,59 @@ export class SoundCardComponent {
   onContextMenu(event: MouseEvent): void {
     event.preventDefault();
     this.soundContextMenu.emit({ sound: this.sound, event });
+  }
+
+  onDragOver(event: DragEvent): void {
+    if (!event.dataTransfer?.types.includes('Files')) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+    this.isIconDragOver = true;
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isIconDragOver = false;
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isIconDragOver = false;
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!SoundCardComponent.ALLOWED_IMAGE_TYPES.includes(file.type)) return;
+
+    const img = new Image();
+    img.onload = () => {
+      const max = SoundCardComponent.MAX_ICON_SIZE;
+      let { width, height } = img;
+      if (width > max || height > max) {
+        const scale = Math.min(max / width, max / height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d')!;
+      ctx.drawImage(img, 0, 0, width, height);
+
+      const dataUrl = canvas.toDataURL('image/png');
+      const base64 = dataUrl.split(',')[1];
+      if (base64) {
+        this.iconDropped.emit({ sound: this.sound, iconBase64: base64 });
+      }
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(file);
   }
 
 }

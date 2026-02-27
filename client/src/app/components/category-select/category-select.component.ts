@@ -98,6 +98,14 @@ export class CategorySelectComponent {
     }
   }
 
+  onCreateRowMousedown(event: MouseEvent): void {
+    // Allow default mousedown on the input (enables text selection)
+    // but prevent it on the surrounding row (prevents blur/close)
+    if ((event.target as HTMLElement).tagName !== 'INPUT') {
+      event.preventDefault();
+    }
+  }
+
   onCreateInputKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
       event.preventDefault();

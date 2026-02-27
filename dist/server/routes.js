@@ -250,7 +250,7 @@ router.post('/sounds/:id/update-details', (req, res) => {
             res.status(400).json({ error: 'Invalid sound id' });
             return;
         }
-        const { customTag, artist, category } = req.body;
+        const { customTag, artist, category, icon, hideTitle } = req.body;
         if (typeof customTag !== 'string' || !customTag.trim()) {
             res.status(400).json({ error: 'customTag must be a non-empty string' });
             return;
@@ -271,6 +271,9 @@ router.post('/sounds/:id/update-details', (req, res) => {
             title: customTag.trim(),
             artist: typeof artist === 'string' ? artist : undefined,
             categoryId,
+            icon: typeof icon === 'string' ? icon : undefined,
+            iconIsBase64: typeof icon === 'string' ? (icon.length > 0) : undefined,
+            hideTitle: typeof hideTitle === 'boolean' ? hideTitle : undefined,
         });
         if (ok) {
             notifySseClients();
@@ -458,6 +461,8 @@ router.post('/sounds/add', addSoundUpload, async (req, res) => {
         const displayName = req.body.displayName?.trim() || undefined;
         const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
         const durationSeconds = parseInt(req.body.durationSeconds, 10) || 0;
+        const icon = typeof req.body.icon === 'string' ? req.body.icon : '';
+        const hideTitle = req.body.hideTitle === 'true' || req.body.hideTitle === '1';
         // Get or create the category
         const categoryId = soundDb.getOrCreateCategory(categoryName.trim());
         // Generate a unique filename
@@ -501,6 +506,9 @@ router.post('/sounds/add', addSoundUpload, async (req, res) => {
             durationMs: durationSeconds * 1000,
             categoryId,
             hasUncropped,
+            icon,
+            iconIsBase64: icon.length > 0,
+            hideTitle,
         });
         notifySseClients();
         res.json({ message: `Sound "${soundTitle}" added` });
@@ -883,7 +891,7 @@ router.get('/youtube/fetch-stream', async (req, res) => {
         const cached = ytCache.get(cacheKey);
         if (cached) {
             console.log(`[youtube/fetch-stream] Cache hit for ${cacheKey}`);
-            sendEvent('metadata', { title: cached.title, durationSeconds: cached.durationSeconds });
+            sendEvent('metadata', { title: cached.title, durationSeconds: cached.durationSeconds, thumbnail: cached.thumbnail });
             const fileId = crypto_1.default.randomUUID();
             tempDownloads.set(fileId, {
                 buffer: cached.buffer,
@@ -916,7 +924,7 @@ router.get('/youtube/fetch-stream', async (req, res) => {
         }
         if (killed)
             return;
-        sendEvent('metadata', { title: videoTitle, durationSeconds: videoDurationSeconds });
+        sendEvent('metadata', { title: videoTitle, durationSeconds: videoDurationSeconds, thumbnail: videoThumbnail });
         // Phase 2: Download with progress
         sendEvent('phase', { phase: 'downloading' });
         const tmpDir = process.env['RAGE_PAD_TMP_DIR'] || os.tmpdir();
@@ -1105,6 +1113,32 @@ router.get('/youtube/cache-info', (_req, res) => {
     }
     catch (error) {
         res.status(500).json({ error: 'Failed to get cache info' });
+    }
+});
+// ── Image proxy (avoids CORS issues with external thumbnails) ──────────────
+router.get('/proxy-image', async (req, res) => {
+    const url = req.query.url;
+    if (!url) {
+        res.status(400).json({ error: 'url query parameter is required' });
+        return;
+    }
+    try {
+        const response = await fetch(url, {
+            headers: { 'User-Agent': 'rage-pad/1.0' },
+            signal: AbortSignal.timeout(10000),
+        });
+        if (!response.ok || !response.body) {
+            res.status(502).json({ error: 'Failed to fetch image' });
+            return;
+        }
+        const contentType = response.headers.get('content-type') || 'image/jpeg';
+        res.setHeader('Content-Type', contentType);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        const arrayBuffer = await response.arrayBuffer();
+        res.send(Buffer.from(arrayBuffer));
+    }
+    catch {
+        res.status(502).json({ error: 'Failed to fetch image' });
     }
 });
 // ── SSE endpoint ───────────────────────────────────────────────────────────

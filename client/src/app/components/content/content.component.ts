@@ -44,6 +44,7 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Output() dragStateChange = new EventEmitter<boolean>();
   @Output() soundContextMenu = new EventEmitter<{ sound: Sound; event: MouseEvent }>();
   @Output() updateCategoryIcon = new EventEmitter<{ categoryName: string; iconBase64: string }>();
+  @Output() updateSoundIcon = new EventEmitter<{ sound: Sound; iconBase64: string }>();
 
   @ViewChild('mainContent') mainContent!: ElementRef;
   @ViewChild('categoryNavList') categoryNavList!: ElementRef;

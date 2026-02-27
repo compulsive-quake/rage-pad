@@ -13,6 +13,9 @@ export interface Sound {
   categoryIndex: number; // position of this sound within its category (0-based)
   customTag?: string;    // display name
   hasUncropped?: boolean;
+  icon?: string;
+  iconIsBase64?: boolean;
+  hideTitle?: boolean;
 }
 
 export interface Category {

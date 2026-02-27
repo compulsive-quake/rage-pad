@@ -96,6 +96,7 @@
               (play)="onPlaySound($event)"
               (rename)="onOpenRenameModal($event)"
               (soundContextMenu)="onSoundContextMenu($event)"
+              (iconDropped)="updateSoundIcon.emit($event)"
             ></app-sound-card>
           </div>
 
@@ -121,6 +122,7 @@
                 [isPlaying]="currentlyPlayingId === sound.id"
                 [isRenameMode]="false"
                 (soundContextMenu)="onSoundContextMenu($event)"
+                (iconDropped)="updateSoundIcon.emit($event)"
                 class="reorder-card"
               ></app-sound-card>
               <div class="drag-handle">
@@ -164,6 +166,7 @@
                   (play)="onPlaySound($event)"
                   (rename)="onOpenRenameModal($event)"
                   (soundContextMenu)="onSoundContextMenu($event)"
+                  (iconDropped)="updateSoundIcon.emit($event)"
                 ></app-sound-card>
               </div>
 
@@ -186,6 +189,7 @@
                     [isPlaying]="currentlyPlayingId === sound.id"
                     [isRenameMode]="false"
                     (soundContextMenu)="onSoundContextMenu($event)"
+                    (iconDropped)="updateSoundIcon.emit($event)"
                     class="reorder-card"
                   ></app-sound-card>
                   <div class="drag-handle">
