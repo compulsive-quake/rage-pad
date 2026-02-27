@@ -1126,5 +1126,4 @@ router.get('/config-watch', (req, res) => {
         console.log(`[config-watch] Client disconnected (total: ${sseClients.size})`);
     });
 });
-exports.default = router;
 //# sourceMappingURL=routes.js.map

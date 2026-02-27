@@ -1183,5 +1183,3 @@ router.get('/config-watch', (req: Request, res: Response) => {
     console.log(`[config-watch] Client disconnected (total: ${sseClients.size})`);
   });
 });
-
-export default router;

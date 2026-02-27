@@ -20,3 +20,4 @@ yarn-error.log*
 /src-tauri/target/
 /src-tauri/binaries/
 /src-tauri/gen/
+/audio-engine/target/release/build/

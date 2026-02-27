@@ -873,7 +873,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       }
     }
 
-    this.drawFrequencyScale(ctx, W, specH, scaleH);
+    this.drawFrequencyScale(ctx, W, specH);
   }
 
   /** Draw frequency scale labels and tick lines at the bottom of the scope */
@@ -997,7 +997,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       }
     }
 
-    this.drawFrequencyScale(ctx, W, specH, scaleH);
+    this.drawFrequencyScale(ctx, W, specH);
   }
 
   // ── Peak amplitude tracking ───────────────────────────────────────────────
