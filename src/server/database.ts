@@ -12,6 +12,9 @@ export interface AppSettings {
   serverPort: number;
   audioInputDevice: string;
   audioOutputDevice: string;
+  youtubeCachePath: string;
+  youtubeCacheTtlMinutes: number;
+  youtubeCacheMaxSizeMb: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -23,6 +26,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   serverPort: 8088,
   audioInputDevice: '',
   audioOutputDevice: '',
+  youtubeCachePath: '',
+  youtubeCacheTtlMinutes: 120,
+  youtubeCacheMaxSizeMb: 500,
 };
 
 // ── Data dir & file path ─────────────────────────────────────────────────────

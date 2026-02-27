@@ -4,7 +4,7 @@
     type="button"
     class="custom-category-trigger"
     (click)="toggleDropdown()"
-    (blur)="onBlur()"
+    (blur)="onBlur($event)"
   >
     <span class="custom-category-selected">
       <span class="custom-category-icon-wrap" *ngIf="getCategoryImageUrl(selected)">
@@ -39,6 +39,36 @@
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/></svg>
       </span>
       <span class="custom-category-name">{{ cat.parentCategory ? '└ ' + cat.name : cat.name }}</span>
+    </li>
+    <!-- Create new category -->
+    <li class="custom-category-divider" *ngIf="categories.length > 0"></li>
+    <li class="custom-category-option create-new" *ngIf="!isCreating" (mousedown)="startCreate($event)">
+      <span class="custom-category-icon-wrap default-icon create-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+      </span>
+      <span class="custom-category-name create-label">Create new…</span>
+    </li>
+    <li class="custom-category-create-input" *ngIf="isCreating" (mousedown)="$event.preventDefault()">
+      <div class="new-category-input-row">
+        <input
+          #newCategoryInput
+          type="text"
+          class="new-category-input"
+          [(ngModel)]="newCategoryName"
+          placeholder="Category name"
+          (keydown)="onCreateInputKeydown($event)"
+          (blur)="onCreateInputBlur($event)"
+          maxlength="50"
+        />
+        <button
+          type="button"
+          class="new-category-save-btn"
+          (mousedown)="$event.preventDefault(); confirmCreate()"
+          title="Save category"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+        </button>
+      </div>
     </li>
   </ul>
 </div>

@@ -8,6 +8,10 @@
   <!-- Frequency scope -->
   <div *ngIf="!previewLoading" class="frequency-scope-container">
     <canvas #frequencyCanvas class="frequency-scope-canvas"></canvas>
+    <div class="clipping-indicator" *ngIf="isClipping">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+      <span>Clipping</span>
+    </div>
   </div>
 
   <!-- Waveform canvas + crop UI -->
@@ -94,6 +98,13 @@
       <span class="preview-duration">{{ formatTime(previewDuration) }}</span>
     </div>
 
+    <div class="waveform-clipping-warning"
+         *ngIf="showClippingWarning"
+         [class.fading]="clippingWarningFading">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
+      <span>Clipping</span>
+    </div>
+
     <div class="preview-crop-info" *ngIf="cropStart > 0 || cropEnd < 1">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="crop-icon">
         <path d="M17 15h2V7c0-1.1-.9-2-2-2H9v2h8v8zM7 17V1H5v4H1v2h4v10c0 1.1.9 2 2 2h10v4h2v-4h4v-2H7z"/>
@@ -125,18 +136,25 @@
 
     <div class="volume-controls">
       <button *ngIf="volumeGain !== 1.0" class="volume-reset-btn" (click)="resetVolume()" title="Reset to original volume">Reset</button>
-      <input
-        type="range"
-        class="volume-slider"
-        min="0"
-        [max]="volumeSliderMax"
-        [value]="volumeGain * 100"
-        (input)="onVolumeSliderInput($event)"
-        (change)="onVolumeSliderChange()"
-        title="Volume"
-      />
+      <div class="volume-slider-wrapper">
+        <input
+          type="range"
+          class="volume-slider"
+          min="0"
+          [max]="volumeSliderMax"
+          [value]="volumeGain * 100"
+          (input)="onVolumeSliderInput($event)"
+          (change)="onVolumeSliderChange()"
+          title="Volume"
+        />
+        <div class="volume-peak-marker"
+             *ngIf="peakMarkerPercent <= 100"
+             [style.left.%]="peakMarkerPercent"
+             title="Max without clipping ({{ (100 / croppedPeakAmplitude).toFixed(0) }}%)">
+        </div>
+      </div>
       <span class="volume-label">{{ (volumeGain * 100).toFixed(0) }}%</span>
-      <button class="volume-normalize-btn" (click)="normalizeVolume()" title="Maximize volume without clipping">
+      <button class="volume-normalize-btn" [class.active]="isNormalized" (click)="normalizeVolume()" title="Maximize volume without clipping">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 12px; height: 12px;">
           <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
         </svg>

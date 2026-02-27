@@ -13,6 +13,38 @@ export interface UpdateInfo {
 }
 import { Sound, ConnectionStatus, CategoryIcon, AudioDevices } from '../models/sound.model';
 
+export interface YoutubeFetchProgress {
+  type: 'phase' | 'metadata' | 'progress' | 'done' | 'error';
+  phase?: 'metadata' | 'downloading' | 'processing';
+  title?: string;
+  durationSeconds?: number;
+  percent?: number;
+  totalSize?: string;
+  speed?: string;
+  eta?: string;
+  fileId?: string;
+  fileName?: string;
+  message?: string;
+}
+
+export interface YoutubeCacheEntry {
+  videoId: string;
+  title: string;
+  thumbnail: string;
+  videoUrl: string;
+  durationSeconds: number;
+  cachedAt: number;
+}
+
+export interface YoutubeCacheInfo {
+  entryCount: number;
+  totalSizeBytes: number;
+  totalSizeMb: number;
+  maxSizeMb: number;
+  ttlMinutes: number;
+  cachePath: string;
+}
+
 export interface AppSettings {
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
@@ -22,6 +54,9 @@ export interface AppSettings {
   serverPort: number;
   audioInputDevice: string;
   audioOutputDevice: string;
+  youtubeCachePath: string;
+  youtubeCacheTtlMinutes: number;
+  youtubeCacheMaxSizeMb: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -33,6 +68,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   serverPort: 8088,
   audioInputDevice: '',
   audioOutputDevice: '',
+  youtubeCachePath: '',
+  youtubeCacheTtlMinutes: 120,
+  youtubeCacheMaxSizeMb: 500,
 };
 
 @Injectable({
@@ -400,6 +438,110 @@ export class SoundService implements OnDestroy {
         const file = new File([blob], fileName, { type: blob.type || 'audio/mpeg' });
         return { file, title, durationSeconds };
       })
+    );
+  }
+
+  fetchYoutubeAudioWithProgress(url: string): Observable<YoutubeFetchProgress> {
+    return new Observable<YoutubeFetchProgress>(observer => {
+      const encodedUrl = encodeURIComponent(url);
+      const es = new EventSource(`${this.apiUrl}/youtube/fetch-stream?url=${encodedUrl}`);
+      let done = false;
+
+      const handleEvent = (type: string) => (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.ngZone.run(() => observer.next({ type: type as any, ...data }));
+        } catch { /* ignore parse errors */ }
+      };
+
+      es.addEventListener('phase', handleEvent('phase'));
+      es.addEventListener('metadata', handleEvent('metadata'));
+      es.addEventListener('progress', handleEvent('progress'));
+      es.addEventListener('done', (event: MessageEvent) => {
+        done = true;
+        es.close();
+        try {
+          const data = JSON.parse(event.data);
+          this.ngZone.run(() => {
+            observer.next({ type: 'done', ...data });
+            observer.complete();
+          });
+        } catch { /* ignore */ }
+      });
+      es.addEventListener('error', (event: MessageEvent) => {
+        if (done) return;
+        done = true;
+        es.close();
+        // Custom error event from server (has data)
+        if (event.data) {
+          try {
+            const data = JSON.parse(event.data);
+            this.ngZone.run(() => observer.error(new Error(data.message || 'YouTube fetch failed')));
+          } catch {
+            this.ngZone.run(() => observer.error(new Error('YouTube fetch failed')));
+          }
+        }
+      });
+
+      es.onerror = () => {
+        if (done) return;
+        done = true;
+        es.close();
+        this.ngZone.run(() => observer.error(new Error('Connection to server lost')));
+      };
+
+      return () => { done = true; es.close(); };
+    });
+  }
+
+  downloadYoutubeFile(fileId: string): Observable<{ file: File; title: string; durationSeconds: number }> {
+    return this.http.get(`${this.apiUrl}/youtube/download/${fileId}`, {
+      responseType: 'blob',
+      observe: 'response',
+    }).pipe(
+      map(response => {
+        const blob = response.body as Blob;
+        const encodedTitle = response.headers.get('X-Video-Title') || '';
+        const title = encodedTitle ? decodeURIComponent(encodedTitle) : 'YouTube Audio';
+        const durationSeconds = parseInt(response.headers.get('X-Video-Duration') || '0', 10) || 0;
+        const contentDisposition = response.headers.get('Content-Disposition') || '';
+        let fileName = 'youtube_audio.m4a';
+        const match = contentDisposition.match(/filename="([^"]+)"/);
+        if (match) {
+          try {
+            fileName = decodeURIComponent(match[1]);
+          } catch {
+            fileName = match[1];
+          }
+        }
+        const file = new File([blob], fileName, { type: blob.type || 'audio/mpeg' });
+        return { file, title, durationSeconds };
+      })
+    );
+  }
+
+  getYoutubeCacheList(): Observable<YoutubeCacheEntry[]> {
+    return this.http.get<YoutubeCacheEntry[]>(`${this.apiUrl}/youtube/cache-list`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  clearYoutubeCache(): Observable<{ message: string; cleared: number }> {
+    return this.http.delete<{ message: string; cleared: number }>(`${this.apiUrl}/youtube/cache`).pipe(
+      catchError(() => of({ message: 'Failed to clear cache', cleared: 0 }))
+    );
+  }
+
+  getYoutubeCacheInfo(): Observable<YoutubeCacheInfo> {
+    return this.http.get<YoutubeCacheInfo>(`${this.apiUrl}/youtube/cache-info`).pipe(
+      catchError(() => of({
+        entryCount: 0,
+        totalSizeBytes: 0,
+        totalSizeMb: 0,
+        maxSizeMb: 500,
+        ttlMinutes: 120,
+        cachePath: '',
+      }))
     );
   }
 

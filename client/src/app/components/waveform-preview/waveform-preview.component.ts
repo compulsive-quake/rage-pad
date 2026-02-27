@@ -34,7 +34,13 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   isCropping = false;
   originalFile: File | null = null;
   volumeGain = 1.0;
-  volumeSliderMax = 200;
+  volumeSliderMax = 300;
+  scopeMaxFreq = 20000;
+  croppedPeakAmplitude = 0;
+  isNormalized = false;
+  isClipping = false;
+  showClippingWarning = false;
+  clippingWarningFading = false;
 
   private originalAudioBuffer: AudioBuffer | null = null;
   private audioCtx: AudioContext | null = null;
@@ -51,9 +57,13 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   private analyserNode: AnalyserNode | null = null;
   private frequencyData: Uint8Array | null = null;
   private frequencyPeaks: Float32Array | null = null;
+  private frequencyPeakClipped: Uint8Array | null = null;
+  private frequencyPeakClipTime: Float64Array | null = null;
+  private timeDomainData: Float32Array | null = null;
   private peakDecayAnimFrame: number | null = null;
   private lastPeakDecayTime = 0;
   private skipNextFileChange = false;
+  private clippingWarningTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
@@ -94,7 +104,10 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.originalFile = null;
     this.originalAudioBuffer = null;
     this.volumeGain = 1.0;
-    this.volumeSliderMax = 200;
+    this.volumeSliderMax = 300;
+    this.scopeMaxFreq = 20000;
+    this.croppedPeakAmplitude = 0;
+    this.isNormalized = false;
   }
 
   destroyPreviewAudio(): void {
@@ -111,10 +124,19 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.analyserNode = null;
     this.frequencyData = null;
     this.frequencyPeaks = null;
+    this.frequencyPeakClipped = null;
+    this.frequencyPeakClipTime = null;
+    this.timeDomainData = null;
     if (this.peakDecayAnimFrame !== null) {
       cancelAnimationFrame(this.peakDecayAnimFrame);
       this.peakDecayAnimFrame = null;
     }
+    if (this.clippingWarningTimeout !== null) {
+      clearTimeout(this.clippingWarningTimeout);
+      this.clippingWarningTimeout = null;
+    }
+    this.showClippingWarning = false;
+    this.clippingWarningFading = false;
     this.removeCropDragListeners();
   }
 
@@ -142,6 +164,9 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       this.analyserNode.smoothingTimeConstant = 0.8;
       this.frequencyData = new Uint8Array(this.analyserNode.frequencyBinCount);
       this.frequencyPeaks = new Float32Array(this.analyserNode.frequencyBinCount);
+      this.frequencyPeakClipped = new Uint8Array(this.analyserNode.frequencyBinCount);
+      this.frequencyPeakClipTime = new Float64Array(this.analyserNode.frequencyBinCount);
+      this.timeDomainData = new Float32Array(this.analyserNode.fftSize);
       this.audioCtx.decodeAudioData(arrayBuffer.slice(0))
         .then((buffer) => {
           this.ngZone.run(() => {
@@ -150,6 +175,8 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
             this.previewLoading = false;
             this.durationChanged.emit(buffer.duration);
             this.waveformPeaks = this.computePeaks(buffer, 600);
+            this.scopeMaxFreq = 20000;
+            this.updateCroppedPeakAmplitude();
             setTimeout(() => this.drawWaveform(), 50);
           });
         })
@@ -244,16 +271,21 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   }
 
   private computePeaks(buffer: AudioBuffer, numBuckets: number): Float32Array {
-    const channelData = buffer.getChannelData(0);
-    const blockSize = Math.floor(channelData.length / numBuckets);
+    const numChannels = buffer.numberOfChannels;
+    const totalSamples = buffer.length;
+    const blockSize = Math.floor(totalSamples / numBuckets);
     const peaks = new Float32Array(numBuckets);
     for (let i = 0; i < numBuckets; i++) {
       let max = 0;
       const start = i * blockSize;
-      const end = start + blockSize;
-      for (let j = start; j < end; j++) {
-        const abs = Math.abs(channelData[j]);
-        if (abs > max) max = abs;
+      // Include tail samples in the last bucket
+      const end = (i === numBuckets - 1) ? totalSamples : start + blockSize;
+      for (let ch = 0; ch < numChannels; ch++) {
+        const channelData = buffer.getChannelData(ch);
+        for (let j = start; j < end; j++) {
+          const abs = Math.abs(channelData[j]);
+          if (abs > max) max = abs;
+        }
       }
       peaks[i] = max;
     }
@@ -402,6 +434,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       this.cropEnd * this.previewDuration
     );
     this.stopPreviewPlayback();
+    this.startPeakDecay();
   }
 
   private stopPreviewPlayback(): void {
@@ -410,6 +443,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       this.previewSourceNode = null;
     }
     this.previewIsPlaying = false;
+    this.isClipping = false;
     if (this.previewAnimFrame !== null) {
       cancelAnimationFrame(this.previewAnimFrame);
       this.previewAnimFrame = null;
@@ -472,6 +506,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       }
     }
     this.cropStateChanged.emit({ start: this.cropStart, end: this.cropEnd, duration: this.previewDuration });
+    this.updateCroppedPeakAmplitude();
     this.drawWaveform();
   }
 
@@ -495,6 +530,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.cropStart = 0;
     this.cropEnd = 1;
     this.cropStateChanged.emit({ start: 0, end: 1, duration: this.previewDuration });
+    this.updateCroppedPeakAmplitude();
     this.drawWaveform();
   }
 
@@ -530,11 +566,6 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       dst.set(src.subarray(startSample, endSample));
     }
 
-    const wavBlob = this.audioBufferToWav(croppedBuffer, this.volumeGain);
-    const originalName = this.file?.name ?? 'cropped.wav';
-    const baseName = this.fileNameWithoutExtension(originalName);
-    const newFile = new File([wavBlob], `${baseName}.wav`, { type: 'audio/wav' });
-
     this.audioBuffer = croppedBuffer;
     this.previewDuration = croppedBuffer.duration;
 
@@ -545,11 +576,33 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.previewPlayheadPos = 0;
 
     this.waveformPeaks = this.computePeaks(croppedBuffer, 600);
+    this.updateCroppedPeakAmplitude();
+    this.scopeMaxFreq = 20000;
+
+    // Auto-renormalize if volume was already at max — use true peak from raw buffer
+    if (this.isNormalized) {
+      const truePeak = this.findPeakAmplitude(croppedBuffer);
+      if (truePeak > 0) {
+        this.croppedPeakAmplitude = truePeak;
+        this.volumeGain = 1.0 / truePeak;
+        this.volumeSliderMax = Math.max(300, Math.ceil(this.volumeGain * 100));
+        if (this.gainNode) {
+          this.gainNode.gain.value = this.volumeGain;
+        }
+      }
+    }
+
+    const wavBlob = this.audioBufferToWav(croppedBuffer, this.volumeGain);
+    const originalName = this.file?.name ?? 'cropped.wav';
+    const baseName = this.fileNameWithoutExtension(originalName);
+    const newFile = new File([wavBlob], `${baseName}.wav`, { type: 'audio/wav' });
+
     this.isCropping = false;
     this.durationChanged.emit(croppedBuffer.duration);
     this.cropStateChanged.emit({ start: 0, end: 1, duration: croppedBuffer.duration });
     this.skipNextFileChange = true;
     this.fileChanged.emit(newFile);
+    this.startPeakDecay();
     this.cdr.detectChanges();
     setTimeout(() => this.drawWaveform(), 0);
   }
@@ -574,11 +627,28 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
     this.focusedCropHandle = null;
 
     this.waveformPeaks = this.computePeaks(this.audioBuffer, 600);
+    this.scopeMaxFreq = 20000;
+    this.updateCroppedPeakAmplitude();
+
+    // Auto-renormalize if volume was already at max — use true peak from raw buffer
+    if (this.isNormalized) {
+      const truePeak = this.findPeakAmplitude(this.audioBuffer);
+      if (truePeak > 0) {
+        this.croppedPeakAmplitude = truePeak;
+        this.volumeGain = 1.0 / truePeak;
+        this.volumeSliderMax = Math.max(300, Math.ceil(this.volumeGain * 100));
+        if (this.gainNode) {
+          this.gainNode.gain.value = this.volumeGain;
+        }
+      }
+    }
+
     this.durationChanged.emit(this.audioBuffer.duration);
     this.cropStateChanged.emit({ start: 0, end: 1, duration: this.audioBuffer.duration });
     this.skipNextFileChange = true;
     this.fileChanged.emit(restoredFile);
     this.originalFileChanged.emit(null);
+    this.startPeakDecay();
     this.cdr.detectChanges();
     setTimeout(() => this.drawWaveform(), 0);
   }
@@ -633,7 +703,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
   private drawFrequencyScope(): void {
     const canvasEl = this.frequencyCanvas?.nativeElement;
-    if (!canvasEl || !this.analyserNode || !this.frequencyData) return;
+    if (!canvasEl || !this.analyserNode || !this.frequencyData || !this.audioCtx) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvasEl.getBoundingClientRect();
@@ -646,62 +716,221 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
     const W = rect.width;
     const H = rect.height;
+    const scaleH = 14;
+    const specH = H - scaleH;
 
+    // @ts-ignore
     this.analyserNode.getByteFrequencyData(this.frequencyData);
+
+    // Detect actual clipping from time-domain signal (samples exceeding 1.0)
+    // The analyser sees the post-gain signal, so values >= 1.0 mean the DAC will clip
+    let isClipping = false;
+    if (this.timeDomainData) {
+      // @ts-ignore
+      this.analyserNode.getFloatTimeDomainData(this.timeDomainData);
+      for (let i = 0; i < this.timeDomainData.length; i++) {
+        if (Math.abs(this.timeDomainData[i]) > 1.0) {
+          isClipping = true;
+          break;
+        }
+      }
+    }
+    // Expose clipping state to the template for the warning indicator
+    this.isClipping = isClipping;
+
+    // Manage "Clipping Detected" warning below waveform with hold+fade matching peak indicators
+    if (isClipping) {
+      // Clipping is active — show warning immediately, cancel any pending fade-out
+      if (this.clippingWarningTimeout !== null) {
+        clearTimeout(this.clippingWarningTimeout);
+        this.clippingWarningTimeout = null;
+      }
+      this.showClippingWarning = true;
+      this.clippingWarningFading = false;
+    } else if (this.showClippingWarning && !this.clippingWarningFading) {
+      // Clipping just stopped — start the hold period (400ms), then fade (600ms via CSS transition)
+      this.clippingWarningFading = false;
+      this.clippingWarningTimeout = setTimeout(() => {
+        this.ngZone.run(() => {
+          // After 400ms hold, start the CSS fade-out (600ms)
+          this.clippingWarningFading = true;
+          this.cdr.detectChanges();
+          this.clippingWarningTimeout = setTimeout(() => {
+            this.ngZone.run(() => {
+              // After 600ms fade, hide the element entirely
+              this.showClippingWarning = false;
+              this.clippingWarningFading = false;
+              this.clippingWarningTimeout = null;
+              this.cdr.detectChanges();
+            });
+          }, 600);
+        });
+      }, 400);
+    }
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
     ctx.fillRect(0, 0, W, H);
 
     const bins = this.frequencyData.length;
-    const barW = W / bins;
+    const nyquist = this.audioCtx.sampleRate / 2;
+    const maxBin = Math.min(bins, Math.ceil(this.scopeMaxFreq / nyquist * bins));
+    const barW = W / maxBin;
 
-    for (let i = 0; i < bins; i++) {
-      const value = this.frequencyData[i] / 255;
-      const barH = value * H;
-      const t = i / bins;
+    // Fold bins above 20kHz into the last visible bar
+    let lastBarExtra = 0;
+    for (let i = maxBin; i < bins; i++) {
+      const v = this.frequencyData[i] / 255;
+      if (v > lastBarExtra) lastBarExtra = v;
+    }
+
+    // Draw bars and peaks for visible frequency range
+    for (let i = 0; i < maxBin; i++) {
+      let value = this.frequencyData[i] / 255;
+      // Last bar includes the max of all bins above 20kHz
+      if (i === maxBin - 1 && lastBarExtra > value) {
+        value = lastBarExtra;
+      }
+      const barH = value * specH;
+      const t = i / maxBin;
       const r = Math.round(155 + (231 - 155) * t);
       const g = Math.round(89 + (76 - 89) * t);
       const b = Math.round(182 + (60 - 182) * t);
       ctx.fillStyle = `rgba(${r},${g},${b},0.85)`;
-      ctx.fillRect(i * barW, H - barH, Math.max(barW - 0.5, 0.5), barH);
+      ctx.fillRect(i * barW, specH - barH, Math.max(barW - 0.5, 0.5), barH);
 
-      // Update peak tracking
-      if (this.frequencyPeaks) {
+      if (this.frequencyPeaks && this.frequencyPeakClipped && this.frequencyPeakClipTime) {
+        // For the last bar, also track peaks from bins above 20kHz
+        if (i === maxBin - 1) {
+          for (let j = maxBin; j < bins; j++) {
+            const extraVal = this.frequencyData![j] / 255;
+            if (extraVal > value) value = extraVal;
+            if (extraVal > this.frequencyPeaks[i]) {
+              this.frequencyPeaks[i] = extraVal;
+            }
+          }
+        }
         if (value > this.frequencyPeaks[i]) {
           this.frequencyPeaks[i] = value;
         }
-        // Draw peak indicator
-        const peakY = H - this.frequencyPeaks[i] * H;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        // Only mark bins as clipped when actual time-domain clipping is detected
+        const now = performance.now();
+        if (isClipping && value > 0.15) {
+          this.frequencyPeakClipped[i] = 1;
+          this.frequencyPeakClipTime[i] = now;
+        }
+        const peakVal = this.frequencyPeaks[i];
+        const peakY = specH - peakVal * specH;
+        // Fade clipped indicators from red back to white after a hold period
+        const clipHoldMs = 400;   // stay fully red for this long
+        const clipFadeMs = 600;   // then fade to white over this duration
+        if (this.frequencyPeakClipped[i]) {
+          const elapsed = now - this.frequencyPeakClipTime[i];
+          if (elapsed > clipHoldMs + clipFadeMs) {
+            // Fade complete — clear clipped state
+            this.frequencyPeakClipped[i] = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          } else if (elapsed > clipHoldMs) {
+            // Fading from red to white
+            const fadeProgress = (elapsed - clipHoldMs) / clipFadeMs;
+            const redAmount = Math.min(1, peakVal / 0.98) * (1 - fadeProgress);
+            ctx.fillStyle = `rgba(255,${Math.round((1 - redAmount) * 255)},${Math.round((1 - redAmount) * 255)},0.9)`;
+          } else {
+            // Still in hold period — fully red
+            const redAmount = Math.min(1, peakVal / 0.98);
+            ctx.fillStyle = `rgba(255,${Math.round((1 - redAmount) * 255)},${Math.round((1 - redAmount) * 255)},0.9)`;
+          }
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        }
         ctx.fillRect(i * barW, peakY, Math.max(barW - 0.5, 0.5), 2);
       }
     }
 
-    // Decay peaks slowly during live playback
-    if (this.frequencyPeaks) {
-      const now = performance.now();
-      const dt = (now - this.lastPeakDecayTime) / 1000;
-      this.lastPeakDecayTime = now;
-      const decayRate = 0.3;
+    // Track peaks for all bins but only decay visible ones visually matters
+    if (this.frequencyPeaks && this.frequencyPeakClipped && this.frequencyPeakClipTime) {
+      const nowDecay = performance.now();
+      const dt = (nowDecay - this.lastPeakDecayTime) / 1000;
+      this.lastPeakDecayTime = nowDecay;
+      const decayRate = 0.12;
+      const clipTotalMs = 400 + 600; // hold + fade
       for (let i = 0; i < this.frequencyPeaks.length; i++) {
-        this.frequencyPeaks[i] = Math.max(this.frequencyData![i] / 255, this.frequencyPeaks[i] - decayRate * dt);
+        let liveVal = this.frequencyData![i] / 255;
+        // For the last visible bar, include energy from bins above 20kHz
+        if (i === maxBin - 1) {
+          for (let j = maxBin; j < bins; j++) {
+            const extraVal = this.frequencyData![j] / 255;
+            if (extraVal > liveVal) liveVal = extraVal;
+          }
+        }
+        this.frequencyPeaks[i] = Math.max(liveVal, this.frequencyPeaks[i] - decayRate * dt);
+        // Clear clipped state if peak has dropped very low OR clip fade has completed
+        if (this.frequencyPeakClipped[i]) {
+          const clipElapsed = nowDecay - this.frequencyPeakClipTime[i];
+          if (this.frequencyPeaks[i] < 0.15 || clipElapsed > clipTotalMs) {
+            this.frequencyPeakClipped[i] = 0;
+          }
+        }
       }
+    }
+
+    this.drawFrequencyScale(ctx, W, specH, scaleH);
+  }
+
+  /** Draw frequency scale labels and tick lines at the bottom of the scope */
+  private drawFrequencyScale(ctx: CanvasRenderingContext2D, W: number, specH: number): void {
+    const maxFreq = this.scopeMaxFreq;
+
+    // Separator line
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, specH);
+    ctx.lineTo(W, specH);
+    ctx.stroke();
+
+    const freqs = [100, 200, 500, 1000, 2000, 3000, 4000, 5000, 8000, 10000, 12000, 14000, 16000, 20000];
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+
+    for (const freq of freqs) {
+      if (freq > maxFreq) continue;
+      const x = (freq / maxFreq) * W;
+      if (x < 12 || x > W - 12) continue;
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(x, specH);
+      ctx.lineTo(x, specH + 3);
+      ctx.stroke();
+
+      const label = freq >= 1000 ? `${freq / 1000}k` : `${freq}`;
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.fillText(label, x, specH + 3);
     }
   }
 
   private startPeakDecay(): void {
     if (this.peakDecayAnimFrame !== null) return;
     this.lastPeakDecayTime = performance.now();
+    const clipTotalMs = 400 + 600; // hold + fade
     const decay = (now: number) => {
       if (!this.frequencyPeaks) return;
       const dt = (now - this.lastPeakDecayTime) / 1000;
       this.lastPeakDecayTime = now;
-      const decayRate = 0.4;
+      const decayRate = 0.18;
       let anyAlive = false;
       for (let i = 0; i < this.frequencyPeaks.length; i++) {
         if (this.frequencyPeaks[i] > 0) {
           this.frequencyPeaks[i] = Math.max(0, this.frequencyPeaks[i] - decayRate * dt);
           if (this.frequencyPeaks[i] > 0.001) anyAlive = true;
+          if (this.frequencyPeakClipped && this.frequencyPeakClipped[i]) {
+            const clipElapsed = this.frequencyPeakClipTime
+              ? now - this.frequencyPeakClipTime[i] : Infinity;
+            if (this.frequencyPeaks[i] < 0.15 || clipElapsed > clipTotalMs) {
+              this.frequencyPeakClipped[i] = 0;
+            }
+          }
         }
       }
       this.drawFrequencyScopeStatic();
@@ -717,7 +946,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   /** Draw frequency scope with only peak indicators (no live data) — used during decay after playback stops. */
   private drawFrequencyScopeStatic(): void {
     const canvasEl = this.frequencyCanvas?.nativeElement;
-    if (!canvasEl || !this.frequencyPeaks) return;
+    if (!canvasEl || !this.frequencyPeaks || !this.audioCtx) return;
 
     const dpr = window.devicePixelRatio || 1;
     const rect = canvasEl.getBoundingClientRect();
@@ -730,20 +959,66 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
     const W = rect.width;
     const H = rect.height;
+    const scaleH = 14;
+    const specH = H - scaleH;
 
     ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
     ctx.fillRect(0, 0, W, H);
 
     const bins = this.frequencyPeaks.length;
-    const barW = W / bins;
+    const nyquist = this.audioCtx.sampleRate / 2;
+    const maxBin = Math.min(bins, Math.ceil(this.scopeMaxFreq / nyquist * bins));
+    const barW = W / maxBin;
 
-    for (let i = 0; i < bins; i++) {
+    const now = performance.now();
+    const clipHoldMs = 400;
+    const clipFadeMs = 600;
+    for (let i = 0; i < maxBin; i++) {
       if (this.frequencyPeaks[i] > 0.001) {
-        const peakY = H - this.frequencyPeaks[i] * H;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        const peakVal = this.frequencyPeaks[i];
+        const peakY = specH - peakVal * specH;
+        if (this.frequencyPeakClipped && this.frequencyPeakClipped[i] && this.frequencyPeakClipTime) {
+          const elapsed = now - this.frequencyPeakClipTime[i];
+          if (elapsed > clipHoldMs + clipFadeMs) {
+            this.frequencyPeakClipped[i] = 0;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          } else if (elapsed > clipHoldMs) {
+            const fadeProgress = (elapsed - clipHoldMs) / clipFadeMs;
+            const redAmount = Math.min(1, peakVal / 0.98) * (1 - fadeProgress);
+            ctx.fillStyle = `rgba(255,${Math.round((1 - redAmount) * 255)},${Math.round((1 - redAmount) * 255)},0.9)`;
+          } else {
+            const redAmount = Math.min(1, peakVal / 0.98);
+            ctx.fillStyle = `rgba(255,${Math.round((1 - redAmount) * 255)},${Math.round((1 - redAmount) * 255)},0.9)`;
+          }
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        }
         ctx.fillRect(i * barW, peakY, Math.max(barW - 0.5, 0.5), 2);
       }
     }
+
+    this.drawFrequencyScale(ctx, W, specH, scaleH);
+  }
+
+  // ── Peak amplitude tracking ───────────────────────────────────────────────
+
+  /** Update croppedPeakAmplitude from waveformPeaks across the entire sound */
+  private updateCroppedPeakAmplitude(): void {
+    if (!this.waveformPeaks) {
+      this.croppedPeakAmplitude = 0;
+      return;
+    }
+    let peak = 0;
+    for (let i = 0; i < this.waveformPeaks.length; i++) {
+      if (this.waveformPeaks[i] > peak) peak = this.waveformPeaks[i];
+    }
+    this.croppedPeakAmplitude = peak;
+  }
+
+  /** Position of the max-without-clipping marker on the volume slider (0-100%) */
+  get peakMarkerPercent(): number {
+    if (this.croppedPeakAmplitude <= 0) return 101;
+    return (100 / this.croppedPeakAmplitude) / this.volumeSliderMax * 100;
   }
 
   onPreviewKeydown(event: KeyboardEvent): void {
@@ -767,10 +1042,12 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
       if (this.focusedCropHandle === 'start') {
         this.cropStart = Math.max(0, Math.min(this.cropEnd - 0.001, this.cropStart + delta));
         this.cropStateChanged.emit({ start: this.cropStart, end: this.cropEnd, duration: this.previewDuration });
+        this.updateCroppedPeakAmplitude();
         this.drawWaveform();
       } else if (this.focusedCropHandle === 'end') {
         this.cropEnd = Math.max(this.cropStart + 0.001, Math.min(1, this.cropEnd + delta));
         this.cropStateChanged.emit({ start: this.cropStart, end: this.cropEnd, duration: this.previewDuration });
+        this.updateCroppedPeakAmplitude();
         this.drawWaveform();
       }
       return;
@@ -791,6 +1068,7 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
   onVolumeSliderInput(event: Event): void {
     const value = +(event.target as HTMLInputElement).value;
     this.volumeGain = value / 100;
+    this.isNormalized = false;
     if (this.gainNode) {
       this.gainNode.gain.value = this.volumeGain;
     }
@@ -803,10 +1081,16 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
   normalizeVolume(): void {
     if (!this.audioBuffer) return;
-    const peak = this.findPeakAmplitude(this.audioBuffer);
+    // Always use the true peak from the raw audio buffer (all channels, full resolution)
+    // to avoid under-estimating the peak from the downsampled waveformPeaks
+    const truePeak = this.findPeakAmplitude(this.audioBuffer);
+    const peak = truePeak > 0 ? truePeak : this.croppedPeakAmplitude;
     if (peak > 0) {
       this.volumeGain = 1.0 / peak;
-      this.volumeSliderMax = Math.max(200, Math.ceil(this.volumeGain * 100));
+      // Update croppedPeakAmplitude to match the true peak so the peak marker is accurate
+      this.croppedPeakAmplitude = peak;
+        this.volumeSliderMax = Math.max(300, Math.ceil(this.volumeGain * 100));
+      this.isNormalized = true;
       if (this.gainNode) {
         this.gainNode.gain.value = this.volumeGain;
       }
@@ -817,7 +1101,8 @@ export class WaveformPreviewComponent implements OnChanges, OnDestroy {
 
   resetVolume(): void {
     this.volumeGain = 1.0;
-    this.volumeSliderMax = 200;
+    this.volumeSliderMax = 300;
+    this.isNormalized = false;
     if (this.gainNode) {
       this.gainNode.gain.value = this.volumeGain;
     }

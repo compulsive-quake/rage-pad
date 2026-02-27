@@ -92,6 +92,7 @@
               [sound]="sound"
               [isPlaying]="currentlyPlayingId === sound.id"
               [isRenameMode]="isRenameMode"
+              [queuePositions]="getQueuePositions(sound.id)"
               (play)="onPlaySound($event)"
               (rename)="onOpenRenameModal($event)"
               (soundContextMenu)="onSoundContextMenu($event)"

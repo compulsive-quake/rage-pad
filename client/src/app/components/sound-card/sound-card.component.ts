@@ -12,6 +12,7 @@ import { Sound } from '../../models/sound.model';
       class="sound-button"
       [class.playing]="isPlaying"
       [class.rename-mode]="isRenameMode"
+      [class.queued]="queuePositions.length > 0"
       (click)="onClick()"
       (contextmenu)="onContextMenu($event)"
     >
@@ -21,6 +22,7 @@ import { Sound } from '../../models/sound.model';
           <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
         </svg>
       </span>
+      <span class="queue-badge" *ngIf="queuePositions.length > 0">{{ queuePositions.join(', ') }}</span>
     </button>
   `,
   styles: [`
@@ -110,12 +112,43 @@ import { Sound } from '../../models/sound.model';
       }
     }
 
+    .queue-badge {
+      position: absolute;
+      top: 6px;
+      left: 6px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 5px;
+      background: rgba(230, 126, 34, 0.92);
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+      animation: queueBadgeIn 0.2s ease-out;
+    }
+
+    @keyframes queueBadgeIn {
+      from { transform: scale(0); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+
+    .sound-button.queued {
+      border-color: rgba(230, 126, 34, 0.5);
+    }
+
   `]
 })
 export class SoundCardComponent {
   @Input() sound!: Sound;
   @Input() isPlaying = false;
   @Input() isRenameMode = false;
+  @Input() queuePositions: number[] = [];
   @Output() play = new EventEmitter<Sound>();
   @Output() rename = new EventEmitter<Sound>();
   @Output() soundContextMenu = new EventEmitter<{ sound: Sound; event: MouseEvent }>();

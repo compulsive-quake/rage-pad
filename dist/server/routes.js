@@ -43,6 +43,8 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const child_process_1 = require("child_process");
+const crypto_1 = __importDefault(require("crypto"));
+const database_1 = require("./database");
 // ── Module-level state (set by initRoutes) ─────────────────────────────────
 let soundDb;
 let audioEngine;
@@ -700,9 +702,23 @@ router.post('/youtube/fetch', async (req, res) => {
             return;
         }
         const videoUrl = url.trim();
+        const cacheKey = extractVideoId(videoUrl);
+        // Check cache first
+        const cached = ytCache.get(cacheKey);
+        if (cached) {
+            console.log(`[youtube/fetch] Cache hit for ${cacheKey}`);
+            res.setHeader('Content-Type', cached.mimeType);
+            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cached.fileName)}"`);
+            res.setHeader('X-Video-Title', encodeURIComponent(cached.title));
+            res.setHeader('X-Video-Duration', String(cached.durationSeconds));
+            res.setHeader('Access-Control-Expose-Headers', 'X-Video-Title, X-Video-Duration, Content-Disposition');
+            res.send(cached.buffer);
+            return;
+        }
         const tmpDir = process.env['RAGE_PAD_TMP_DIR'] || os.tmpdir();
         let videoTitle = 'youtube_audio';
         let videoDurationSeconds = 0;
+        let videoThumbnail = '';
         try {
             const metaJson = await runYtDlp([
                 '--no-download', '-j', '--no-warnings', videoUrl
@@ -710,6 +726,7 @@ router.post('/youtube/fetch', async (req, res) => {
             const meta = JSON.parse(metaJson);
             videoTitle = meta.title || meta.fulltitle || 'youtube_audio';
             videoDurationSeconds = meta.duration || 0;
+            videoThumbnail = meta.thumbnail || '';
         }
         catch (metaErr) {
             console.warn('[youtube/fetch] Could not fetch metadata:', metaErr);
@@ -748,7 +765,19 @@ router.post('/youtube/fetch', async (req, res) => {
         }
         catch { /* ignore */ }
         const fileName = `${safeTitle}.${ext}`;
-        res.setHeader('Content-Type', mimeMap[ext] || 'application/octet-stream');
+        const mimeType = mimeMap[ext] || 'application/octet-stream';
+        // Store in URL cache
+        ytCache.set(cacheKey, {
+            buffer: fileBuffer,
+            fileName,
+            mimeType,
+            title: videoTitle,
+            durationSeconds: videoDurationSeconds,
+            thumbnail: videoThumbnail,
+            videoUrl: videoUrl,
+            cachedAt: Date.now(),
+        });
+        res.setHeader('Content-Type', mimeType);
         res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
         res.setHeader('X-Video-Title', encodeURIComponent(videoTitle));
         res.setHeader('X-Video-Duration', String(videoDurationSeconds));
@@ -759,6 +788,324 @@ router.post('/youtube/fetch', async (req, res) => {
         console.error('[youtube/fetch] Error:', error);
         const message = error instanceof Error ? error.message : 'Failed to fetch YouTube audio';
         res.status(500).json({ error: message });
+    }
+});
+function getYtCacheTtl() {
+    const minutes = (0, database_1.getSetting)('youtubeCacheTtlMinutes');
+    return (minutes > 0 ? minutes : 120) * 60 * 1000;
+}
+function getYtCacheMaxSizeBytes() {
+    const mb = (0, database_1.getSetting)('youtubeCacheMaxSizeMb');
+    return (mb > 0 ? mb : 500) * 1024 * 1024;
+}
+const ytCache = new Map();
+function extractVideoId(url) {
+    try {
+        const u = new URL(url);
+        if (u.hostname === 'youtu.be')
+            return u.pathname.slice(1).split('/')[0];
+        const v = u.searchParams.get('v');
+        if (v)
+            return v;
+        const embedMatch = u.pathname.match(/\/embed\/([^/?]+)/);
+        if (embedMatch)
+            return embedMatch[1];
+    }
+    catch { /* ignore */ }
+    return url; // fallback: use raw URL as key
+}
+const tempDownloads = new Map();
+setInterval(() => {
+    const now = Date.now();
+    const ttl = getYtCacheTtl();
+    const maxBytes = getYtCacheMaxSizeBytes();
+    for (const [id, entry] of tempDownloads) {
+        if (now - entry.createdAt > 5 * 60 * 1000) {
+            tempDownloads.delete(id);
+        }
+    }
+    for (const [id, entry] of ytCache) {
+        if (now - entry.cachedAt > ttl) {
+            ytCache.delete(id);
+        }
+    }
+    // Enforce max cache size
+    enforceYtCacheMaxSize(maxBytes);
+}, 60000);
+function getYtCacheTotalSize() {
+    let total = 0;
+    for (const entry of ytCache.values()) {
+        total += entry.buffer.length;
+    }
+    return total;
+}
+function enforceYtCacheMaxSize(maxBytes) {
+    if (maxBytes <= 0)
+        return;
+    let totalSize = getYtCacheTotalSize();
+    if (totalSize <= maxBytes)
+        return;
+    // Sort entries by cachedAt ascending (oldest first)
+    const entries = [...ytCache.entries()].sort((a, b) => a[1].cachedAt - b[1].cachedAt);
+    for (const [id, entry] of entries) {
+        if (totalSize <= maxBytes)
+            break;
+        totalSize -= entry.buffer.length;
+        ytCache.delete(id);
+    }
+}
+// ── YouTube fetch with SSE progress ────────────────────────────────────────
+router.get('/youtube/fetch-stream', async (req, res) => {
+    const url = (req.query.url || '').trim();
+    if (!url) {
+        res.status(400).json({ error: 'YouTube URL is required' });
+        return;
+    }
+    // SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    const sendEvent = (event, data) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    let killed = false;
+    let ytProcess = null;
+    req.on('close', () => {
+        killed = true;
+        if (ytProcess) {
+            ytProcess.kill();
+        }
+    });
+    const cacheKey = extractVideoId(url);
+    try {
+        // Check cache first
+        const cached = ytCache.get(cacheKey);
+        if (cached) {
+            console.log(`[youtube/fetch-stream] Cache hit for ${cacheKey}`);
+            sendEvent('metadata', { title: cached.title, durationSeconds: cached.durationSeconds });
+            const fileId = crypto_1.default.randomUUID();
+            tempDownloads.set(fileId, {
+                buffer: cached.buffer,
+                fileName: cached.fileName,
+                mimeType: cached.mimeType,
+                title: cached.title,
+                durationSeconds: cached.durationSeconds,
+                createdAt: Date.now(),
+            });
+            sendEvent('done', { fileId, fileName: cached.fileName, title: cached.title, durationSeconds: cached.durationSeconds, cached: true });
+            res.end();
+            return;
+        }
+        // Phase 1: Metadata
+        sendEvent('phase', { phase: 'metadata' });
+        let videoTitle = 'youtube_audio';
+        let videoDurationSeconds = 0;
+        let videoThumbnail = '';
+        try {
+            const metaJson = await runYtDlp([
+                '--no-download', '-j', '--no-warnings', url
+            ]);
+            const meta = JSON.parse(metaJson);
+            videoTitle = meta.title || meta.fulltitle || 'youtube_audio';
+            videoDurationSeconds = meta.duration || 0;
+            videoThumbnail = meta.thumbnail || '';
+        }
+        catch (metaErr) {
+            console.warn('[youtube/fetch-stream] Could not fetch metadata:', metaErr);
+        }
+        if (killed)
+            return;
+        sendEvent('metadata', { title: videoTitle, durationSeconds: videoDurationSeconds });
+        // Phase 2: Download with progress
+        sendEvent('phase', { phase: 'downloading' });
+        const tmpDir = process.env['RAGE_PAD_TMP_DIR'] || os.tmpdir();
+        const safeTitle = videoTitle.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() || 'youtube_audio';
+        const outTemplate = path.join(tmpDir, `${safeTitle}.%(ext)s`);
+        const ytDlpPath = getYtDlpPath();
+        const args = [
+            '-f', 'bestaudio[ext=m4a]/bestaudio',
+            '-o', outTemplate,
+            '--no-playlist',
+            '--no-warnings',
+            '--force-overwrites',
+            '--newline',
+            url
+        ];
+        await new Promise((resolve, reject) => {
+            ytProcess = (0, child_process_1.spawn)(ytDlpPath, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+            const progressRegex = /\[download]\s+([\d.]+)%\s+of\s+~?\s*([\d.]+\S+)\s+at\s+([\d.]+\S+\/s)\s+ETA\s+(\S+)/;
+            let stderrChunks = '';
+            ytProcess.stdout.on('data', (chunk) => {
+                const lines = chunk.toString().split('\n');
+                for (const line of lines) {
+                    const match = line.match(progressRegex);
+                    if (match) {
+                        sendEvent('progress', {
+                            percent: parseFloat(match[1]),
+                            totalSize: match[2],
+                            speed: match[3],
+                            eta: match[4],
+                        });
+                    }
+                }
+            });
+            ytProcess.stderr.on('data', (chunk) => {
+                stderrChunks += chunk.toString();
+            });
+            ytProcess.on('close', (code) => {
+                ytProcess = null;
+                if (killed) {
+                    reject(new Error('Aborted'));
+                }
+                else if (code !== 0) {
+                    reject(new Error(stderrChunks || `yt-dlp exited with code ${code}`));
+                }
+                else {
+                    resolve();
+                }
+            });
+            ytProcess.on('error', (err) => {
+                ytProcess = null;
+                reject(err);
+            });
+        });
+        if (killed)
+            return;
+        // Phase 3: Processing / finding output file
+        sendEvent('phase', { phase: 'processing' });
+        const possibleExts = ['m4a', 'webm', 'opus', 'ogg', 'mp3'];
+        let outPath = '';
+        for (const ext of possibleExts) {
+            const candidate = path.join(tmpDir, `${safeTitle}.${ext}`);
+            if (fs.existsSync(candidate)) {
+                outPath = candidate;
+                break;
+            }
+        }
+        if (!outPath) {
+            sendEvent('error', { message: 'yt-dlp did not produce an output file' });
+            res.end();
+            return;
+        }
+        const ext = path.extname(outPath).slice(1);
+        const mimeMap = {
+            m4a: 'audio/mp4', webm: 'audio/webm', opus: 'audio/opus',
+            ogg: 'audio/ogg', mp3: 'audio/mpeg',
+        };
+        const fileBuffer = fs.readFileSync(outPath);
+        try {
+            fs.unlinkSync(outPath);
+        }
+        catch { /* ignore */ }
+        const fileName = `${safeTitle}.${ext}`;
+        const mimeType = mimeMap[ext] || 'application/octet-stream';
+        // Store in URL cache
+        ytCache.set(cacheKey, {
+            buffer: fileBuffer,
+            fileName,
+            mimeType,
+            title: videoTitle,
+            durationSeconds: videoDurationSeconds,
+            thumbnail: videoThumbnail,
+            videoUrl: url,
+            cachedAt: Date.now(),
+        });
+        const fileId = crypto_1.default.randomUUID();
+        tempDownloads.set(fileId, {
+            buffer: fileBuffer,
+            fileName,
+            mimeType,
+            title: videoTitle,
+            durationSeconds: videoDurationSeconds,
+            createdAt: Date.now(),
+        });
+        sendEvent('done', { fileId, fileName, title: videoTitle, durationSeconds: videoDurationSeconds });
+        res.end();
+    }
+    catch (error) {
+        if (killed)
+            return;
+        const message = error instanceof Error ? error.message : 'Failed to fetch YouTube audio';
+        console.error('[youtube/fetch-stream] Error:', error);
+        sendEvent('error', { message });
+        res.end();
+    }
+});
+// ── Download completed YouTube file by ID ──────────────────────────────────
+router.get('/youtube/download/:fileId', (req, res) => {
+    const { fileId } = req.params;
+    const entry = tempDownloads.get(fileId);
+    if (!entry) {
+        res.status(404).json({ error: 'File not found or expired' });
+        return;
+    }
+    tempDownloads.delete(fileId);
+    res.setHeader('Content-Type', entry.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(entry.fileName)}"`);
+    res.setHeader('X-Video-Title', encodeURIComponent(entry.title));
+    res.setHeader('X-Video-Duration', String(entry.durationSeconds));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Video-Title, X-Video-Duration, Content-Disposition');
+    res.send(entry.buffer);
+});
+// ── List cached YouTube videos ─────────────────────────────────────────────
+router.get('/youtube/cache-list', (_req, res) => {
+    try {
+        const now = Date.now();
+        const ttl = getYtCacheTtl();
+        const items = [];
+        for (const [videoId, entry] of ytCache) {
+            if (now - entry.cachedAt > ttl)
+                continue; // skip expired
+            items.push({
+                videoId,
+                title: entry.title,
+                thumbnail: entry.thumbnail,
+                videoUrl: entry.videoUrl,
+                durationSeconds: entry.durationSeconds,
+                cachedAt: entry.cachedAt,
+            });
+        }
+        // Sort by most recently cached first
+        items.sort((a, b) => b.cachedAt - a.cachedAt);
+        res.json(items);
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to list cached YouTube videos' });
+    }
+});
+// ── Clear YouTube cache ────────────────────────────────────────────────────
+router.delete('/youtube/cache', (_req, res) => {
+    try {
+        const count = ytCache.size;
+        ytCache.clear();
+        console.log(`[youtube/cache] Cleared ${count} cached entries`);
+        res.json({ message: `Cleared ${count} cached videos`, cleared: count });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to clear YouTube cache' });
+    }
+});
+// ── YouTube cache info ─────────────────────────────────────────────────────
+router.get('/youtube/cache-info', (_req, res) => {
+    try {
+        const totalSizeBytes = getYtCacheTotalSize();
+        const entryCount = ytCache.size;
+        const maxSizeMb = (0, database_1.getSetting)('youtubeCacheMaxSizeMb');
+        const ttlMinutes = (0, database_1.getSetting)('youtubeCacheTtlMinutes');
+        const cachePath = (0, database_1.getSetting)('youtubeCachePath');
+        res.json({
+            entryCount,
+            totalSizeBytes,
+            totalSizeMb: Math.round(totalSizeBytes / (1024 * 1024) * 100) / 100,
+            maxSizeMb: maxSizeMb > 0 ? maxSizeMb : 500,
+            ttlMinutes: ttlMinutes > 0 ? ttlMinutes : 120,
+            cachePath: cachePath || '',
+        });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to get cache info' });
     }
 });
 // ── SSE endpoint ───────────────────────────────────────────────────────────

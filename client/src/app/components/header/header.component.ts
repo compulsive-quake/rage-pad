@@ -13,6 +13,8 @@ export class HeaderComponent {
   @Input() isLoading = false;
   @Input() isRenameMode = false;
   @Input() isReorderMode = false;
+  @Input() isQueueMode = false;
+  @Input() queueLength = 0;
   @Input() playbackProgress = 0;
 
   isFullscreen = false;
@@ -21,6 +23,7 @@ export class HeaderComponent {
   @Output() refresh = new EventEmitter<void>();
   @Output() toggleRenameMode = new EventEmitter<void>();
   @Output() toggleReorderMode = new EventEmitter<void>();
+  @Output() toggleQueueMode = new EventEmitter<void>();
   @Output() toggleSettings = new EventEmitter<void>();
   @Output() addSound = new EventEmitter<void>();
 
@@ -38,6 +41,10 @@ export class HeaderComponent {
 
   onToggleReorderMode(): void {
     this.toggleReorderMode.emit();
+  }
+
+  onToggleQueueMode(): void {
+    this.toggleQueueMode.emit();
   }
 
   onToggleSettings(): void {

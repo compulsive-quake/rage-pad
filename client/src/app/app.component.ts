@@ -53,6 +53,8 @@ export class AppComponent implements OnInit, OnDestroy {
   isSettingsModalOpen = false;
   isRenameMode = false;
   isReorderMode = false;
+  isQueueMode = false;
+  soundQueue: Sound[] = [];
 
   // Rename modal state
   isRenameModalOpen = false;
@@ -400,6 +402,18 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   playSound(sound: Sound): void {
+    if (this.isQueueMode) {
+      this.soundQueue.push(sound);
+      // If nothing is currently playing, start the queue
+      if (!this.isActuallyPlaying) {
+        this.playNextInQueue();
+      }
+      return;
+    }
+    this.playSoundImmediate(sound);
+  }
+
+  private playSoundImmediate(sound: Sound): void {
     const speakersOnly = this.playbackMode === 'speakers';
     const micOnly = this.playbackMode === 'mic';
 
@@ -433,6 +447,39 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
 
+  private playNextInQueue(): void {
+    if (this.soundQueue.length === 0) return;
+    this.playSoundImmediate(this.soundQueue[0]);
+  }
+
+  private onSoundPlaybackEnded(): void {
+    if (this.isQueueMode && this.soundQueue.length > 0) {
+      this.soundQueue.shift(); // remove the one that just finished
+      if (this.soundQueue.length > 0) {
+        this.playNextInQueue();
+        return;
+      }
+    }
+    this.currentlyPlayingId = null;
+    this.isActuallyPlaying = false;
+    this.playbackProgress = 0;
+    this.playbackTimeRemaining = 0;
+    if (this.playbackTimer) {
+      clearInterval(this.playbackTimer);
+      this.playbackTimer = null;
+    }
+  }
+
+  toggleQueueMode(): void {
+    this.isQueueMode = !this.isQueueMode;
+    if (this.isQueueMode) {
+      this.isRenameMode = false;
+      this.isReorderMode = false;
+    } else {
+      this.soundQueue = [];
+    }
+  }
+
   // ── Web Audio API (speaker playback) ───────────────────────────────────
 
   private playWebAudio(soundId: number): void {
@@ -463,14 +510,7 @@ export class AppComponent implements OnInit, OnDestroy {
           this.currentAudioSource.onended = () => {
             this.ngZone.run(() => {
               if (this.currentlyPlayingId === soundId) {
-                this.currentlyPlayingId = null;
-                this.isActuallyPlaying = false;
-                this.playbackProgress = 0;
-                this.playbackTimeRemaining = 0;
-                if (this.playbackTimer) {
-                  clearInterval(this.playbackTimer);
-                  this.playbackTimer = null;
-                }
+                this.onSoundPlaybackEnded();
               }
             });
           };
@@ -515,18 +555,14 @@ export class AppComponent implements OnInit, OnDestroy {
         this.playbackTimeRemaining = Math.max(this.currentSoundDuration - elapsed, 0);
 
         if (this.playbackTimeRemaining <= 0) {
-          this.currentlyPlayingId = null;
-          this.isActuallyPlaying = false;
-          this.playbackProgress = 0;
-          this.playbackTimeRemaining = 0;
-          clearInterval(this.playbackTimer);
-          this.playbackTimer = null;
+          this.onSoundPlaybackEnded();
         }
       }
     }, 100);
   }
 
   stopSound(): void {
+    this.soundQueue = [];
     this.soundService.stopSound()
       .pipe(take(1))
       .subscribe({
@@ -692,6 +728,8 @@ export class AppComponent implements OnInit, OnDestroy {
     this.isRenameMode = !this.isRenameMode;
     if (this.isRenameMode) {
       this.isReorderMode = false;
+      this.isQueueMode = false;
+      this.soundQueue = [];
     }
     if (!this.isRenameMode) {
       this.isRenameModalOpen = false;
@@ -705,6 +743,8 @@ export class AppComponent implements OnInit, OnDestroy {
       this.isRenameMode = false;
       this.isRenameModalOpen = false;
       this.soundToRename = null;
+      this.isQueueMode = false;
+      this.soundQueue = [];
     }
   }
 

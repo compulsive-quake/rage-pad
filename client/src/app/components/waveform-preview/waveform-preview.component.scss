@@ -186,8 +186,9 @@
 
 // Frequency scope
 .frequency-scope-container {
+  position: relative;
   width: 100%;
-  height: 48px;
+  height: 62px;
   margin-bottom: 0.4rem;
   border-radius: 8px;
   overflow: hidden;
@@ -199,6 +200,43 @@
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.clipping-indicator {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.35rem;
+  background: rgba(231, 76, 60, 0.85);
+  border-radius: 4px;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  pointer-events: none;
+  animation: clipping-pulse 0.4s ease-in-out infinite alternate;
+  z-index: 10;
+
+  svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+}
+
+@keyframes clipping-pulse {
+  from {
+    opacity: 0.75;
+    box-shadow: 0 0 4px rgba(231, 76, 60, 0.4);
+  }
+  to {
+    opacity: 1;
+    box-shadow: 0 0 10px rgba(231, 76, 60, 0.7);
+  }
 }
 
 // Preview controls row
@@ -408,11 +446,30 @@
   &:active {
     transform: scale(0.96);
   }
+
+  &.active {
+    background: rgba(155, 89, 182, 0.3);
+    border-color: #9b59b6;
+    color: #9b59b6;
+    box-shadow: 0 0 10px rgba(155, 89, 182, 0.25);
+  }
+}
+
+.volume-slider-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 80px;
+  display: flex;
+  align-items: center;
+  overflow: visible;
 }
 
 .volume-slider {
-  flex: 1;
-  min-width: 80px;
+  // Extend slider by thumb diameter (14px) and offset by -7px on each side
+  // so the thumb center travels from 0% to 100% of the wrapper width.
+  // The thumb will overhang at min/max — that's intentional.
+  width: calc(100% + 14px);
+  margin: 0 -7px;
   height: 4px;
   -webkit-appearance: none;
   appearance: none;
@@ -449,6 +506,30 @@
   }
 }
 
+.volume-peak-marker {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: rgba(231, 76, 60, 0.7);
+  transform: translateX(-50%);
+  pointer-events: none;
+  border-radius: 1px;
+
+  &::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid rgba(231, 76, 60, 0.7);
+  }
+}
+
 .volume-label {
   font-family: monospace;
   font-size: 0.8rem;
@@ -469,6 +550,7 @@
   transition: all 0.2s;
   white-space: nowrap;
   flex-shrink: 0;
+  margin-right: 0.25rem;
 
   &:hover {
     background: rgba(231, 76, 60, 0.25);
@@ -487,4 +569,33 @@
 
 .spinning {
   animation: spin 1s linear infinite;
+}
+
+// Clipping warning – inline in controls row
+.waveform-clipping-warning {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem 0.15rem 0.35rem;
+  background: rgba(231, 76, 60, 0.15);
+  border: 1px solid rgba(231, 76, 60, 0.4);
+  border-radius: 4px;
+  color: #e74c3c;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  opacity: 1;
+  transition: opacity 600ms ease-out;
+  white-space: nowrap;
+
+  svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  &.fading {
+    opacity: 0;
+  }
 }

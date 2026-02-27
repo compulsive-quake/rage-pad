@@ -1,8 +1,8 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { take } from 'rxjs';
-import { SoundService } from '../../services/sound.service';
+import { take, Subscription } from 'rxjs';
+import { SoundService, YoutubeFetchProgress, YoutubeCacheEntry } from '../../services/sound.service';
 import { Sound, CategoryIcon } from '../../models/sound.model';
 import { CategorySelectComponent } from '../category-select/category-select.component';
 import { WaveformPreviewComponent } from '../waveform-preview/waveform-preview.component';
@@ -37,11 +37,25 @@ export class AddSoundModalComponent implements OnChanges {
   youtubeFetchError = '';
   youtubeDurationSeconds = 0;
   showYoutubeRetryBtn = false;
+  youtubeProgressPercent = 0;
+  youtubePhase: 'metadata' | 'downloading' | 'processing' | '' = '';
+  youtubeTitle = '';
+  youtubeSpeed = '';
+  youtubeEta = '';
   private youtubeFetchAttempts = 0;
   private youtubeRetryTimer: any = null;
+  private youtubeSubscription: Subscription | null = null;
 
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
+
+  // Recent YouTube videos from cache
+  allCachedVideos: YoutubeCacheEntry[] = [];
+  recentYoutubeVideos: YoutubeCacheEntry[] = [];
+  showRecentVideos = false;
+  cachedVideosLoaded = false;
+
+  @ViewChild('youtubeInput') youtubeInputRef!: ElementRef<HTMLInputElement>;
 
   step: 'select' | 'preview' | 'details' = 'select';
   showCropConfirmDialog = false;
@@ -94,7 +108,20 @@ export class AddSoundModalComponent implements OnChanges {
     this.youtubeFetchError = '';
     this.youtubeDurationSeconds = 0;
     this.showYoutubeRetryBtn = false;
+    this.youtubeProgressPercent = 0;
+    this.youtubePhase = '';
+    this.youtubeTitle = '';
+    this.youtubeSpeed = '';
+    this.youtubeEta = '';
     this.youtubeFetchAttempts = 0;
+    this.allCachedVideos = [];
+    this.recentYoutubeVideos = [];
+    this.showRecentVideos = false;
+    this.cachedVideosLoaded = false;
+    if (this.youtubeSubscription) {
+      this.youtubeSubscription.unsubscribe();
+      this.youtubeSubscription = null;
+    }
     if (this.youtubeRetryTimer) {
       clearTimeout(this.youtubeRetryTimer);
       this.youtubeRetryTimer = null;
@@ -162,6 +189,85 @@ export class AddSoundModalComponent implements OnChanges {
   selectArtistSuggestion(artist: string): void {
     this.addSoundArtist = artist;
     this.showArtistSuggestions = false;
+  }
+
+  onYoutubeUrlFocus(): void {
+    if (this.isFetchingYoutube || this.isAddingSound) return;
+
+    const loadAndShow = () => {
+      this.filterCachedVideos();
+      this.showRecentVideos = this.recentYoutubeVideos.length > 0;
+    };
+
+    if (this.cachedVideosLoaded) {
+      loadAndShow();
+      return;
+    }
+
+    this.soundService.getYoutubeCacheList()
+      .pipe(take(1))
+      .subscribe({
+        next: (entries) => {
+          this.allCachedVideos = entries;
+          this.cachedVideosLoaded = true;
+          loadAndShow();
+        },
+        error: () => {
+          this.allCachedVideos = [];
+          this.recentYoutubeVideos = [];
+          this.showRecentVideos = false;
+          this.cachedVideosLoaded = true;
+        }
+      });
+  }
+
+  onYoutubeUrlInput(): void {
+    if (this.isFetchingYoutube || this.isAddingSound) return;
+    if (!this.cachedVideosLoaded) return;
+    this.filterCachedVideos();
+    this.showRecentVideos = this.recentYoutubeVideos.length > 0;
+  }
+
+  private filterCachedVideos(): void {
+    const query = this.youtubeUrl.trim().toLowerCase();
+    if (!query) {
+      this.recentYoutubeVideos = this.allCachedVideos;
+      return;
+    }
+    this.recentYoutubeVideos = this.allCachedVideos.filter(v =>
+      v.title.toLowerCase().includes(query) ||
+      v.videoUrl.toLowerCase().includes(query) ||
+      v.videoId.toLowerCase().includes(query)
+    );
+  }
+
+  onYoutubeUrlBlur(): void {
+    setTimeout(() => {
+      this.showRecentVideos = false;
+    }, 200);
+  }
+
+  selectRecentVideo(entry: YoutubeCacheEntry): void {
+    this.youtubeUrl = entry.videoUrl;
+    this.showRecentVideos = false;
+    this.fetchFromYoutube();
+  }
+
+  clearRecentVideos(event: MouseEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.soundService.clearYoutubeCache().subscribe(() => {
+      this.recentYoutubeVideos = [];
+      this.allCachedVideos = [];
+      this.showRecentVideos = false;
+    });
+  }
+
+  formatDuration(seconds: number): string {
+    if (!seconds || seconds <= 0) return '';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   }
 
   onCategoryChange(categoryName: string): void {
@@ -244,36 +350,70 @@ export class AddSoundModalComponent implements OnChanges {
     this.youtubeFetchError = '';
     this.addSoundError = '';
     this.showYoutubeRetryBtn = false;
+    this.youtubeProgressPercent = 0;
+    this.youtubePhase = '';
+    this.youtubeTitle = '';
+    this.youtubeSpeed = '';
+    this.youtubeEta = '';
     this.youtubeFetchAttempts++;
 
-    this.soundService.fetchYoutubeAudio(url)
-      .pipe(take(1))
+    if (this.youtubeSubscription) {
+      this.youtubeSubscription.unsubscribe();
+    }
+
+    this.youtubeSubscription = this.soundService.fetchYoutubeAudioWithProgress(url)
       .subscribe({
-        next: ({ file, title, durationSeconds }) => {
-          this.isFetchingYoutube = false;
-          this.youtubeFetchAttempts = 0;
-          this.addSoundFile = file;
-          this.youtubeDurationSeconds = durationSeconds;
-          this.addSoundTitle = title;
-          this.addSoundName = title;
-          this.step = 'preview';
+        next: (event: YoutubeFetchProgress) => {
+          if (event.type === 'phase' && event.phase) {
+            this.youtubePhase = event.phase;
+          } else if (event.type === 'metadata') {
+            this.youtubeTitle = event.title || '';
+          } else if (event.type === 'progress') {
+            this.youtubeProgressPercent = event.percent || 0;
+            this.youtubeSpeed = event.speed || '';
+            this.youtubeEta = event.eta || '';
+          } else if (event.type === 'done') {
+            this.youtubePhase = 'processing';
+            // Download the completed file
+            this.soundService.downloadYoutubeFile(event.fileId!)
+              .pipe(take(1))
+              .subscribe({
+                next: ({ file, title, durationSeconds }) => {
+                  this.isFetchingYoutube = false;
+                  this.youtubePhase = '';
+                  this.youtubeFetchAttempts = 0;
+                  this.addSoundFile = file;
+                  this.youtubeDurationSeconds = durationSeconds;
+                  this.addSoundTitle = title;
+                  this.addSoundName = title;
+                  this.step = 'preview';
+                },
+                error: (err) => {
+                  this.handleYoutubeFetchError(err?.message || 'Failed to download completed file.');
+                }
+              });
+          }
         },
         error: (err) => {
-          this.isFetchingYoutube = false;
-          const errorMsg = err?.error?.error || err?.message || 'Failed to fetch audio from YouTube.';
-
-          if (this.youtubeFetchAttempts < 2) {
-            this.youtubeFetchError = errorMsg + ' Retrying…';
-            this.youtubeRetryTimer = setTimeout(() => {
-              this.youtubeRetryTimer = null;
-              this.fetchFromYoutube();
-            }, 2000);
-          } else {
-            this.youtubeFetchError = errorMsg;
-            this.showYoutubeRetryBtn = true;
-          }
+          this.handleYoutubeFetchError(err?.message || 'Failed to fetch audio from YouTube.');
         }
       });
+  }
+
+  private handleYoutubeFetchError(errorMsg: string): void {
+    this.isFetchingYoutube = false;
+    this.youtubePhase = '';
+
+    if (this.youtubeFetchAttempts < 2) {
+      this.youtubeFetchError = errorMsg + ' Retrying…';
+      this.youtubeRetryTimer = setTimeout(() => {
+        this.youtubeRetryTimer = null;
+        this.fetchFromYoutube();
+      }, 2000);
+    } else {
+      this.youtubeFetchError = errorMsg;
+      this.showYoutubeRetryBtn = true;
+    }
   }
 
   retryYoutubeFetch(): void {

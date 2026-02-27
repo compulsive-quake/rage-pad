@@ -1,0 +1,1 @@
+C:\Users\Richard\WebstormProjects\rage-pad\audio-engine\target\release\ragepad-audio-engine.exe: C:\Users\Richard\WebstormProjects\rage-pad\audio-engine\src\devices.rs C:\Users\Richard\WebstormProjects\rage-pad\audio-engine\src\main.rs C:\Users\Richard\WebstormProjects\rage-pad\audio-engine\src\mixer.rs C:\Users\Richard\WebstormProjects\rage-pad\audio-engine\src\protocol.rs

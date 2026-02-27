@@ -17,6 +17,7 @@
     "start:client": "cd client && npm run start",
     "start": "concurrently \"npm run build:server\" \"npm run start:server\"",
     "dev": "concurrently \"npm run build:server:watch\" \"npm run start:server:watch\" \"npm run start:client\"",
+    "tauri:dev": "tauri dev",
     "build:audio": "cd audio-engine && cargo build --release",
     "bundle:server": "node -e \"require('fs').mkdirSync('src-tauri/binaries', {recursive: true})\" && esbuild dist/server/index.js --bundle --platform=node --target=node20 --outfile=src-tauri/binaries/server-bundle.js --external:better-sqlite3 && node scripts/copy-runtime-deps.js",
     "download:node": "node -e \"require('fs').mkdirSync('src-tauri/binaries', {recursive: true})\" && curl -Lo src-tauri/binaries/ragepad-server-x86_64-pc-windows-msvc.exe https://nodejs.org/dist/v20.18.3/win-x64/node.exe",

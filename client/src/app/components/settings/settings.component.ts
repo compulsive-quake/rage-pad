@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { APP_VERSION, SoundService } from '../../services/sound.service';
+import { APP_VERSION, SoundService, YoutubeCacheInfo } from '../../services/sound.service';
 import { AudioDevices } from '../../models/sound.model';
 
 export interface SettingsPayload {
@@ -14,6 +14,9 @@ export interface SettingsPayload {
   serverPort: number;
   audioInputDevice: string;
   audioOutputDevice: string;
+  youtubeCachePath: string;
+  youtubeCacheTtlMinutes: number;
+  youtubeCacheMaxSizeMb: number;
 }
 
 @Component({
@@ -51,6 +54,19 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftInputDevice = '';
   draftOutputDevice = '';
 
+  // YouTube cache draft values
+  draftYoutubeCachePath = '';
+  draftYoutubeCacheTtl = 120;
+  draftYoutubeCacheMaxSize = 500;
+  currentYoutubeCachePath = '';
+  currentYoutubeCacheTtl = 120;
+  currentYoutubeCacheMaxSize = 500;
+
+  // YouTube cache info
+  cacheInfo: YoutubeCacheInfo | null = null;
+  isClearingCache = false;
+  cacheClearMessage = '';
+
   // Audio devices
   audioDevices: AudioDevices = { input: [], output: [] };
   currentInputDevice = '';
@@ -76,6 +92,7 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.loadQrCode();
     this.loadAudioDevices();
     this.loadAudioSettings();
+    this.loadYoutubeCacheInfo();
     this.snapshotDraft();
   }
 
@@ -102,6 +119,9 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftServerPort = this.serverPort;
     this.draftInputDevice = this.currentInputDevice;
     this.draftOutputDevice = this.currentOutputDevice;
+    this.draftYoutubeCachePath = this.currentYoutubeCachePath;
+    this.draftYoutubeCacheTtl = this.currentYoutubeCacheTtl;
+    this.draftYoutubeCacheMaxSize = this.currentYoutubeCacheMaxSize;
   }
 
   get hasChanges(): boolean {
@@ -112,7 +132,10 @@ export class SettingsComponent implements OnInit, OnChanges {
            this.draftUpdateCheckInterval !== this.updateCheckIntervalMinutes ||
            this.draftServerPort !== this.serverPort ||
            this.draftInputDevice !== this.currentInputDevice ||
-           this.draftOutputDevice !== this.currentOutputDevice;
+           this.draftOutputDevice !== this.currentOutputDevice ||
+           this.draftYoutubeCachePath !== this.currentYoutubeCachePath ||
+           this.draftYoutubeCacheTtl !== this.currentYoutubeCacheTtl ||
+           this.draftYoutubeCacheMaxSize !== this.currentYoutubeCacheMaxSize;
   }
 
   // ── Draft change handlers ──────────────────────────────────────────────
@@ -156,6 +179,38 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftOutputDevice = device;
   }
 
+  onYoutubeCachePathChange(value: string): void {
+    this.draftYoutubeCachePath = value;
+  }
+
+  onYoutubeCacheTtlChange(value: number): void {
+    this.draftYoutubeCacheTtl = value;
+  }
+
+  onYoutubeCacheMaxSizeChange(value: number): void {
+    this.draftYoutubeCacheMaxSize = value;
+  }
+
+  onClearYoutubeCache(): void {
+    this.isClearingCache = true;
+    this.cacheClearMessage = '';
+    this.soundService.clearYoutubeCache()
+      .pipe(take(1))
+      .subscribe({
+        next: (result) => {
+          this.isClearingCache = false;
+          this.cacheClearMessage = `Cleared ${result.cleared} entries`;
+          this.loadYoutubeCacheInfo();
+          setTimeout(() => { this.cacheClearMessage = ''; }, 3000);
+        },
+        error: () => {
+          this.isClearingCache = false;
+          this.cacheClearMessage = 'Failed to clear';
+          setTimeout(() => { this.cacheClearMessage = ''; }, 3000);
+        }
+      });
+  }
+
   onCheckForUpdates(): void {
     this.checkForUpdates.emit();
   }
@@ -169,6 +224,9 @@ export class SettingsComponent implements OnInit, OnChanges {
   onSave(): void {
     this.currentInputDevice = this.draftInputDevice;
     this.currentOutputDevice = this.draftOutputDevice;
+    this.currentYoutubeCachePath = this.draftYoutubeCachePath;
+    this.currentYoutubeCacheTtl = this.draftYoutubeCacheTtl;
+    this.currentYoutubeCacheMaxSize = this.draftYoutubeCacheMaxSize;
 
     this.saveSettings.emit({
       keepAwakeEnabled: this.draftKeepAwake,
@@ -179,6 +237,9 @@ export class SettingsComponent implements OnInit, OnChanges {
       serverPort: this.draftServerPort,
       audioInputDevice: this.draftInputDevice,
       audioOutputDevice: this.draftOutputDevice,
+      youtubeCachePath: this.draftYoutubeCachePath,
+      youtubeCacheTtlMinutes: this.draftYoutubeCacheTtl,
+      youtubeCacheMaxSizeMb: this.draftYoutubeCacheMaxSize,
     });
   }
 
@@ -238,6 +299,23 @@ export class SettingsComponent implements OnInit, OnChanges {
         this.currentOutputDevice = settings.audioOutputDevice || '';
         this.draftInputDevice = this.currentInputDevice;
         this.draftOutputDevice = this.currentOutputDevice;
+        // YouTube cache settings
+        this.currentYoutubeCachePath = settings.youtubeCachePath || '';
+        this.currentYoutubeCacheTtl = settings.youtubeCacheTtlMinutes || 120;
+        this.currentYoutubeCacheMaxSize = settings.youtubeCacheMaxSizeMb || 500;
+        this.draftYoutubeCachePath = this.currentYoutubeCachePath;
+        this.draftYoutubeCacheTtl = this.currentYoutubeCacheTtl;
+        this.draftYoutubeCacheMaxSize = this.currentYoutubeCacheMaxSize;
+      });
+  }
+
+  // ── YouTube cache info ──────────────────────────────────────────────────
+
+  private loadYoutubeCacheInfo(): void {
+    this.soundService.getYoutubeCacheInfo()
+      .pipe(take(1))
+      .subscribe(info => {
+        this.cacheInfo = info;
       });
   }
 }

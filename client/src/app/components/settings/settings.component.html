@@ -99,6 +99,89 @@
         </div>
       </div>
 
+      <!-- YouTube Cache Settings -->
+      <div class="settings-section">
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">YouTube cache location</span>
+            <span class="settings-toggle-description">Directory where downloaded YouTube audio is cached. Leave empty for default (in-memory).</span>
+          </div>
+          <div class="port-field">
+            <input
+              type="text"
+              class="wake-minutes-input cache-path-input"
+              [ngModel]="draftYoutubeCachePath"
+              (ngModelChange)="onYoutubeCachePathChange($event)"
+              placeholder="Default (in-memory)"
+            />
+          </div>
+        </div>
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Cache retention</span>
+            <span class="settings-toggle-description">How long to keep cached YouTube downloads before they expire</span>
+          </div>
+          <div class="interval-field">
+            <div class="cache-input-row">
+              <input
+                type="number"
+                class="wake-minutes-input"
+                [ngModel]="draftYoutubeCacheTtl"
+                (ngModelChange)="onYoutubeCacheTtlChange($event)"
+                min="1"
+                max="10080"
+                step="1"
+              />
+              <span class="interval-unit">minutes</span>
+            </div>
+          </div>
+        </div>
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Maximum cache size</span>
+            <span class="settings-toggle-description">Oldest entries are removed when the cache exceeds this size</span>
+          </div>
+          <div class="interval-field">
+            <div class="cache-input-row">
+              <input
+                type="number"
+                class="wake-minutes-input"
+                [ngModel]="draftYoutubeCacheMaxSize"
+                (ngModelChange)="onYoutubeCacheMaxSizeChange($event)"
+                min="50"
+                max="10000"
+                step="50"
+              />
+              <span class="interval-unit">MB</span>
+            </div>
+          </div>
+        </div>
+        <div class="settings-toggle-row">
+          <div class="settings-toggle-info">
+            <span class="settings-toggle-label">Clear YouTube cache</span>
+            <span class="settings-toggle-description">
+              Remove all cached YouTube downloads
+              <span *ngIf="cacheInfo" class="cache-info-inline">
+                ({{ cacheInfo.entryCount }} {{ cacheInfo.entryCount === 1 ? 'entry' : 'entries' }}, {{ cacheInfo.totalSizeMb }} MB)
+              </span>
+            </span>
+          </div>
+          <button
+            class="check-update-btn clear-cache-btn"
+            (click)="onClearYoutubeCache()"
+            [disabled]="isClearingCache"
+          >
+            <svg *ngIf="isClearingCache" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+            </svg>
+            <svg *ngIf="!isClearingCache" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+            <span *ngIf="!isClearingCache">{{ cacheClearMessage || 'Clear Cache' }}</span>
+          </button>
+        </div>
+      </div>
+
       <div class="settings-section">
         <div class="settings-toggle-row">
           <div class="settings-toggle-info">

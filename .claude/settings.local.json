@@ -4,7 +4,10 @@
       "Bash(npm install:*)",
       "Bash(npm uninstall:*)",
       "Bash(npx ng:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(xargs grep:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

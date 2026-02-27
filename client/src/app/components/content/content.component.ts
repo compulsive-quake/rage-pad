@@ -35,6 +35,7 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() isRenameMode = false;
   @Input() isReorderMode = false;
   @Input() activeCategory = '';
+  @Input() soundQueue: Sound[] = [];
   @Output() playSound = new EventEmitter<Sound>();
   @Output() openRenameModal = new EventEmitter<Sound>();
   @Output() activeCategoryChange = new EventEmitter<string>();
@@ -1056,6 +1057,16 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   getTotalSoundCount(category: Category): number {
     const subTotal = category.subCategories.reduce((sum, sub) => sum + sub.sounds.length, 0);
     return category.sounds.length + subTotal;
+  }
+
+  getQueuePositions(soundId: number): number[] {
+    const positions: number[] = [];
+    for (let i = 0; i < this.soundQueue.length; i++) {
+      if (this.soundQueue[i].id === soundId) {
+        positions.push(i + 1);
+      }
+    }
+    return positions;
   }
 
   onPlaySound(sound: Sound): void {

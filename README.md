@@ -1,4 +1,4 @@
-# Rage Pad - Soundpad Remote Control
+# Rage Pad
 
 A Node.js application with an Angular frontend that integrates with Soundpad software API to list and play sounds. Ships as a standalone Windows desktop app via Tauri, or runs in any browser on your local network.
 
