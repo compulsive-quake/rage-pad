@@ -9,7 +9,6 @@ export interface SoundRow {
   title: string;
   file_name: string;
   artist: string;
-  raw_title: string;
   duration_ms: number;
   added_date: string;
   last_played_date: string | null;
@@ -44,7 +43,6 @@ export interface Sound {
   categoryImage: string;
   categoryIndex: number;
   customTag?: string;
-  rawTitle?: string;
   hasUncropped?: boolean;
 }
 
@@ -93,7 +91,6 @@ export class SoundDb {
         title TEXT NOT NULL,
         file_name TEXT NOT NULL,
         artist TEXT NOT NULL DEFAULT '',
-        raw_title TEXT NOT NULL DEFAULT '',
         duration_ms INTEGER NOT NULL DEFAULT 0,
         added_date TEXT NOT NULL DEFAULT (datetime('now')),
         last_played_date TEXT,
@@ -103,6 +100,12 @@ export class SoundDb {
         has_uncropped INTEGER NOT NULL DEFAULT 0
       );
     `);
+
+    // Migration: drop raw_title column if it exists
+    const columns = this.db.prepare("PRAGMA table_info(sounds)").all() as { name: string }[];
+    if (columns.some(c => c.name === 'raw_title')) {
+      this.db.exec('ALTER TABLE sounds DROP COLUMN raw_title');
+    }
   }
 
   // ── Sound file paths ─────────────────────────────────────────────────────
@@ -155,7 +158,6 @@ export class SoundDb {
     title: string;
     fileName: string;
     artist?: string;
-    rawTitle?: string;
     durationMs?: number;
     categoryId: number;
     hasUncropped?: boolean;
@@ -165,13 +167,12 @@ export class SoundDb {
     ).get(params.categoryId) as { m: number };
 
     const result = this.db.prepare(`
-      INSERT INTO sounds (title, file_name, artist, raw_title, duration_ms, category_id, sort_order, has_uncropped)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO sounds (title, file_name, artist, duration_ms, category_id, sort_order, has_uncropped)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run(
       params.title,
       params.fileName,
       params.artist || '',
-      params.rawTitle || '',
       params.durationMs || 0,
       params.categoryId,
       maxOrder.m + 1,
@@ -189,7 +190,6 @@ export class SoundDb {
   updateSoundDetails(id: number, params: {
     title?: string;
     artist?: string;
-    rawTitle?: string;
     categoryId?: number;
   }): boolean {
     const sound = this.db.prepare('SELECT * FROM sounds WHERE id = ?').get(id) as SoundRow | undefined;
@@ -197,7 +197,6 @@ export class SoundDb {
 
     const newTitle = params.title !== undefined ? params.title : sound.title;
     const newArtist = params.artist !== undefined ? params.artist : sound.artist;
-    const newRawTitle = params.rawTitle !== undefined ? params.rawTitle : sound.raw_title;
     const newCategoryId = params.categoryId !== undefined ? params.categoryId : sound.category_id;
 
     // If changing category, put at end of new category
@@ -210,9 +209,9 @@ export class SoundDb {
     }
 
     const result = this.db.prepare(`
-      UPDATE sounds SET title = ?, artist = ?, raw_title = ?, category_id = ?, sort_order = ?
+      UPDATE sounds SET title = ?, artist = ?, category_id = ?, sort_order = ?
       WHERE id = ?
-    `).run(newTitle, newArtist, newRawTitle, newCategoryId, newSortOrder, id);
+    `).run(newTitle, newArtist, newCategoryId, newSortOrder, id);
 
     return result.changes > 0;
   }
@@ -409,7 +408,6 @@ export class SoundDb {
       categoryImage: '',
       categoryIndex: row.sort_order,
       customTag: row.title,
-      rawTitle: row.raw_title || undefined,
       hasUncropped,
     };
   }

@@ -25,7 +25,6 @@ export class AddSoundModalComponent implements OnChanges {
   addSoundFile: File | null = null;
   addSoundName = '';
   addSoundArtist = '';
-  addSoundTitle = '';
   addSoundCategory = '';
   addSoundCategories: { name: string; parentCategory: string }[] = [];
   addSoundError = '';
@@ -96,7 +95,6 @@ export class AddSoundModalComponent implements OnChanges {
     this.addSoundFile = null;
     this.addSoundName = '';
     this.addSoundArtist = '';
-    this.addSoundTitle = '';
     this.addSoundCategory = '';
     this.addSoundError = '';
     this.isDragOver = false;
@@ -331,7 +329,6 @@ export class AddSoundModalComponent implements OnChanges {
     this.addSoundFile = null;
     this.addSoundName = '';
     this.addSoundArtist = '';
-    this.addSoundTitle = '';
     this.youtubeUrl = '';
     this.youtubeFetchError = '';
     this.youtubeDurationSeconds = 0;
@@ -384,7 +381,6 @@ export class AddSoundModalComponent implements OnChanges {
                   this.youtubeFetchAttempts = 0;
                   this.addSoundFile = file;
                   this.youtubeDurationSeconds = durationSeconds;
-                  this.addSoundTitle = title;
                   this.addSoundName = title;
                   this.step = 'preview';
                 },
@@ -441,8 +437,7 @@ export class AddSoundModalComponent implements OnChanges {
     if (meta.artist && !this.addSoundArtist) {
       this.addSoundArtist = meta.artist;
     }
-    if (meta.title && !this.addSoundTitle) {
-      this.addSoundTitle = meta.title;
+    if (meta.title && !this.addSoundName) {
       this.addSoundName = meta.title;
     }
   }
@@ -502,13 +497,12 @@ export class AddSoundModalComponent implements OnChanges {
     }
 
     if (!this.addSoundName.trim()) {
-      this.addSoundError = 'Tag is required.';
+      this.addSoundError = 'Title is required.';
       return;
     }
 
     const displayName = this.addSoundName.trim();
     const artist = this.addSoundArtist.trim();
-    const title = this.addSoundTitle.trim();
 
     this.isAddingSound = true;
     this.addSoundError = '';
@@ -518,7 +512,7 @@ export class AddSoundModalComponent implements OnChanges {
 
     const durationSeconds = this.previewDuration > 0 ? Math.round(this.previewDuration) : undefined;
 
-    this.soundService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, title, durationSeconds, this.originalUncroppedFile)
+    this.soundService.addSound(this.addSoundFile, category, displayName, cropStartSec, cropEndSec, artist, durationSeconds, this.originalUncroppedFile)
       .pipe(take(1))
       .subscribe({
         next: () => {

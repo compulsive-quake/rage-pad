@@ -12,7 +12,6 @@ export interface Sound {
   categoryImage: string;
   categoryIndex: number; // position of this sound within its category (0-based)
   customTag?: string;    // display name
-  rawTitle?: string;     // raw title (distinct from computed title)
   hasUncropped?: boolean;
 }
 

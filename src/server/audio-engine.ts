@@ -183,6 +183,29 @@ export class AudioEngine extends EventEmitter {
     if (resp.type === 'error') throw new Error(resp.message);
   }
 
+  /** Fire-and-forget play — sends the command without waiting for a response. */
+  playFireAndForget(filePath: string, volume?: number): void {
+    if (!this.process || !this.process.stdin) return;
+    const command = {
+      cmd: 'play',
+      file_path: filePath,
+      volume: volume !== undefined ? volume / 100 : undefined,
+    };
+    const json = JSON.stringify(command) + '\n';
+    // Add a pending handler that just logs errors silently
+    this.pendingRequests.push({
+      resolve: (resp) => {
+        if (resp.type === 'error') {
+          console.error(`[audio-engine] play error: ${resp.message}`);
+        }
+      },
+      reject: (err) => {
+        console.error(`[audio-engine] play failed: ${err.message}`);
+      },
+    });
+    this.process.stdin.write(json);
+  }
+
   async stopPlayback(): Promise<void> {
     const resp = await this.send({ cmd: 'stop' });
     if (resp.type === 'error') throw new Error(resp.message);

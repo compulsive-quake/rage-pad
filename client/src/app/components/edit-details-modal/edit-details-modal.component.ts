@@ -22,7 +22,6 @@ export class EditDetailsModalComponent implements OnChanges {
   @Output() saved = new EventEmitter<void>();
 
   editTag = '';
-  editTitle = '';
   editArtist = '';
   editCategory = '';
   categories: { name: string; parentCategory: string }[] = [];
@@ -48,7 +47,6 @@ export class EditDetailsModalComponent implements OnChanges {
 
   private prefillFromSound(sound: Sound): void {
     this.editTag = sound.customTag || sound.title || '';
-    this.editTitle = sound.rawTitle || '';
     this.editArtist = sound.artist || '';
     this.editCategory = sound.category || '';
     this.errorMessage = '';
@@ -129,7 +127,6 @@ export class EditDetailsModalComponent implements OnChanges {
       this.sound.id,
       tag,
       this.editArtist.trim(),
-      this.editTitle.trim(),
       categoryChanged ? this.editCategory : undefined
     ).pipe(take(1)).subscribe({
       next: (result: any) => {

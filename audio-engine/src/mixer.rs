@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream, StreamConfig};
@@ -77,28 +78,37 @@ impl RingBuffer {
 // File playback source that can be read from the output callback
 // ---------------------------------------------------------------------------
 
-/// Holds a decoded audio file and the state needed to read it sample-by-sample.
+/// Streaming playback buffer.  A background thread decodes samples and appends
+/// them here while the output callback reads them in real time.  This lets
+/// playback start as soon as the first decoded chunk is ready instead of waiting
+/// for the entire file to be decoded.
 struct FilePlayback {
-    /// Decoded samples (mono f32, resampled to match the output config).
+    /// Decoded samples are appended here by the decode thread.
     samples: Vec<f32>,
-    /// Current read position.
+    /// Current read position (advanced by the output callback).
     position: usize,
     /// Per-file volume multiplier (0.0 .. 1.0).
     volume: f32,
+    /// Set to `true` once the decode thread has finished (all samples appended).
+    decode_complete: bool,
 }
 
 impl FilePlayback {
-    /// Read up to `n` samples, mixed (added) into `out`.  Returns `true` while
-    /// there are still samples remaining.
+    /// Read up to `out.len()` samples, mixed (added) into `out`.  Returns
+    /// `true` while there are (or will be) more samples to play.
     fn mix_into(&mut self, out: &mut [f32]) -> bool {
+        let available = self.samples.len();
         for sample in out.iter_mut() {
-            if self.position >= self.samples.len() {
-                return false;
+            if self.position >= available {
+                // If decoding is still in progress, we ran out of buffered
+                // samples temporarily — output silence but keep playing.
+                return !self.decode_complete;
             }
             *sample += self.samples[self.position] * self.volume;
             self.position += 1;
         }
-        true
+        // Still playing if we haven't reached the end, or decode is ongoing.
+        self.position < available || !self.decode_complete
     }
 }
 
@@ -270,25 +280,63 @@ impl MixerState {
     // ---- file playback ------------------------------------------------
 
     /// Decode an audio file and start mixing it into the output stream.
+    ///
+    /// Decoding happens on a background thread so playback begins almost
+    /// immediately — the output callback starts reading samples as soon as
+    /// the first chunk has been decoded.
     pub fn play_file(&mut self, path: &str, file_volume: f32) -> Result<(), String> {
         let file = File::open(path).map_err(|e| format!("Cannot open file: {e}"))?;
         let reader = BufReader::new(file);
         let decoder =
             Decoder::new(reader).map_err(|e| format!("Cannot decode audio file: {e}"))?;
 
-        // Collect all samples as f32.  rodio's Decoder yields i16 by default
-        // but implements Iterator<Item = i16> -- we convert to f32 normalised
-        // to [-1, 1].
-        let samples: Vec<f32> = decoder.map(|s| s as f32 / i16::MAX as f32).collect();
-
+        // Pre-allocate for ~10 seconds at 48kHz to reduce reallocations.
         let playback = FilePlayback {
-            samples,
+            samples: Vec::with_capacity(48_000 * 10),
             position: 0,
             volume: file_volume.clamp(0.0, 1.0),
+            decode_complete: false,
         };
 
-        *self.file_playback.lock().map_err(|e| e.to_string())? = Some(playback);
+        {
+            let mut guard = self.file_playback.lock().map_err(|e| e.to_string())?;
+            *guard = Some(playback);
+        }
         self.playing.store(true, Ordering::Release);
+
+        // Spawn a background thread to decode samples in chunks and push them
+        // into the shared FilePlayback buffer.
+        let file_playback = Arc::clone(&self.file_playback);
+        thread::spawn(move || {
+            const CHUNK_SIZE: usize = 4096;
+            let mut chunk = Vec::with_capacity(CHUNK_SIZE);
+
+            for sample in decoder {
+                chunk.push(sample as f32 / i16::MAX as f32);
+                if chunk.len() >= CHUNK_SIZE {
+                    if let Ok(mut guard) = file_playback.lock() {
+                        if let Some(ref mut fp) = *guard {
+                            fp.samples.extend_from_slice(&chunk);
+                        } else {
+                            // Playback was stopped/replaced — abort decode.
+                            return;
+                        }
+                    }
+                    chunk.clear();
+                }
+            }
+
+            // Flush remaining samples and mark decode complete.
+            if let Ok(mut guard) = file_playback.lock() {
+                if let Some(ref mut fp) = *guard {
+                    if !chunk.is_empty() {
+                        fp.samples.extend_from_slice(&chunk);
+                    }
+                    fp.decode_complete = true;
+                }
+            }
+        });
+
         Ok(())
     }
 

@@ -7,7 +7,11 @@
       "Bash(npm run:*)",
       "mcp__ide__getDiagnostics",
       "Bash(xargs grep:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(cargo build:*)",
+      "Bash(tasklist:*)",
+      "Bash(taskkill:*)",
+      "Bash(wmic process:*)"
     ]
   }
 }

@@ -200,9 +200,9 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  updateSoundDetails(id: number, customTag: string, artist: string, title: string, category?: string): Observable<any> {
+  updateSoundDetails(id: number, customTag: string, artist: string, category?: string): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/${id}/update-details`, {
-      customTag, artist, title, category
+      customTag, artist, category
     }).pipe(
       catchError(error => {
         console.error('Failed to update sound details:', error);
@@ -285,7 +285,7 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, title?: string, durationSeconds?: number, originalFile?: File | null): Observable<any> {
+  addSound(file: File, category: string, displayName?: string, cropStartSec?: number, cropEndSec?: number, artist?: string, durationSeconds?: number, originalFile?: File | null): Observable<any> {
     const formData = new FormData();
     formData.append('soundFile', file);
     formData.append('category', category);
@@ -299,7 +299,6 @@ export class SoundService implements OnDestroy {
       formData.append('cropEnd', String(cropEndSec));
     }
     formData.append('artist', artist ?? '');
-    formData.append('title', title ?? '');
     if (durationSeconds !== undefined && durationSeconds > 0) {
       formData.append('durationSeconds', String(durationSeconds));
     }

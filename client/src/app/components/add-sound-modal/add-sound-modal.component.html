@@ -187,37 +187,15 @@
       <!-- Step 3: Sound Details -->
       <div class="step-content" *ngIf="step === 'details'">
         <div class="add-sound-form-fields">
-          <!-- Row 1: Tag | Title -->
-          <div class="form-fields-row">
-            <!-- Tag -->
-            <div class="form-field-col">
-              <label class="category-label">Tag <span class="required-star">*</span></label>
-              <input
-                type="text"
-                class="sound-name-input"
-                [(ngModel)]="addSoundName"
-                placeholder="Enter tag (required)"
-              />
-            </div>
-            <!-- Title -->
-            <div class="form-field-col">
-              <label class="category-label">Title</label>
-              <div class="field-input-row">
-                <input
-                  type="text"
-                  class="sound-name-input"
-                  [(ngModel)]="addSoundTitle"
-                  placeholder="Enter title"
-                />
-                <button
-                  class="field-clear-btn"
-                  *ngIf="addSoundTitle"
-                  (click)="addSoundTitle = ''"
-                  title="Clear title"
-                  type="button"
-                >&times;</button>
-              </div>
-            </div>
+          <!-- Title (full width) -->
+          <div class="form-field-col">
+            <label class="category-label">Title <span class="required-star">*</span></label>
+            <input
+              type="text"
+              class="sound-name-input"
+              [(ngModel)]="addSoundName"
+              placeholder="Enter title (required)"
+            />
           </div>
 
           <!-- Row 2: Artist | Category -->

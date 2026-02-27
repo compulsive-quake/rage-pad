@@ -181,7 +181,6 @@ export class EditSoundModalComponent implements OnChanges {
       undefined,
       undefined,
       this.sound.artist,
-      this.sound.title,
       this.previewDuration > 0 ? Math.round(this.previewDuration) : undefined,
       this.originalUncroppedFile
     ).pipe(take(1))

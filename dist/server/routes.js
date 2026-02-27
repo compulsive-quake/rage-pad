@@ -162,9 +162,11 @@ router.post('/sounds/:id/play', async (req, res) => {
             return;
         }
         const { speakersOnly = false, micOnly = false } = req.body;
-        // Play through audio engine (mic/VB-Cable output) unless speakers-only
+        // Play through audio engine (mic/VB-Cable output) unless speakers-only.
+        // Fire-and-forget: don't await the decode — respond immediately so the
+        // client can start speaker playback with minimal latency.
         if (!speakersOnly) {
-            await audioEngine.play(filePath);
+            audioEngine.playFireAndForget(filePath);
         }
         // Record the play
         soundDb.recordPlay(id);
@@ -248,7 +250,7 @@ router.post('/sounds/:id/update-details', (req, res) => {
             res.status(400).json({ error: 'Invalid sound id' });
             return;
         }
-        const { customTag, artist, title, category } = req.body;
+        const { customTag, artist, category } = req.body;
         if (typeof customTag !== 'string' || !customTag.trim()) {
             res.status(400).json({ error: 'customTag must be a non-empty string' });
             return;
@@ -268,7 +270,6 @@ router.post('/sounds/:id/update-details', (req, res) => {
         const ok = soundDb.updateSoundDetails(id, {
             title: customTag.trim(),
             artist: typeof artist === 'string' ? artist : undefined,
-            rawTitle: typeof title === 'string' ? title : undefined,
             categoryId,
         });
         if (ok) {
@@ -456,7 +457,6 @@ router.post('/sounds/add', addSoundUpload, async (req, res) => {
         }
         const displayName = req.body.displayName?.trim() || undefined;
         const artist = typeof req.body.artist === 'string' ? req.body.artist : '';
-        const title = typeof req.body.title === 'string' ? req.body.title : '';
         const durationSeconds = parseInt(req.body.durationSeconds, 10) || 0;
         // Get or create the category
         const categoryId = soundDb.getOrCreateCategory(categoryName.trim());
@@ -498,7 +498,6 @@ router.post('/sounds/add', addSoundUpload, async (req, res) => {
             title: soundTitle,
             fileName,
             artist,
-            rawTitle: title,
             durationMs: durationSeconds * 1000,
             categoryId,
             hasUncropped,

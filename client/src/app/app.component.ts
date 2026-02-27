@@ -137,6 +137,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private audioContext: AudioContext | null = null;
   private currentAudioSource: AudioBufferSourceNode | null = null;
   private gainNode: GainNode | null = null;
+  private audioBufferCache = new Map<number, AudioBuffer>();
 
   private destroy$ = new Subject<void>();
   private searchSubject$ = new Subject<string>();
@@ -417,34 +418,34 @@ export class AppComponent implements OnInit, OnDestroy {
     const speakersOnly = this.playbackMode === 'speakers';
     const micOnly = this.playbackMode === 'mic';
 
-    this.soundService.playSound(sound.id, speakersOnly, micOnly)
-      .pipe(take(1))
-      .subscribe({
-        next: (result: any) => {
-          if (result?.error) {
-            console.error('Failed to play sound:', result.error);
-            return;
+    // Start UI state and Web Audio playback immediately — don't wait for the
+    // server round-trip.  The server play is fire-and-forget anyway.
+    this.currentlyPlayingId = sound.id;
+    this.isActuallyPlaying = true;
+    this.isPaused = false;
+
+    this.currentSoundDuration = this.parseDuration(sound.duration);
+    this.playbackStartTime = Date.now();
+    this.playbackProgress = 0;
+    this.playbackTimeRemaining = this.currentSoundDuration;
+
+    this.startProgressTimer();
+
+    // Start Web Audio speaker playback immediately (in parallel with server call)
+    if (!micOnly) {
+      this.playWebAudio(sound.id);
+    }
+
+    // Tell the server to play through audio engine (mic/VB-Cable) in the background
+    if (!speakersOnly) {
+      this.soundService.playSound(sound.id, speakersOnly, micOnly)
+        .pipe(take(1))
+        .subscribe({
+          error: (err) => {
+            console.error('Failed to play sound on audio engine:', err);
           }
-          this.currentlyPlayingId = sound.id;
-          this.isActuallyPlaying = true;
-          this.isPaused = false;
-
-          this.currentSoundDuration = this.parseDuration(sound.duration);
-          this.playbackStartTime = Date.now();
-          this.playbackProgress = 0;
-          this.playbackTimeRemaining = this.currentSoundDuration;
-
-          this.startProgressTimer();
-
-          // Web Audio API playback for speakers/both modes
-          if (!micOnly) {
-            this.playWebAudio(sound.id);
-          }
-        },
-        error: (err) => {
-          console.error('Failed to play sound:', err);
-        }
-      });
+        });
+    }
   }
 
   private playNextInQueue(): void {
@@ -484,46 +485,52 @@ export class AppComponent implements OnInit, OnDestroy {
 
   private playWebAudio(soundId: number): void {
     this.stopWebAudio();
+    this.startWebAudioPlayback(soundId);
+  }
 
-    this.soundService.getSoundAudio(soundId).pipe(take(1)).subscribe({
-      next: async (file: File) => {
-        try {
-          if (!this.audioContext) {
-            this.audioContext = new AudioContext();
-          }
-          if (this.audioContext.state === 'suspended') {
-            await this.audioContext.resume();
-          }
-
-          const arrayBuffer = await file.arrayBuffer();
-          const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-
-          this.currentAudioSource = this.audioContext.createBufferSource();
-          this.currentAudioSource.buffer = audioBuffer;
-
-          this.gainNode = this.audioContext.createGain();
-          this.gainNode.gain.value = this.volume / 100;
-
-          this.currentAudioSource.connect(this.gainNode);
-          this.gainNode.connect(this.audioContext.destination);
-
-          this.currentAudioSource.onended = () => {
-            this.ngZone.run(() => {
-              if (this.currentlyPlayingId === soundId) {
-                this.onSoundPlaybackEnded();
-              }
-            });
-          };
-
-          this.currentAudioSource.start();
-        } catch (err) {
-          console.error('[web-audio] Failed to play:', err);
-        }
-      },
-      error: (err) => {
-        console.error('[web-audio] Failed to fetch audio:', err);
+  private async startWebAudioPlayback(soundId: number): Promise<void> {
+    try {
+      if (!this.audioContext) {
+        this.audioContext = new AudioContext();
       }
-    });
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+      }
+
+      // Use cached AudioBuffer if available, otherwise fetch and decode
+      let audioBuffer = this.audioBufferCache.get(soundId);
+      if (!audioBuffer) {
+        const file = await this.soundService.getSoundAudio(soundId).pipe(take(1)).toPromise();
+        if (!file) return;
+        const arrayBuffer = await file.arrayBuffer();
+        audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+        this.audioBufferCache.set(soundId, audioBuffer);
+      }
+
+      // Bail if a different sound started while we were loading
+      if (this.currentlyPlayingId !== soundId) return;
+
+      this.currentAudioSource = this.audioContext.createBufferSource();
+      this.currentAudioSource.buffer = audioBuffer;
+
+      this.gainNode = this.audioContext.createGain();
+      this.gainNode.gain.value = this.volume / 100;
+
+      this.currentAudioSource.connect(this.gainNode);
+      this.gainNode.connect(this.audioContext.destination);
+
+      this.currentAudioSource.onended = () => {
+        this.ngZone.run(() => {
+          if (this.currentlyPlayingId === soundId) {
+            this.onSoundPlaybackEnded();
+          }
+        });
+      };
+
+      this.currentAudioSource.start();
+    } catch (err) {
+      console.error('[web-audio] Failed to play:', err);
+    }
   }
 
   private stopWebAudio(): void {
@@ -622,6 +629,7 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   refreshSounds(): void {
+    this.audioBufferCache.clear();
     this.loadSounds();
   }
 

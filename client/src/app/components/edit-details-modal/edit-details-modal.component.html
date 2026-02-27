@@ -6,7 +6,7 @@
     </div>
     <div class="modal-body edit-details-modal-body">
       <div class="form-fields">
-        <!-- Row 1: Tag | Title -->
+        <!-- Row 1: Tag -->
         <div class="form-fields-row">
           <!-- Tag -->
           <div class="form-field-col">
@@ -17,25 +17,6 @@
               [(ngModel)]="editTag"
               placeholder="Enter tag (required)"
             />
-          </div>
-          <!-- Title -->
-          <div class="form-field-col">
-            <label class="category-label">Title</label>
-            <div class="field-input-row">
-              <input
-                type="text"
-                class="sound-name-input"
-                [(ngModel)]="editTitle"
-                placeholder="Enter title"
-              />
-              <button
-                class="field-clear-btn"
-                *ngIf="editTitle"
-                (click)="editTitle = ''"
-                title="Clear title"
-                type="button"
-              >&times;</button>
-            </div>
           </div>
         </div>
 

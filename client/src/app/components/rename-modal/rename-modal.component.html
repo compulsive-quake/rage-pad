@@ -1,18 +1,18 @@
 <div class="modal-overlay" *ngIf="isOpen" (mousedown)="onOverlayMouseDown($event)" (mouseup)="onOverlayMouseUp($event)">
   <div class="modal-content rename-modal-content">
     <div class="modal-header">
-      <h2>Rename Sound</h2>
+      <h2>Rename</h2>
       <button class="close-btn" (click)="onClose()">&times;</button>
     </div>
     <div class="modal-body">
-      <p class="rename-current-name">Current name: <strong>{{ sound?.title }}</strong></p>
+      <p class="rename-current-name">Current title: <strong>{{ sound?.title }}</strong></p>
       <div class="rename-input-group">
         <input
           #renameInput
           type="text"
           class="rename-input"
           [(ngModel)]="renameValue"
-          placeholder="Enter new name"
+          placeholder="Enter new title"
           (keydown.enter)="confirm()"
           (keydown.escape)="onClose()"
         />

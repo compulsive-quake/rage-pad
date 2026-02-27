@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Commands sent from the Node.js server to the audio engine via stdin (JSON, one per line).
 #[derive(Debug, Deserialize)]
-#[serde(tag = "command")]
+#[serde(tag = "cmd", rename_all = "snake_case")]
 pub enum Command {
     /// Enumerate all available audio input and output devices.
     ListDevices,
@@ -37,7 +37,7 @@ pub enum Command {
 
 /// Responses sent from the audio engine back to Node.js via stdout (JSON, one per line).
 #[derive(Debug, Serialize)]
-#[serde(tag = "response")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
     /// List of available devices.
     Devices {
