@@ -10,7 +10,6 @@ import { HeaderComponent } from './components/header/header.component';
 import { FooterComponent } from './components/footer/footer.component';
 import { ContentComponent } from './components/content/content.component';
 import { SettingsComponent, SettingsPayload } from './components/settings/settings.component';
-import { RenameModalComponent } from './components/rename-modal/rename-modal.component';
 import { WakeDialogComponent } from './components/wake-dialog/wake-dialog.component';
 import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-modal.component';
 import { ContextMenuComponent } from './components/context-menu/context-menu.component';
@@ -28,7 +27,6 @@ import { EditDetailsModalComponent } from './components/edit-details-modal/edit-
     FooterComponent,
     ContentComponent,
     SettingsComponent,
-    RenameModalComponent,
     WakeDialogComponent,
     AddSoundModalComponent,
     ContextMenuComponent,
@@ -51,14 +49,9 @@ export class AppComponent implements OnInit, OnDestroy {
   playbackMode: 'both' | 'mic' | 'speakers' = 'both';
   searchQuery = '';
   isSettingsModalOpen = false;
-  isRenameMode = false;
   isReorderMode = false;
   isQueueMode = false;
   soundQueue: Sound[] = [];
-
-  // Rename modal state
-  isRenameModalOpen = false;
-  soundToRename: Sound | null = null;
 
   // Add Sound modal state
   isAddSoundModalOpen = false;
@@ -77,6 +70,10 @@ export class AppComponent implements OnInit, OnDestroy {
   // Edit details modal state
   isEditDetailsModalOpen = false;
   soundToEditDetails: Sound | null = null;
+
+  // VB-Cable state
+  vbCableInstalled = true; // assume installed until checked
+  vbCableDismissed = false;
 
   // Delete confirmation state
   isDeleteConfirmOpen = false;
@@ -195,6 +192,8 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.autoUpdateCheckEnabled) {
       this.startUpdateCheck();
     }
+
+    this.checkVBCableStatus();
   }
 
   private startConfigWatch(): void {
@@ -474,7 +473,6 @@ export class AppComponent implements OnInit, OnDestroy {
   toggleQueueMode(): void {
     this.isQueueMode = !this.isQueueMode;
     if (this.isQueueMode) {
-      this.isRenameMode = false;
       this.isReorderMode = false;
     } else {
       this.soundQueue = [];
@@ -733,25 +731,9 @@ export class AppComponent implements OnInit, OnDestroy {
       });
   }
 
-  toggleRenameMode(): void {
-    this.isRenameMode = !this.isRenameMode;
-    if (this.isRenameMode) {
-      this.isReorderMode = false;
-      this.isQueueMode = false;
-      this.soundQueue = [];
-    }
-    if (!this.isRenameMode) {
-      this.isRenameModalOpen = false;
-      this.soundToRename = null;
-    }
-  }
-
   toggleReorderMode(): void {
     this.isReorderMode = !this.isReorderMode;
     if (this.isReorderMode) {
-      this.isRenameMode = false;
-      this.isRenameModalOpen = false;
-      this.soundToRename = null;
       this.isQueueMode = false;
       this.soundQueue = [];
     }
@@ -844,25 +826,6 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
-  // ── Rename modal handlers ──────────────────────────────────────────────────
-
-  openRenameModal(sound: Sound): void {
-    this.soundToRename = sound;
-    this.isRenameModalOpen = true;
-  }
-
-  onRenameClosed(): void {
-    this.isRenameModalOpen = false;
-    this.soundToRename = null;
-  }
-
-  onSoundRenamed(event: { sound: Sound; newTitle: string }): void {
-    event.sound.title = event.newTitle;
-    this.isRenameModalOpen = false;
-    this.soundToRename = null;
-    this.isRenameMode = false;
-  }
-
   // ── Add Sound modal handlers ───────────────────────────────────────────────
 
   openAddSoundModal(): void {
@@ -876,6 +839,39 @@ export class AppComponent implements OnInit, OnDestroy {
   onSoundAdded(): void {
     this.isAddSoundModalOpen = false;
     this.loadSounds(true);
+  }
+
+  // ── VB-Cable ────────────────────────────────────────────────────────────
+
+  get showVBCableBanner(): boolean {
+    return !this.vbCableInstalled && !this.vbCableDismissed;
+  }
+
+  private checkVBCableStatus(): void {
+    this.soundService.getVBCableStatus()
+      .pipe(take(1))
+      .subscribe(status => {
+        this.vbCableInstalled = status.installed;
+      });
+  }
+
+  onVBCableDismissed(): void {
+    this.vbCableDismissed = true;
+  }
+
+  onVBCableInstalled(): void {
+    // Restart audio engine, wait, then auto-select VB-Cable
+    this.soundService.restartAudioEngine()
+      .pipe(take(1))
+      .subscribe(() => {
+        setTimeout(() => {
+          this.soundService.autoSelectVBCable()
+            .pipe(take(1))
+            .subscribe(() => {
+              this.checkVBCableStatus();
+            });
+        }, 2000);
+      });
   }
 
   // ── Context menu & Delete sound ──────────────────────────────────────────

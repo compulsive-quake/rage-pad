@@ -91,10 +91,8 @@
               *ngFor="let sound of category.sounds; trackBy: trackByIndex"
               [sound]="sound"
               [isPlaying]="currentlyPlayingId === sound.id"
-              [isRenameMode]="isRenameMode"
               [queuePositions]="getQueuePositions(sound.id)"
               (play)="onPlaySound($event)"
-              (rename)="onOpenRenameModal($event)"
               (soundContextMenu)="onSoundContextMenu($event)"
               (iconDropped)="updateSoundIcon.emit($event)"
             ></app-sound-card>
@@ -120,7 +118,6 @@
               <app-sound-card
                 [sound]="sound"
                 [isPlaying]="currentlyPlayingId === sound.id"
-                [isRenameMode]="false"
                 (soundContextMenu)="onSoundContextMenu($event)"
                 (iconDropped)="updateSoundIcon.emit($event)"
                 class="reorder-card"
@@ -162,9 +159,7 @@
                   *ngFor="let sound of subCategory.sounds; trackBy: trackByIndex"
                   [sound]="sound"
                   [isPlaying]="currentlyPlayingId === sound.id"
-                  [isRenameMode]="isRenameMode"
                   (play)="onPlaySound($event)"
-                  (rename)="onOpenRenameModal($event)"
                   (soundContextMenu)="onSoundContextMenu($event)"
                   (iconDropped)="updateSoundIcon.emit($event)"
                 ></app-sound-card>
@@ -187,7 +182,6 @@
                   <app-sound-card
                     [sound]="sound"
                     [isPlaying]="currentlyPlayingId === sound.id"
-                    [isRenameMode]="false"
                     (soundContextMenu)="onSoundContextMenu($event)"
                     (iconDropped)="updateSoundIcon.emit($event)"
                     class="reorder-card"

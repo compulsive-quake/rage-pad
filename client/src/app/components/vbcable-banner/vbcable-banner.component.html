@@ -1,0 +1,93 @@
+<div class="vbcable-banner" [ngClass]="'state-' + state">
+  <!-- Warning state -->
+  <ng-container *ngIf="state === 'warning'">
+    <div class="banner-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+      </svg>
+    </div>
+    <div class="banner-text">
+      <span class="banner-title">VB-Cable not detected</span>
+      <span class="banner-subtitle">VB-Cable is required to route sounds to your microphone</span>
+    </div>
+    <button class="banner-install-btn" (click)="onInstall()">Install VB-Cable</button>
+    <button class="banner-dismiss-btn" (click)="onDismiss()" title="Dismiss">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+      </svg>
+    </button>
+  </ng-container>
+
+  <!-- Downloading state -->
+  <ng-container *ngIf="state === 'downloading'">
+    <div class="banner-icon spinning">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+      </svg>
+    </div>
+    <div class="banner-text">
+      <span class="banner-title">Downloading VB-Cable...</span>
+      <span class="banner-subtitle">{{ downloadPercent }}%</span>
+    </div>
+    <div class="banner-progress">
+      <div class="banner-progress-bar" [style.width.%]="downloadPercent"></div>
+    </div>
+  </ng-container>
+
+  <!-- Extracting state -->
+  <ng-container *ngIf="state === 'extracting'">
+    <div class="banner-icon spinning">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+      </svg>
+    </div>
+    <div class="banner-text">
+      <span class="banner-title">Extracting installer...</span>
+    </div>
+  </ng-container>
+
+  <!-- Installing state -->
+  <ng-container *ngIf="state === 'installing'">
+    <div class="banner-icon spinning">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+      </svg>
+    </div>
+    <div class="banner-text">
+      <span class="banner-title">Installing VB-Cable driver...</span>
+      <span class="banner-subtitle">A Windows security prompt may appear</span>
+    </div>
+  </ng-container>
+
+  <!-- Done state -->
+  <ng-container *ngIf="state === 'done'">
+    <div class="banner-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+      </svg>
+    </div>
+    <div class="banner-text">
+      <span class="banner-title">VB-Cable installed successfully!</span>
+      <span class="banner-subtitle">Restarting audio engine...</span>
+    </div>
+  </ng-container>
+
+  <!-- Error state -->
+  <ng-container *ngIf="state === 'error'">
+    <div class="banner-icon">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+      </svg>
+    </div>
+    <div class="banner-text">
+      <span class="banner-title">Installation failed</span>
+      <span class="banner-subtitle">{{ errorMessage }}</span>
+    </div>
+    <button class="banner-install-btn" (click)="onRetry()">Retry</button>
+    <button class="banner-dismiss-btn" (click)="onDismiss()" title="Dismiss">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+      </svg>
+    </button>
+  </ng-container>
+</div>

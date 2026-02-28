@@ -11,7 +11,12 @@
       "Bash(cargo build:*)",
       "Bash(tasklist:*)",
       "Bash(taskkill:*)",
-      "Bash(wmic process:*)"
+      "Bash(wmic process:*)",
+      "WebFetch(domain:download.vb-audio.com)",
+      "WebFetch(domain:vb-audio.com)",
+      "WebSearch",
+      "WebFetch(domain:forum.vb-audio.com)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

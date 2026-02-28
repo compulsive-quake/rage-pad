@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { APP_VERSION, SoundService, YoutubeCacheInfo } from '../../services/sound.service';
+import { APP_VERSION, SoundService, VBCableStatus, YoutubeCacheInfo } from '../../services/sound.service';
 import { AudioDevices } from '../../models/sound.model';
 
 export interface SettingsPayload {
@@ -72,8 +72,15 @@ export class SettingsComponent implements OnInit, OnChanges {
   currentInputDevice = '';
   currentOutputDevice = '';
 
+  // VB-Cable status
+  vbCableStatus: VBCableStatus | null = null;
+  isRefreshingVBCable = false;
+
   // Version
   readonly appVersion = APP_VERSION;
+
+  // Tabs
+  activeTab: 'general' | 'audio' | 'youtube' | 'updates' = 'general';
 
   // Version info dialog
   showVersionDialog = false;
@@ -93,6 +100,7 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.loadAudioDevices();
     this.loadAudioSettings();
     this.loadYoutubeCacheInfo();
+    this.loadVBCableStatus();
     this.snapshotDraft();
   }
 
@@ -316,6 +324,26 @@ export class SettingsComponent implements OnInit, OnChanges {
       .pipe(take(1))
       .subscribe(info => {
         this.cacheInfo = info;
+      });
+  }
+
+  // ── VB-Cable status ──────────────────────────────────────────────────
+
+  private loadVBCableStatus(): void {
+    this.soundService.getVBCableStatus()
+      .pipe(take(1))
+      .subscribe(status => {
+        this.vbCableStatus = status;
+      });
+  }
+
+  onRefreshVBCableStatus(): void {
+    this.isRefreshingVBCable = true;
+    this.soundService.getVBCableStatus()
+      .pipe(take(1))
+      .subscribe(status => {
+        this.vbCableStatus = status;
+        this.isRefreshingVBCable = false;
       });
   }
 }

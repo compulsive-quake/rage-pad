@@ -1141,6 +1141,20 @@ router.get('/proxy-image', async (req, res) => {
         res.status(502).json({ error: 'Failed to fetch image' });
     }
 });
+// ── VB-Cable status ─────────────────────────────────────────────────────────
+router.get('/vbcable/status', async (_req, res) => {
+    try {
+        const devices = await audioEngine.listDevices();
+        const allDevices = [...devices.input, ...devices.output];
+        const inputDevice = devices.input.find(d => d.toUpperCase().includes('CABLE')) || null;
+        const outputDevice = devices.output.find(d => d.toUpperCase().includes('CABLE')) || null;
+        const installed = !!(inputDevice || outputDevice);
+        res.json({ installed, devices: allDevices, inputDevice, outputDevice });
+    }
+    catch (error) {
+        res.status(500).json({ error: 'Failed to check VB-Cable status' });
+    }
+});
 // ── SSE endpoint ───────────────────────────────────────────────────────────
 router.get('/config-watch', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');

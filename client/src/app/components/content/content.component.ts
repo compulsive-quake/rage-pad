@@ -32,12 +32,10 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Input() isLoading = false;
   @Input() searchQuery = '';
   @Input() currentlyPlayingId: number | null = null;
-  @Input() isRenameMode = false;
   @Input() isReorderMode = false;
   @Input() activeCategory = '';
   @Input() soundQueue: Sound[] = [];
   @Output() playSound = new EventEmitter<Sound>();
-  @Output() openRenameModal = new EventEmitter<Sound>();
   @Output() activeCategoryChange = new EventEmitter<string>();
   @Output() reorderSound = new EventEmitter<{ soundId: number; targetCategory: string; targetPosition: number }>();
   @Output() reorderCategory = new EventEmitter<{ categoryName: string; targetPosition: number }>();
@@ -1072,10 +1070,6 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
 
   onPlaySound(sound: Sound): void {
     this.playSound.emit(sound);
-  }
-
-  onOpenRenameModal(sound: Sound): void {
-    this.openRenameModal.emit(sound);
   }
 
   onSoundContextMenu(event: { sound: Sound; event: MouseEvent }): void {

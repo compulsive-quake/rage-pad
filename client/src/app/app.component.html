@@ -2,18 +2,19 @@
   <!-- Header -->
   <app-header
     [isLoading]="isLoading"
-    [isRenameMode]="isRenameMode"
     [isReorderMode]="isReorderMode"
     [isQueueMode]="isQueueMode"
     [queueLength]="soundQueue.length"
     [playbackProgress]="playbackProgress"
     (search)="onSearch($event)"
     (refresh)="refreshSounds()"
-    (toggleRenameMode)="toggleRenameMode()"
     (toggleReorderMode)="toggleReorderMode()"
     (toggleQueueMode)="toggleQueueMode()"
     (toggleSettings)="toggleSettingsModal()"
     (addSound)="openAddSoundModal()"
+    [showVBCableBanner]="showVBCableBanner"
+    (vbcableDismissed)="onVBCableDismissed()"
+    (vbcableInstalled)="onVBCableInstalled()"
   ></app-header>
 
   <!-- Main Content / Settings -->
@@ -24,12 +25,10 @@
     [isLoading]="isLoading"
     [searchQuery]="searchQuery"
     [currentlyPlayingId]="currentlyPlayingId"
-    [isRenameMode]="isRenameMode"
     [isReorderMode]="isReorderMode"
     [activeCategory]="activeCategory"
     [soundQueue]="soundQueue"
     (playSound)="playSound($event)"
-    (openRenameModal)="openRenameModal($event)"
     (activeCategoryChange)="activeCategory = $event"
     (reorderSound)="onReorderSound($event)"
     (reorderCategory)="onReorderCategory($event)"
@@ -75,14 +74,6 @@
     (playbackModeChange)="setPlaybackMode($event)"
     (dismissUpdate)="dismissUpdate()"
   ></app-footer>
-
-  <!-- Rename Modal -->
-  <app-rename-modal
-    [isOpen]="isRenameModalOpen"
-    [sound]="soundToRename"
-    (closed)="onRenameClosed()"
-    (renamed)="onSoundRenamed($event)"
-  ></app-rename-modal>
 
   <!-- Are You Still There? Dialog -->
   <app-wake-dialog

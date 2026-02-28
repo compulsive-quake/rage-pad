@@ -19,270 +19,315 @@
   </div>
 
   <div class="settings-body">
+    <div class="settings-tabs">
+      <button class="settings-tab" [class.active]="activeTab === 'general'" (click)="activeTab = 'general'">General</button>
+      <button class="settings-tab" [class.active]="activeTab === 'audio'" (click)="activeTab = 'audio'">Audio</button>
+      <button class="settings-tab" [class.active]="activeTab === 'youtube'" (click)="activeTab = 'youtube'">YouTube</button>
+      <button class="settings-tab" [class.active]="activeTab === 'updates'" (click)="activeTab = 'updates'">Updates</button>
+    </div>
+
+    <div class="settings-scroll">
     <div class="settings-content-wrapper">
-      <div class="settings-section">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Server port</span>
-            <span class="settings-toggle-description">Port the backend server listens on. Changing this will restart the server connection.</span>
-          </div>
-          <div class="port-field">
-            <div class="port-input-row">
-              <input
-                type="number"
-                class="wake-minutes-input"
-                [ngModel]="draftServerPort"
-                (ngModelChange)="onServerPortChange($event)"
-                [disabled]="isPortChanging"
-                min="1024"
-                max="65535"
-                step="1"
-              />
-              <svg *ngIf="isPortChanging" class="spinning port-spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-              </svg>
+      <!-- ── General tab ──────────────────────────────────────────────── -->
+      <ng-container *ngIf="activeTab === 'general'">
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Server port</span>
+              <span class="settings-toggle-description">Port the backend server listens on. Changing this will restart the server connection.</span>
             </div>
-            <p class="port-change-error" *ngIf="portChangeError">{{ portChangeError }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-section qr-section" *ngIf="qrDataUrl">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Connect from phone</span>
-            <span class="settings-toggle-description">Scan this QR code to open RagePad on another device on the same network</span>
-          </div>
-          <div class="qr-inline">
-            <img [src]="qrDataUrl" alt="QR Code" class="qr-inline-image" />
-            <span class="qr-inline-url">{{ qrServerUrl }}</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Audio Device Settings -->
-      <div class="settings-section">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Microphone input</span>
-            <span class="settings-toggle-description">The real microphone to capture audio from</span>
-          </div>
-          <div class="port-field">
-            <select
-              class="interval-select"
-              [ngModel]="draftInputDevice"
-              (ngModelChange)="onInputDeviceChange($event)"
-            >
-              <option value="">Default</option>
-              <option *ngFor="let device of audioDevices.input" [value]="device">{{ device }}</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="settings-section">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Audio output (VB-Cable)</span>
-            <span class="settings-toggle-description">The output device for mic + sound mixing (typically VB-Cable Input)</span>
-          </div>
-          <div class="port-field">
-            <select
-              class="interval-select"
-              [ngModel]="draftOutputDevice"
-              (ngModelChange)="onOutputDeviceChange($event)"
-            >
-              <option value="">Default</option>
-              <option *ngFor="let device of audioDevices.output" [value]="device">{{ device }}</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- YouTube Cache Settings -->
-      <div class="settings-section">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">YouTube cache location</span>
-            <span class="settings-toggle-description">Directory where downloaded YouTube audio is cached. Leave empty for default (in-memory).</span>
-          </div>
-          <div class="port-field">
-            <input
-              type="text"
-              class="wake-minutes-input cache-path-input"
-              [ngModel]="draftYoutubeCachePath"
-              (ngModelChange)="onYoutubeCachePathChange($event)"
-              placeholder="Default (in-memory)"
-            />
-          </div>
-        </div>
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Cache retention</span>
-            <span class="settings-toggle-description">How long to keep cached YouTube downloads before they expire</span>
-          </div>
-          <div class="interval-field">
-            <div class="cache-input-row">
-              <input
-                type="number"
-                class="wake-minutes-input"
-                [ngModel]="draftYoutubeCacheTtl"
-                (ngModelChange)="onYoutubeCacheTtlChange($event)"
-                min="1"
-                max="10080"
-                step="1"
-              />
-              <span class="interval-unit">minutes</span>
+            <div class="port-field">
+              <div class="port-input-row">
+                <input
+                  type="number"
+                  class="wake-minutes-input"
+                  [ngModel]="draftServerPort"
+                  (ngModelChange)="onServerPortChange($event)"
+                  [disabled]="isPortChanging"
+                  min="1024"
+                  max="65535"
+                  step="1"
+                />
+                <svg *ngIf="isPortChanging" class="spinning port-spinner" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+                </svg>
+              </div>
+              <p class="port-change-error" *ngIf="portChangeError">{{ portChangeError }}</p>
             </div>
           </div>
         </div>
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Maximum cache size</span>
-            <span class="settings-toggle-description">Oldest entries are removed when the cache exceeds this size</span>
-          </div>
-          <div class="interval-field">
-            <div class="cache-input-row">
-              <input
-                type="number"
-                class="wake-minutes-input"
-                [ngModel]="draftYoutubeCacheMaxSize"
-                (ngModelChange)="onYoutubeCacheMaxSizeChange($event)"
-                min="50"
-                max="10000"
-                step="50"
-              />
-              <span class="interval-unit">MB</span>
+
+        <div class="settings-section qr-section" *ngIf="qrDataUrl">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Connect from phone</span>
+              <span class="settings-toggle-description">Scan this QR code to open RagePad on another device on the same network</span>
+            </div>
+            <div class="qr-inline">
+              <img [src]="qrDataUrl" alt="QR Code" class="qr-inline-image" />
+              <span class="qr-inline-url">{{ qrServerUrl }}</span>
             </div>
           </div>
         </div>
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Clear YouTube cache</span>
-            <span class="settings-toggle-description">
-              Remove all cached YouTube downloads
-              <span *ngIf="cacheInfo" class="cache-info-inline">
-                ({{ cacheInfo.entryCount }} {{ cacheInfo.entryCount === 1 ? 'entry' : 'entries' }}, {{ cacheInfo.totalSizeMb }} MB)
-              </span>
-            </span>
-          </div>
-          <button
-            class="check-update-btn clear-cache-btn"
-            (click)="onClearYoutubeCache()"
-            [disabled]="isClearingCache"
-          >
-            <svg *ngIf="isClearingCache" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-            </svg>
-            <svg *ngIf="!isClearingCache" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
-            </svg>
-            <span *ngIf="!isClearingCache">{{ cacheClearMessage || 'Clear Cache' }}</span>
-          </button>
-        </div>
-      </div>
 
-      <div class="settings-section">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Prevent screen from sleeping</span>
-            <span class="settings-toggle-description">Keeps the screen on so it doesn't turn off while you're using the app</span>
-          </div>
-          <label class="toggle-switch">
-            <input type="checkbox" [checked]="draftKeepAwake" (change)="onToggleKeepAwake()" />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div class="settings-toggle-row" [class.keep-awake-expanded]="draftIdleTimeout" *ngIf="draftKeepAwake">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Idle timeout</span>
-            <span class="settings-toggle-description">Show an "Are you still there?" prompt after inactivity, then allow the screen to sleep</span>
-          </div>
-          <div class="keep-awake-controls">
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Prevent screen from sleeping</span>
+              <span class="settings-toggle-description">Keeps the screen on so it doesn't turn off while you're using the app</span>
+            </div>
             <label class="toggle-switch">
-              <input type="checkbox" [checked]="draftIdleTimeout" (change)="onToggleIdleTimeout()" />
+              <input type="checkbox" [checked]="draftKeepAwake" (change)="onToggleKeepAwake()" />
               <span class="toggle-slider"></span>
             </label>
-            <div class="wake-minutes-field" *ngIf="draftIdleTimeout">
-              <label class="wake-minutes-label" for="wakeMinutesInput">Minutes before sleep is allowed</label>
-              <input
-                id="wakeMinutesInput"
-                type="number"
-                class="wake-minutes-input"
-                [ngModel]="draftWakeMinutes"
-                (ngModelChange)="onWakeMinutesChange($event)"
-                min="1"
-                max="480"
-                step="1"
-              />
-              <p class="wake-minutes-warning">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="warning-icon">
-                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-                </svg>
-                Your device may take longer than this to actually sleep, depending on OS and power settings.
-              </p>
+          </div>
+          <div class="settings-toggle-row" [class.keep-awake-expanded]="draftIdleTimeout" *ngIf="draftKeepAwake">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Idle timeout</span>
+              <span class="settings-toggle-description">Show an "Are you still there?" prompt after inactivity, then allow the screen to sleep</span>
+            </div>
+            <div class="keep-awake-controls">
+              <label class="toggle-switch">
+                <input type="checkbox" [checked]="draftIdleTimeout" (change)="onToggleIdleTimeout()" />
+                <span class="toggle-slider"></span>
+              </label>
+              <div class="wake-minutes-field" *ngIf="draftIdleTimeout">
+                <label class="wake-minutes-label" for="wakeMinutesInput">Minutes before sleep is allowed</label>
+                <input
+                  id="wakeMinutesInput"
+                  type="number"
+                  class="wake-minutes-input"
+                  [ngModel]="draftWakeMinutes"
+                  (ngModelChange)="onWakeMinutesChange($event)"
+                  min="1"
+                  max="480"
+                  step="1"
+                />
+                <p class="wake-minutes-warning">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="warning-icon">
+                    <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+                  </svg>
+                  Your device may take longer than this to actually sleep, depending on OS and power settings.
+                </p>
+              </div>
             </div>
           </div>
         </div>
-      </div>
-      <div class="settings-section">
-        <div class="settings-toggle-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Check for updates</span>
-            <span class="settings-toggle-description">Periodically check GitHub for a newer release</span>
+      </ng-container>
+
+      <!-- ── Audio tab ────────────────────────────────────────────────── -->
+      <ng-container *ngIf="activeTab === 'audio'">
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Microphone input</span>
+              <span class="settings-toggle-description">The real microphone to capture audio from</span>
+            </div>
+            <div class="port-field">
+              <select
+                class="interval-select"
+                [ngModel]="draftInputDevice"
+                (ngModelChange)="onInputDeviceChange($event)"
+              >
+                <option value="">Default</option>
+                <option *ngFor="let device of audioDevices.input" [value]="device">{{ device }}</option>
+              </select>
+            </div>
           </div>
-          <label class="toggle-switch">
-            <input type="checkbox" [checked]="draftAutoUpdateCheck" (change)="onToggleAutoUpdateCheck()" />
-            <span class="toggle-slider"></span>
-          </label>
         </div>
-        <div class="settings-toggle-row" *ngIf="draftAutoUpdateCheck">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Check interval</span>
-            <span class="settings-toggle-description">How often to check for new releases</span>
+
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Audio output (VB-Cable)</span>
+              <span class="settings-toggle-description">The output device for mic + sound mixing (typically VB-Cable Input)</span>
+            </div>
+            <div class="port-field">
+              <select
+                class="interval-select"
+                [ngModel]="draftOutputDevice"
+                (ngModelChange)="onOutputDeviceChange($event)"
+              >
+                <option value="">Default</option>
+                <option *ngFor="let device of audioDevices.output" [value]="device">{{ device }}</option>
+              </select>
+            </div>
           </div>
-          <div class="interval-field">
-            <select
-              class="interval-select"
-              [ngModel]="intervalPreset"
-              (ngModelChange)="onIntervalPresetChange($event)"
+        </div>
+        <div class="settings-section" *ngIf="vbCableStatus">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">VB-Cable Status</span>
+              <span class="settings-toggle-description" *ngIf="vbCableStatus.installed">
+                <span class="vbcable-status-badge installed">Installed</span>
+                <span *ngIf="vbCableStatus.outputDevice" class="vbcable-device-name">{{ vbCableStatus.outputDevice }}</span>
+              </span>
+              <span class="settings-toggle-description" *ngIf="!vbCableStatus.installed">
+                <span class="vbcable-status-badge not-installed">Not Installed</span>
+                <span class="vbcable-help-text">VB-Cable is required to route sounds to your microphone</span>
+              </span>
+            </div>
+            <button
+              class="check-update-btn"
+              (click)="onRefreshVBCableStatus()"
+              [disabled]="isRefreshingVBCable"
             >
-              <option value="30">Every 30 minutes</option>
-              <option value="60">Every hour</option>
-              <option value="1440">Daily</option>
-              <option value="custom">Custom</option>
-            </select>
-            <div class="custom-interval" *ngIf="intervalPreset === 'custom'">
+              <svg *ngIf="isRefreshingVBCable" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <span *ngIf="!isRefreshingVBCable">Refresh</span>
+            </button>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- ── YouTube tab ──────────────────────────────────────────────── -->
+      <ng-container *ngIf="activeTab === 'youtube'">
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">YouTube cache location</span>
+              <span class="settings-toggle-description">Directory where downloaded YouTube audio is cached. Leave empty for default (in-memory).</span>
+            </div>
+            <div class="port-field">
               <input
-                type="number"
-                class="wake-minutes-input"
-                [ngModel]="draftUpdateCheckInterval"
-                (ngModelChange)="onCustomIntervalChange($event)"
-                min="5"
-                max="10080"
-                step="1"
+                type="text"
+                class="wake-minutes-input cache-path-input"
+                [ngModel]="draftYoutubeCachePath"
+                (ngModelChange)="onYoutubeCachePathChange($event)"
+                placeholder="Default (in-memory)"
               />
-              <span class="interval-unit">minutes</span>
             </div>
           </div>
-        </div>
-        <div class="settings-toggle-row version-row">
-          <div class="settings-toggle-info">
-            <span class="settings-toggle-label">Version</span>
-            <span class="settings-toggle-description">v{{ appVersion }}</span>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Cache retention</span>
+              <span class="settings-toggle-description">How long to keep cached YouTube downloads before they expire</span>
+            </div>
+            <div class="interval-field">
+              <div class="cache-input-row">
+                <input
+                  type="number"
+                  class="wake-minutes-input"
+                  [ngModel]="draftYoutubeCacheTtl"
+                  (ngModelChange)="onYoutubeCacheTtlChange($event)"
+                  min="1"
+                  max="10080"
+                  step="1"
+                />
+                <span class="interval-unit">minutes</span>
+              </div>
+            </div>
           </div>
-          <button
-            class="check-update-btn"
-            (click)="onCheckForUpdates()"
-            [disabled]="isCheckingForUpdate"
-          >
-            <svg *ngIf="isCheckingForUpdate" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-              <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-            </svg>
-            <span *ngIf="!isCheckingForUpdate">Check for updates</span>
-          </button>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Maximum cache size</span>
+              <span class="settings-toggle-description">Oldest entries are removed when the cache exceeds this size</span>
+            </div>
+            <div class="interval-field">
+              <div class="cache-input-row">
+                <input
+                  type="number"
+                  class="wake-minutes-input"
+                  [ngModel]="draftYoutubeCacheMaxSize"
+                  (ngModelChange)="onYoutubeCacheMaxSizeChange($event)"
+                  min="50"
+                  max="10000"
+                  step="50"
+                />
+                <span class="interval-unit">MB</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Clear YouTube cache</span>
+              <span class="settings-toggle-description">
+                Remove all cached YouTube downloads
+                <span *ngIf="cacheInfo" class="cache-info-inline">
+                  ({{ cacheInfo.entryCount }} {{ cacheInfo.entryCount === 1 ? 'entry' : 'entries' }}, {{ cacheInfo.totalSizeMb }} MB)
+                </span>
+              </span>
+            </div>
+            <button
+              class="check-update-btn clear-cache-btn"
+              (click)="onClearYoutubeCache()"
+              [disabled]="isClearingCache"
+            >
+              <svg *ngIf="isClearingCache" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <svg *ngIf="!isClearingCache" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+              </svg>
+              <span *ngIf="!isClearingCache">{{ cacheClearMessage || 'Clear Cache' }}</span>
+            </button>
+          </div>
         </div>
-      </div>
+      </ng-container>
+
+      <!-- ── Updates tab ──────────────────────────────────────────────── -->
+      <ng-container *ngIf="activeTab === 'updates'">
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Check for updates</span>
+              <span class="settings-toggle-description">Periodically check GitHub for a newer release</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="draftAutoUpdateCheck" (change)="onToggleAutoUpdateCheck()" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="settings-toggle-row" *ngIf="draftAutoUpdateCheck">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Check interval</span>
+              <span class="settings-toggle-description">How often to check for new releases</span>
+            </div>
+            <div class="interval-field">
+              <select
+                class="interval-select"
+                [ngModel]="intervalPreset"
+                (ngModelChange)="onIntervalPresetChange($event)"
+              >
+                <option value="30">Every 30 minutes</option>
+                <option value="60">Every hour</option>
+                <option value="1440">Daily</option>
+                <option value="custom">Custom</option>
+              </select>
+              <div class="custom-interval" *ngIf="intervalPreset === 'custom'">
+                <input
+                  type="number"
+                  class="wake-minutes-input"
+                  [ngModel]="draftUpdateCheckInterval"
+                  (ngModelChange)="onCustomIntervalChange($event)"
+                  min="5"
+                  max="10080"
+                  step="1"
+                />
+                <span class="interval-unit">minutes</span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-toggle-row version-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Version</span>
+              <span class="settings-toggle-description">v{{ appVersion }}</span>
+            </div>
+            <button
+              class="check-update-btn"
+              (click)="onCheckForUpdates()"
+              [disabled]="isCheckingForUpdate"
+            >
+              <svg *ngIf="isCheckingForUpdate" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+              </svg>
+              <span *ngIf="!isCheckingForUpdate">Check for updates</span>
+            </button>
+          </div>
+        </div>
+      </ng-container>
+    </div>
     </div>
   </div>
 

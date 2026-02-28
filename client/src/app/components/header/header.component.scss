@@ -185,43 +185,6 @@
   }
 }
 
-.rename-btn-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(52, 152, 219, 0.1);
-  border: 1px solid rgba(52, 152, 219, 0.3);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  color: rgba(52, 152, 219, 0.8);
-
-  &:hover {
-    background: rgba(52, 152, 219, 0.2);
-    border-color: rgba(52, 152, 219, 0.6);
-    color: #3498db;
-    transform: scale(1.05);
-  }
-
-  &:active {
-    transform: scale(0.95);
-  }
-
-  &.active {
-    background: rgba(52, 152, 219, 0.25);
-    border-color: #3498db;
-    color: #3498db;
-    box-shadow: 0 0 12px rgba(52, 152, 219, 0.3);
-  }
-
-  svg {
-    width: 18px;
-    height: 18px;
-  }
-}
-
 .reorder-btn-icon {
   width: 40px;
   height: 40px;

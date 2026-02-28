@@ -20,16 +20,32 @@
         <!-- Icon -->
         <div class="icon-upload-row">
           <label class="category-label">Icon</label>
-          <div class="icon-upload-controls">
+          <div
+            class="icon-upload-controls"
+            [class.icon-drag-over]="iconDragOver"
+            (dragover)="onIconDragOver($event)"
+            (dragleave)="onIconDragLeave($event)"
+            (drop)="onIconDrop($event)"
+          >
             <img
               *ngIf="iconPreviewUrl"
               [src]="iconPreviewUrl"
-              class="icon-preview"
+              class="icon-preview icon-clickable"
+              [class.icon-selected]="iconSelected"
               alt="Icon preview"
+              title="Click to select, then Ctrl+V to paste image"
+              tabindex="0"
+              (click)="selectIcon($event)"
+              (keydown)="onIconKeydown($event)"
             />
             <div
               *ngIf="!iconPreviewUrl"
-              class="icon-preview icon-placeholder"
+              class="icon-preview icon-placeholder icon-clickable"
+              [class.icon-selected]="iconSelected"
+              title="Click to select, then Ctrl+V to paste image"
+              tabindex="0"
+              (click)="selectIcon($event)"
+              (keydown)="onIconKeydown($event)"
             >
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                 <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
@@ -54,6 +70,7 @@
               (change)="onIconSelected($event)"
             />
           </div>
+          <p class="icon-hint">Click icon + Ctrl+V to paste, or drag & drop an image</p>
         </div>
 
         <!-- Row 2: Artist | Category -->

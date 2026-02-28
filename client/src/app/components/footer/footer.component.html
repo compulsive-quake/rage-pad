@@ -79,7 +79,7 @@
         min="0"
         max="100"
         [(ngModel)]="volume"
-        (change)="onVolumeChange(volume)"
+        (input)="onVolumeChange(volume)"
       />
       <span class="volume-value">{{ volume }}%</span>
     </div>

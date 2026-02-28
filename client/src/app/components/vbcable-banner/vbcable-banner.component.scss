@@ -1,0 +1,166 @@
+:host {
+  display: block;
+}
+
+.vbcable-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 1px solid rgba(243, 156, 18, 0.3);
+  background: rgba(243, 156, 18, 0.08);
+  animation: bannerSlideDown 0.3s ease;
+  width: 100%;
+
+  // Done state — green
+  &.state-done {
+    border-color: rgba(46, 204, 113, 0.3);
+    background: rgba(46, 204, 113, 0.08);
+
+    .banner-icon {
+      color: #2ecc71;
+    }
+
+    .banner-title {
+      color: #2ecc71;
+    }
+  }
+
+  // Error state — red
+  &.state-error {
+    border-color: rgba(231, 76, 60, 0.3);
+    background: rgba(231, 76, 60, 0.08);
+
+    .banner-icon {
+      color: #e74c3c;
+    }
+
+    .banner-title {
+      color: rgba(231, 76, 60, 0.95);
+    }
+  }
+}
+
+@keyframes bannerSlideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.banner-icon {
+  flex-shrink: 0;
+  color: rgba(243, 156, 18, 0.9);
+
+  svg {
+    width: 22px;
+    height: 22px;
+  }
+
+  &.spinning svg {
+    animation: spin 1s linear infinite;
+  }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.banner-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.banner-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: rgba(243, 156, 18, 0.95);
+}
+
+.banner-subtitle {
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.5);
+  line-height: 1.3;
+}
+
+.banner-install-btn {
+  padding: 0.4rem 1rem;
+  background: rgba(243, 156, 18, 0.2);
+  border: 1px solid rgba(243, 156, 18, 0.4);
+  border-radius: 6px;
+  color: rgba(243, 156, 18, 0.95);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(243, 156, 18, 0.3);
+    border-color: rgba(243, 156, 18, 0.6);
+  }
+
+  &:active {
+    transform: scale(0.97);
+  }
+
+  // Recolor for error state
+  .state-error & {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: rgba(231, 76, 60, 0.4);
+    color: rgba(231, 76, 60, 0.95);
+
+    &:hover {
+      background: rgba(231, 76, 60, 0.3);
+      border-color: rgba(231, 76, 60, 0.6);
+    }
+  }
+}
+
+.banner-dismiss-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.35);
+  cursor: pointer;
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: color 0.2s;
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.7);
+  }
+}
+
+.banner-progress {
+  width: 120px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.banner-progress-bar {
+  height: 100%;
+  background: rgba(243, 156, 18, 0.8);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}

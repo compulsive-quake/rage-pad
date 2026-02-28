@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnChanges, SimpleChanges, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
@@ -32,6 +32,8 @@ export class EditDetailsModalComponent implements OnChanges {
   errorMessage = '';
   isSaving = false;
 
+  iconDragOver = false;
+  iconSelected = false;
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
 
@@ -61,6 +63,7 @@ export class EditDetailsModalComponent implements OnChanges {
       : '';
     this.errorMessage = '';
     this.isSaving = false;
+    this.iconSelected = false;
     this.showArtistSuggestions = false;
     this.filteredArtistSuggestions = [];
   }
@@ -134,7 +137,75 @@ export class EditDetailsModalComponent implements OnChanges {
       this.errorMessage = 'Unsupported image type';
       return;
     }
+    this.processIconFile(file);
+    input.value = '';
+  }
 
+  onIconDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.iconDragOver = true;
+  }
+
+  onIconDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.iconDragOver = false;
+  }
+
+  onIconDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.iconDragOver = false;
+
+    const file = event.dataTransfer?.files?.[0];
+    if (!file || !file.type.startsWith('image/')) {
+      this.errorMessage = 'Only image files can be dropped here';
+      return;
+    }
+    if (!EditDetailsModalComponent.ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      this.errorMessage = 'Unsupported image type';
+      return;
+    }
+    this.processIconFile(file);
+  }
+
+  selectIcon(event: Event): void {
+    event.stopPropagation();
+    this.iconSelected = true;
+    (event.target as HTMLElement).focus();
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.iconSelected = false;
+  }
+
+  onIconKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+      event.preventDefault();
+      this.pasteIconFromClipboard();
+    }
+  }
+
+  private async pasteIconFromClipboard(): Promise<void> {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          this.processIconFile(blob);
+          return;
+        }
+      }
+      this.errorMessage = 'No image found in clipboard';
+    } catch {
+      this.errorMessage = 'Could not read clipboard. Make sure you have copied an image.';
+    }
+  }
+
+  private processIconFile(file: Blob): void {
     const img = new Image();
     img.onload = () => {
       const max = EditDetailsModalComponent.MAX_ICON_SIZE;
@@ -161,9 +232,6 @@ export class EditDetailsModalComponent implements OnChanges {
       URL.revokeObjectURL(img.src);
     };
     img.src = URL.createObjectURL(file);
-
-    // Reset file input so the same file can be selected again
-    input.value = '';
   }
 
   removeIcon(): void {

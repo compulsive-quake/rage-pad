@@ -43,7 +43,6 @@
             <span>Or paste a YouTube URL</span>
           </div>
           <div class="youtube-url-input-wrapper">
-            <div class="youtube-url-input-row">
               <input
                 #youtubeInput
                 type="url"
@@ -51,27 +50,12 @@
                 [(ngModel)]="youtubeUrl"
                 placeholder="https://www.youtube.com/watch?v=..."
                 [disabled]="isFetchingYoutube || isAddingSound"
-                (keydown.enter)="fetchFromYoutube()"
+                (paste)="onYoutubeUrlPaste()"
                 (input)="onYoutubeUrlInput()"
                 (focus)="onYoutubeUrlFocus()"
                 (blur)="onYoutubeUrlBlur()"
                 autocomplete="off"
               />
-              <button
-                class="youtube-fetch-btn"
-                (click)="fetchFromYoutube()"
-                [disabled]="!youtubeUrl.trim() || isFetchingYoutube || isAddingSound"
-                title="Fetch audio from YouTube"
-              >
-                <svg *ngIf="isFetchingYoutube" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-                  <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
-                </svg>
-                <svg *ngIf="!isFetchingYoutube" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
-                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
-                </svg>
-                <span>{{ isFetchingYoutube ? 'Fetching...' : 'Fetch' }}</span>
-              </button>
-            </div>
             <!-- Recent YouTube videos dropdown -->
             <ul class="recent-videos-dropdown" *ngIf="showRecentVideos && recentYoutubeVideos.length > 0">
               <li class="recent-videos-header">
@@ -201,16 +185,32 @@
           <!-- Icon -->
           <div class="icon-upload-row">
             <label class="category-label">Icon</label>
-            <div class="icon-upload-controls">
+            <div
+              class="icon-upload-controls"
+              [class.icon-drag-over]="iconDragOver"
+              (dragover)="onIconDragOver($event)"
+              (dragleave)="onIconDragLeave($event)"
+              (drop)="onIconDrop($event)"
+            >
               <img
                 *ngIf="addSoundIconPreviewUrl"
                 [src]="addSoundIconPreviewUrl"
-                class="icon-preview"
+                class="icon-preview icon-clickable"
+                [class.icon-selected]="iconSelected"
                 alt="Icon preview"
+                title="Click to select, then Ctrl+V to paste image"
+                tabindex="0"
+                (click)="selectIcon($event)"
+                (keydown)="onIconKeydown($event)"
               />
               <div
                 *ngIf="!addSoundIconPreviewUrl"
-                class="icon-preview icon-placeholder"
+                class="icon-preview icon-placeholder icon-clickable"
+                [class.icon-selected]="iconSelected"
+                title="Click to select, then Ctrl+V to paste image"
+                tabindex="0"
+                (click)="selectIcon($event)"
+                (keydown)="onIconKeydown($event)"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                   <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
@@ -235,6 +235,7 @@
                 (change)="onIconSelected($event)"
               />
             </div>
+            <p class="icon-hint">Click icon + Ctrl+V to paste, or drag & drop an image</p>
           </div>
 
           <!-- Row 2: Artist | Category -->

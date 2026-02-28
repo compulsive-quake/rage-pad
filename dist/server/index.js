@@ -207,6 +207,162 @@ app.post('/api/launch-installer', (_req, res) => {
     res.json({ ok: true });
     setTimeout(() => process.exit(0), 500);
 });
+// ── VB-Cable install (SSE) ───────────────────────────────────────────────
+const VBCABLE_ZIP_URL = 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip';
+app.get('/api/vbcable/install', (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+    });
+    const send = (event, data) => {
+        res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    const zipPath = path_1.default.join(os_1.default.tmpdir(), 'VBCABLE_Driver_Pack45.zip');
+    const extractDir = path_1.default.join(os_1.default.tmpdir(), 'vbcable_extract');
+    httpsGetFollowRedirects(VBCABLE_ZIP_URL, (dlRes) => {
+        if (dlRes.statusCode !== 200) {
+            send('error', { message: `HTTP ${dlRes.statusCode}` });
+            res.end();
+            return;
+        }
+        const totalBytes = parseInt(dlRes.headers['content-length'] || '0', 10);
+        let receivedBytes = 0;
+        const fileStream = fs_1.default.createWriteStream(zipPath);
+        dlRes.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            fileStream.write(chunk);
+            if (totalBytes > 0) {
+                send('progress', { received: receivedBytes, total: totalBytes, percent: Math.round((receivedBytes / totalBytes) * 100) });
+            }
+        });
+        dlRes.on('end', () => {
+            fileStream.end(() => {
+                send('extracting', {});
+                // Clean up previous extraction if present
+                if (fs_1.default.existsSync(extractDir)) {
+                    fs_1.default.rmSync(extractDir, { recursive: true, force: true });
+                }
+                // Extract using PowerShell
+                const psExtract = (0, child_process_1.spawn)('powershell', [
+                    '-NoProfile', '-Command',
+                    `Expand-Archive -Path '${zipPath}' -DestinationPath '${extractDir}' -Force`
+                ], { stdio: ['ignore', 'pipe', 'pipe'] });
+                let psStderr = '';
+                psExtract.stderr.on('data', (chunk) => { psStderr += chunk.toString(); });
+                psExtract.on('close', (code) => {
+                    // Clean up the zip
+                    try {
+                        fs_1.default.unlinkSync(zipPath);
+                    }
+                    catch { /* ignore */ }
+                    if (code !== 0) {
+                        send('error', { message: `Extract failed: ${psStderr || `exit code ${code}`}` });
+                        res.end();
+                        return;
+                    }
+                    // Find the installer executable
+                    const installerName = 'VBCABLE_Setup_x64.exe';
+                    const installerPath = path_1.default.join(extractDir, installerName);
+                    if (!fs_1.default.existsSync(installerPath)) {
+                        send('error', { message: `Installer not found at ${installerPath}` });
+                        res.end();
+                        return;
+                    }
+                    send('installing', {});
+                    // Run the installer silently (requires elevation — uses -i -h flags)
+                    const installer = (0, child_process_1.spawn)('powershell', [
+                        '-NoProfile', '-Command',
+                        `Start-Process -FilePath '${installerPath}' -ArgumentList '-i','-h' -Verb RunAs -Wait`
+                    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+                    let installStderr = '';
+                    installer.stderr.on('data', (chunk) => { installStderr += chunk.toString(); });
+                    installer.on('close', (installCode) => {
+                        // Clean up extracted files
+                        try {
+                            fs_1.default.rmSync(extractDir, { recursive: true, force: true });
+                        }
+                        catch { /* ignore */ }
+                        if (installCode !== 0) {
+                            send('error', { message: installStderr || `Installer exited with code ${installCode}` });
+                        }
+                        else {
+                            send('done', {});
+                        }
+                        res.end();
+                    });
+                    installer.on('error', (err) => {
+                        try {
+                            fs_1.default.rmSync(extractDir, { recursive: true, force: true });
+                        }
+                        catch { /* ignore */ }
+                        send('error', { message: err.message });
+                        res.end();
+                    });
+                });
+                psExtract.on('error', (err) => {
+                    try {
+                        fs_1.default.unlinkSync(zipPath);
+                    }
+                    catch { /* ignore */ }
+                    send('error', { message: err.message });
+                    res.end();
+                });
+            });
+        });
+        dlRes.on('error', (err) => {
+            fileStream.end();
+            send('error', { message: err.message });
+            res.end();
+        });
+    }, (err) => {
+        send('error', { message: err.message });
+        res.end();
+    });
+});
+// ── VB-Cable auto-select ────────────────────────────────────────────────
+app.post('/api/vbcable/auto-select', async (_req, res) => {
+    try {
+        const devices = await audioEngine.listDevices();
+        const outputDevice = devices.output.find(d => d.toUpperCase().includes('CABLE'));
+        if (!outputDevice) {
+            res.status(404).json({ error: 'VB-Cable output device not found' });
+            return;
+        }
+        await audioEngine.setOutputDevice(outputDevice);
+        (0, database_1.setSetting)('audioOutputDevice', outputDevice);
+        res.json({ message: `Output device set to: ${outputDevice}`, device: outputDevice });
+    }
+    catch (error) {
+        const msg = error instanceof Error ? error.message : 'Failed to auto-select VB-Cable';
+        res.status(500).json({ error: msg });
+    }
+});
+// ── Audio engine restart ────────────────────────────────────────────────
+app.post('/api/audio/restart-engine', async (_req, res) => {
+    try {
+        await audioEngine.stop();
+        audioEngine.start();
+        // Restore saved device settings
+        const savedInput = (0, database_1.getSetting)('audioInputDevice');
+        const savedOutput = (0, database_1.getSetting)('audioOutputDevice');
+        if (savedInput) {
+            await audioEngine.setInputDevice(savedInput).catch(err => {
+                console.warn(`[restart-engine] Could not restore input device:`, err.message);
+            });
+        }
+        if (savedOutput) {
+            await audioEngine.setOutputDevice(savedOutput).catch(err => {
+                console.warn(`[restart-engine] Could not restore output device:`, err.message);
+            });
+        }
+        res.json({ message: 'Audio engine restarted' });
+    }
+    catch (error) {
+        const msg = error instanceof Error ? error.message : 'Failed to restart audio engine';
+        res.status(500).json({ error: msg });
+    }
+});
 // ── Settings API ─────────────────────────────────────────────────────────────
 app.get('/api/settings', (_req, res) => {
     res.json((0, database_1.getAllSettings)());

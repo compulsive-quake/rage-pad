@@ -46,6 +46,21 @@ export interface YoutubeCacheInfo {
   cachePath: string;
 }
 
+export interface VBCableStatus {
+  installed: boolean;
+  devices: string[];
+  inputDevice: string | null;
+  outputDevice: string | null;
+}
+
+export interface VBCableInstallProgress {
+  type: 'progress' | 'extracting' | 'installing' | 'done' | 'error';
+  received?: number;
+  total?: number;
+  percent?: number;
+  message?: string;
+}
+
 export interface AppSettings {
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
@@ -545,6 +560,80 @@ export class SoundService implements OnDestroy {
         ttlMinutes: 120,
         cachePath: '',
       }))
+    );
+  }
+
+  // ── VB-Cable ──────────────────────────────────────────────────────────────
+
+  getVBCableStatus(): Observable<VBCableStatus> {
+    return this.http.get<VBCableStatus>(`${this.apiUrl}/vbcable/status`).pipe(
+      catchError(() => of({ installed: false, devices: [], inputDevice: null, outputDevice: null }))
+    );
+  }
+
+  installVBCable(): Observable<VBCableInstallProgress> {
+    return new Observable<VBCableInstallProgress>(observer => {
+      const es = new EventSource(`${this.apiUrl}/vbcable/install`);
+      let done = false;
+
+      const handleEvent = (type: string) => (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.ngZone.run(() => observer.next({ type: type as any, ...data }));
+        } catch { /* ignore parse errors */ }
+      };
+
+      es.addEventListener('progress', handleEvent('progress'));
+      es.addEventListener('extracting', handleEvent('extracting'));
+      es.addEventListener('installing', handleEvent('installing'));
+      es.addEventListener('done', (event: MessageEvent) => {
+        done = true;
+        es.close();
+        this.ngZone.run(() => {
+          observer.next({ type: 'done' });
+          observer.complete();
+        });
+      });
+      es.addEventListener('error', (event: MessageEvent) => {
+        if (done) return;
+        done = true;
+        es.close();
+        if (event.data) {
+          try {
+            const data = JSON.parse(event.data);
+            this.ngZone.run(() => observer.error(new Error(data.message || 'VB-Cable install failed')));
+          } catch {
+            this.ngZone.run(() => observer.error(new Error('VB-Cable install failed')));
+          }
+        }
+      });
+
+      es.onerror = () => {
+        if (done) return;
+        done = true;
+        es.close();
+        this.ngZone.run(() => observer.error(new Error('Connection to server lost')));
+      };
+
+      return () => { done = true; es.close(); };
+    });
+  }
+
+  autoSelectVBCable(): Observable<{ message: string; device: string }> {
+    return this.http.post<{ message: string; device: string }>(`${this.apiUrl}/vbcable/auto-select`, {}).pipe(
+      catchError(error => {
+        console.error('Failed to auto-select VB-Cable:', error);
+        return of({ message: 'Failed', device: '' });
+      })
+    );
+  }
+
+  restartAudioEngine(): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.apiUrl}/audio/restart-engine`, {}).pipe(
+      catchError(error => {
+        console.error('Failed to restart audio engine:', error);
+        return of({ message: 'Failed to restart audio engine' });
+      })
     );
   }
 
