@@ -15,6 +15,7 @@ import { AddSoundModalComponent } from './components/add-sound-modal/add-sound-m
 import { ContextMenuComponent } from './components/context-menu/context-menu.component';
 import { EditSoundModalComponent } from './components/edit-sound-modal/edit-sound-modal.component';
 import { EditDetailsModalComponent } from './components/edit-details-modal/edit-details-modal.component';
+import { StoreModalComponent } from './components/store-modal/store-modal.component';
 
 @Component({
   selector: 'app-root',
@@ -32,6 +33,7 @@ import { EditDetailsModalComponent } from './components/edit-details-modal/edit-
     ContextMenuComponent,
     EditSoundModalComponent,
     EditDetailsModalComponent,
+    StoreModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -52,6 +54,14 @@ export class AppComponent implements OnInit, OnDestroy {
   isReorderMode = false;
   isQueueMode = false;
   soundQueue: Sound[] = [];
+
+  // NSFW mode state
+  nsfwModeEnabled = false;
+  showNsfw = false;
+
+  // Store modal state
+  isStoreOpen = false;
+  storeServerUrl = 'http://localhost:9090';
 
   // Add Sound modal state
   isAddSoundModalOpen = false;
@@ -79,6 +89,11 @@ export class AppComponent implements OnInit, OnDestroy {
   isDeleteConfirmOpen = false;
   soundToDelete: Sound | null = null;
   isDeleting = false;
+
+  // Delete category confirmation state
+  isDeleteCategoryConfirmOpen = false;
+  categoryToDelete: string | null = null;
+  isDeletingCategory = false;
 
   // SSE config-watch
   private configWatchSub: Subscription | null = null;
@@ -161,6 +176,8 @@ export class AppComponent implements OnInit, OnDestroy {
         this.autoUpdateCheckEnabled = settings.autoUpdateCheckEnabled;
         this.updateCheckIntervalMinutes = settings.updateCheckIntervalMinutes;
         this.serverPort = settings.serverPort;
+        this.nsfwModeEnabled = settings.nsfwModeEnabled;
+        this.storeServerUrl = settings.storeServerUrl || 'http://localhost:9090';
         this.initializeAfterSettingsLoad();
       });
 
@@ -318,14 +335,21 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   filterSounds(query: string): void {
+    let base = this.sounds;
+
+    // When NSFW mode is enabled and showing is off, exclude NSFW sounds
+    if (this.nsfwModeEnabled && !this.showNsfw) {
+      base = base.filter(s => !s.nsfw);
+    }
+
     if (!query.trim()) {
-      this.filteredSounds = this.sounds;
-      this.groupSoundsByCategory(this.sounds);
+      this.filteredSounds = base;
+      this.groupSoundsByCategory(base);
       return;
     }
 
     const lowerQuery = query.toLowerCase();
-    this.filteredSounds = this.sounds.filter(sound =>
+    this.filteredSounds = base.filter(sound =>
       sound.title.toLowerCase().includes(lowerQuery) ||
       sound.artist.toLowerCase().includes(lowerQuery) ||
       sound.category.toLowerCase().includes(lowerQuery)
@@ -388,17 +412,35 @@ export class AppComponent implements OnInit, OnDestroy {
       });
     };
 
-    this.categories = splOrderedEntries(topLevelMap).map(([name, data]) => ({
+    const hideNsfwCategories = this.nsfwModeEnabled && !this.showNsfw;
+
+    let allCategories = splOrderedEntries(topLevelMap).map(([name, data]) => ({
       name,
       sounds: data.sounds.slice().sort((a, b) => a.categoryIndex - b.categoryIndex),
       image: data.image,
+      nsfw: this.categoryIconsMap.get(name)?.nsfw || false,
+      visibility: (this.categoryIconsMap.get(name)?.visibility || 'private') as 'private' | 'public',
       subCategories: splOrderedEntries(data.subCategories).map(([subName, subData]) => ({
         name: subName,
         sounds: subData.sounds.slice().sort((a, b) => a.categoryIndex - b.categoryIndex),
         image: subData.image,
-        subCategories: []
+        nsfw: this.categoryIconsMap.get(subName)?.nsfw || false,
+        visibility: (this.categoryIconsMap.get(subName)?.visibility || 'private') as 'private' | 'public',
+        subCategories: [] as Category[]
       }))
     }));
+
+    // Filter out NSFW categories when hiding
+    if (hideNsfwCategories) {
+      allCategories = allCategories
+        .filter(c => !c.nsfw)
+        .map(c => ({
+          ...c,
+          subCategories: c.subCategories.filter(sc => !sc.nsfw)
+        }));
+    }
+
+    this.categories = allCategories;
   }
 
   playSound(sound: Sound): void {
@@ -693,6 +735,18 @@ export class AppComponent implements OnInit, OnDestroy {
     if (payload.serverPort !== this.serverPort) {
       this.migrateServerPort(payload.serverPort);
     }
+
+    if (payload.nsfwModeEnabled !== this.nsfwModeEnabled) {
+      this.nsfwModeEnabled = payload.nsfwModeEnabled;
+      if (!this.nsfwModeEnabled) {
+        this.showNsfw = false;
+      }
+      this.filterSounds(this.searchQuery);
+    }
+
+    if (payload.storeServerUrl !== this.storeServerUrl) {
+      this.storeServerUrl = payload.storeServerUrl;
+    }
   }
 
   private migrateServerPort(newPort: number): void {
@@ -824,6 +878,107 @@ export class AppComponent implements OnInit, OnDestroy {
       this.pendingReload = false;
       this.loadSounds(true);
     }
+  }
+
+  // ── NSFW mode ──────────────────────────────────────────────────────────────
+
+  toggleNsfwMode(): void {
+    this.showNsfw = !this.showNsfw;
+    this.filterSounds(this.searchQuery);
+  }
+
+  onContextMenuToggleNsfw(): void {
+    if (!this.contextMenuSound) return;
+    const sound = this.contextMenuSound;
+    const newNsfw = !sound.nsfw;
+    this.contextMenuVisible = false;
+    this.contextMenuSound = null;
+
+    this.soundService.toggleSoundNsfw(sound.id, newNsfw)
+      .pipe(take(1))
+      .subscribe({
+        next: (result: any) => {
+          if (!result?.error) {
+            // SSE will reload, but update locally for instant feedback
+            sound.nsfw = newNsfw;
+          }
+        }
+      });
+  }
+
+  onToggleCategoryNsfw(event: { categoryName: string; nsfw: boolean }): void {
+    this.soundService.setCategoryNsfw(event.categoryName, event.nsfw)
+      .pipe(take(1))
+      .subscribe();
+  }
+
+  // ── Store modal ──────────────────────────────────────────────────────────────
+
+  toggleStoreModal(): void {
+    if (this.isSettingsModalOpen) {
+      this.isSettingsModalOpen = false;
+    }
+    this.isStoreOpen = !this.isStoreOpen;
+  }
+
+  onCategoryDownloaded(categoryName: string): void {
+    this.isStoreOpen = false;
+    this.loadSounds(true);
+  }
+
+  // ── Delete category ─────────────────────────────────────────────────────────
+
+  onDeleteCategory(categoryName: string): void {
+    this.categoryToDelete = categoryName;
+    this.isDeleteCategoryConfirmOpen = true;
+  }
+
+  cancelDeleteCategory(): void {
+    this.isDeleteCategoryConfirmOpen = false;
+    this.categoryToDelete = null;
+    this.isDeletingCategory = false;
+  }
+
+  confirmDeleteCategory(): void {
+    if (!this.categoryToDelete || this.isDeletingCategory) return;
+    this.isDeletingCategory = true;
+
+    this.soundService.deleteCategory(this.categoryToDelete)
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          this.isDeletingCategory = false;
+          this.isDeleteCategoryConfirmOpen = false;
+          this.categoryToDelete = null;
+          this.audioBufferCache.clear();
+          this.loadSounds(true);
+        },
+        error: (err: any) => {
+          console.error('Failed to delete category:', err);
+          this.isDeletingCategory = false;
+          this.isDeleteCategoryConfirmOpen = false;
+          this.categoryToDelete = null;
+        }
+      });
+  }
+
+  // ── Category visibility ─────────────────────────────────────────────────────
+
+  onToggleCategoryVisibility(event: { categoryName: string; visibility: 'private' | 'public' }): void {
+    this.soundService.setCategoryVisibility(event.categoryName, event.visibility)
+      .pipe(take(1))
+      .subscribe({
+        next: () => {
+          // Update local state for instant feedback
+          const cat = this.categories.find(c => c.name === event.categoryName);
+          if (cat) {
+            cat.visibility = event.visibility;
+          }
+        },
+        error: (err: any) => {
+          console.error('Failed to set category visibility:', err);
+        }
+      });
   }
 
   // ── Add Sound modal handlers ───────────────────────────────────────────────

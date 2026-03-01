@@ -1,25 +1,27 @@
 <div class="app-container" [class.wake-blur]="isWakeDialogOpen" [class.wake-dimmed]="isUiDimmed">
   <!-- Header -->
   <app-header
-    [isLoading]="isLoading"
     [isReorderMode]="isReorderMode"
     [isQueueMode]="isQueueMode"
     [queueLength]="soundQueue.length"
     [playbackProgress]="playbackProgress"
+    [showNsfw]="showNsfw"
+    [nsfwModeEnabled]="nsfwModeEnabled"
     (search)="onSearch($event)"
-    (refresh)="refreshSounds()"
     (toggleReorderMode)="toggleReorderMode()"
     (toggleQueueMode)="toggleQueueMode()"
     (toggleSettings)="toggleSettingsModal()"
     (addSound)="openAddSoundModal()"
+    (toggleNsfwMode)="toggleNsfwMode()"
+    (toggleStore)="toggleStoreModal()"
     [showVBCableBanner]="showVBCableBanner"
     (vbcableDismissed)="onVBCableDismissed()"
     (vbcableInstalled)="onVBCableInstalled()"
   ></app-header>
 
-  <!-- Main Content / Settings -->
+  <!-- Main Content / Settings / Store -->
   <app-content
-    *ngIf="!isSettingsModalOpen"
+    *ngIf="!isSettingsModalOpen && !isStoreOpen"
     [categories]="categories"
     [filteredSounds]="filteredSounds"
     [isLoading]="isLoading"
@@ -28,6 +30,7 @@
     [isReorderMode]="isReorderMode"
     [activeCategory]="activeCategory"
     [soundQueue]="soundQueue"
+    [nsfwModeEnabled]="nsfwModeEnabled"
     (playSound)="playSound($event)"
     (activeCategoryChange)="activeCategory = $event"
     (reorderSound)="onReorderSound($event)"
@@ -36,6 +39,9 @@
     (soundContextMenu)="onSoundContextMenu($event)"
     (updateCategoryIcon)="onUpdateCategoryIcon($event)"
     (updateSoundIcon)="onUpdateSoundIcon($event)"
+    (toggleCategoryNsfw)="onToggleCategoryNsfw($event)"
+    (toggleCategoryVisibility)="onToggleCategoryVisibility($event)"
+    (deleteCategory)="onDeleteCategory($event)"
   ></app-content>
 
   <app-settings
@@ -51,10 +57,18 @@
     [isCheckingForUpdate]="isCheckingForUpdate"
     [latestVersion]="latestVersion"
     [updateAvailable]="updateAvailable"
+    [nsfwModeEnabled]="nsfwModeEnabled"
+    [storeServerUrl]="storeServerUrl"
     (saveSettings)="onSaveSettings($event)"
     (closeSettings)="toggleSettingsModal()"
     (checkForUpdates)="manualUpdateCheck()"
   ></app-settings>
+
+  <app-store-modal
+    *ngIf="isStoreOpen && !isSettingsModalOpen"
+    (closed)="isStoreOpen = false"
+    (categoryDownloaded)="onCategoryDownloaded($event)"
+  ></app-store-modal>
 
   <!-- Footer with Playback Controls -->
   <app-footer
@@ -97,10 +111,13 @@
     [visible]="contextMenuVisible"
     [x]="contextMenuX"
     [y]="contextMenuY"
+    [sound]="contextMenuSound"
+    [nsfwModeEnabled]="nsfwModeEnabled"
     (closed)="onContextMenuClosed()"
     (editSound)="onContextMenuEdit()"
     (renameSound)="onContextMenuRename()"
     (deleteSound)="onContextMenuDelete()"
+    (toggleNsfw)="onContextMenuToggleNsfw()"
   ></app-context-menu>
 
   <!-- Edit Sound Modal -->
@@ -117,11 +134,12 @@
     [sound]="soundToEditDetails"
     [sounds]="sounds"
     [categoryIconsMap]="categoryIconsMap"
+    [nsfwModeEnabled]="nsfwModeEnabled"
     (closed)="onEditDetailsClosed()"
     (saved)="onEditDetailsSaved()"
   ></app-edit-details-modal>
 
-  <!-- Delete Confirmation Dialog -->
+  <!-- Delete Sound Confirmation Dialog -->
   <div class="modal-backdrop" *ngIf="isDeleteConfirmOpen" (click)="cancelDelete()">
     <div class="delete-confirm-dialog" (click)="$event.stopPropagation()">
       <h3>Delete Sound</h3>
@@ -132,6 +150,22 @@
         <button class="btn-delete" (click)="confirmDelete()" [disabled]="isDeleting">
           <span *ngIf="!isDeleting">Delete</span>
           <span *ngIf="isDeleting">Deleting...</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Category Confirmation Dialog -->
+  <div class="modal-backdrop" *ngIf="isDeleteCategoryConfirmOpen" (click)="cancelDeleteCategory()">
+    <div class="delete-confirm-dialog" (click)="$event.stopPropagation()">
+      <h3>Delete Category</h3>
+      <p>Are you sure you want to delete <strong>{{ categoryToDelete }}</strong>?</p>
+      <p class="delete-warning">This will permanently delete the category and all its sounds.</p>
+      <div class="delete-confirm-actions">
+        <button class="btn-cancel" (click)="cancelDeleteCategory()" [disabled]="isDeletingCategory">Cancel</button>
+        <button class="btn-delete" (click)="confirmDeleteCategory()" [disabled]="isDeletingCategory">
+          <span *ngIf="!isDeletingCategory">Delete</span>
+          <span *ngIf="isDeletingCategory">Deleting...</span>
         </button>
       </div>
     </div>

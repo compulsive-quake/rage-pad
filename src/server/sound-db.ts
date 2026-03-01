@@ -19,6 +19,7 @@ export interface SoundRow {
   icon: string;
   icon_is_base64: number;
   hide_title: number;
+  nsfw: number;
 }
 
 export interface CategoryRow {
@@ -29,6 +30,9 @@ export interface CategoryRow {
   icon_is_base64: number;
   hidden: number;
   sort_order: number;
+  nsfw: number;
+  visibility: string;
+  store_id: number | null;
 }
 
 /** Matches the existing frontend Sound interface (with id replacing index). */
@@ -50,12 +54,15 @@ export interface Sound {
   icon?: string;
   iconIsBase64?: boolean;
   hideTitle?: boolean;
+  nsfw?: boolean;
 }
 
 export interface CategoryIcon {
   name: string;
   icon: string;
   isBase64: boolean;
+  nsfw: boolean;
+  visibility: 'private' | 'public';
 }
 
 // ── SoundDb ──────────────────────────────────────────────────────────────────
@@ -119,6 +126,26 @@ export class SoundDb {
       this.db.exec("ALTER TABLE sounds ADD COLUMN icon TEXT NOT NULL DEFAULT ''");
       this.db.exec("ALTER TABLE sounds ADD COLUMN icon_is_base64 INTEGER NOT NULL DEFAULT 0");
       this.db.exec("ALTER TABLE sounds ADD COLUMN hide_title INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Migration: add nsfw column to sounds and categories if missing
+    if (!colNames.has('nsfw')) {
+      this.db.exec("ALTER TABLE sounds ADD COLUMN nsfw INTEGER NOT NULL DEFAULT 0");
+    }
+    const catColumns = this.db.prepare("PRAGMA table_info(categories)").all() as { name: string }[];
+    const catColNames = new Set(catColumns.map(c => c.name));
+    if (!catColNames.has('nsfw')) {
+      this.db.exec("ALTER TABLE categories ADD COLUMN nsfw INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Migration: add visibility column to categories
+    if (!catColNames.has('visibility')) {
+      this.db.exec("ALTER TABLE categories ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'");
+    }
+
+    // Migration: add store_id column to categories (remote ID on store server)
+    if (!catColNames.has('store_id')) {
+      this.db.exec("ALTER TABLE categories ADD COLUMN store_id INTEGER");
     }
   }
 
@@ -214,6 +241,7 @@ export class SoundDb {
     icon?: string;
     iconIsBase64?: boolean;
     hideTitle?: boolean;
+    nsfw?: boolean;
   }): boolean {
     const sound = this.db.prepare('SELECT * FROM sounds WHERE id = ?').get(id) as SoundRow | undefined;
     if (!sound) return false;
@@ -224,6 +252,7 @@ export class SoundDb {
     const newIcon = params.icon !== undefined ? params.icon : sound.icon;
     const newIconIsBase64 = params.iconIsBase64 !== undefined ? (params.iconIsBase64 ? 1 : 0) : sound.icon_is_base64;
     const newHideTitle = params.hideTitle !== undefined ? (params.hideTitle ? 1 : 0) : sound.hide_title;
+    const newNsfw = params.nsfw !== undefined ? (params.nsfw ? 1 : 0) : sound.nsfw;
 
     // If changing category, put at end of new category
     let newSortOrder = sound.sort_order;
@@ -235,9 +264,9 @@ export class SoundDb {
     }
 
     const result = this.db.prepare(`
-      UPDATE sounds SET title = ?, artist = ?, category_id = ?, sort_order = ?, icon = ?, icon_is_base64 = ?, hide_title = ?
+      UPDATE sounds SET title = ?, artist = ?, category_id = ?, sort_order = ?, icon = ?, icon_is_base64 = ?, hide_title = ?, nsfw = ?
       WHERE id = ?
-    `).run(newTitle, newArtist, newCategoryId, newSortOrder, newIcon, newIconIsBase64, newHideTitle, id);
+    `).run(newTitle, newArtist, newCategoryId, newSortOrder, newIcon, newIconIsBase64, newHideTitle, newNsfw, id);
 
     return result.changes > 0;
   }
@@ -248,6 +277,25 @@ export class SoundDb {
 
     this.db.prepare('DELETE FROM sounds WHERE id = ?').run(id);
     return { fileName: sound.file_name };
+  }
+
+  deleteCategory(name: string): { fileNames: string[] } | null {
+    const cat = this.db.prepare('SELECT id FROM categories WHERE name = ?').get(name) as { id: number } | undefined;
+    if (!cat) return null;
+
+    // Collect file names of all sounds in this category (and sub-categories)
+    const sounds = this.db.prepare(
+      `SELECT file_name FROM sounds WHERE category_id = ? OR category_id IN (SELECT id FROM categories WHERE parent_id = ?)`
+    ).all(cat.id, cat.id) as { file_name: string }[];
+
+    const fileNames = sounds.map(s => s.file_name);
+
+    // Delete category (CASCADE will delete sounds and sub-categories)
+    this.db.prepare('DELETE FROM categories WHERE id = ?').run(cat.id);
+    // Also delete sub-categories explicitly in case PRAGMA foreign_keys is off
+    this.db.prepare('DELETE FROM categories WHERE parent_id = ?').run(cat.id);
+
+    return { fileNames };
   }
 
   recordPlay(id: number): void {
@@ -372,14 +420,23 @@ export class SoundDb {
 
   getCategoryIcons(): CategoryIcon[] {
     const rows = this.db.prepare(
-      'SELECT name, icon, icon_is_base64 FROM categories ORDER BY sort_order'
-    ).all() as { name: string; icon: string; icon_is_base64: number }[];
+      'SELECT name, icon, icon_is_base64, nsfw, visibility FROM categories ORDER BY sort_order'
+    ).all() as { name: string; icon: string; icon_is_base64: number; nsfw: number; visibility: string }[];
 
     return rows.map(r => ({
       name: r.name,
       icon: r.icon,
-      isBase64: r.icon_is_base64 === 1
+      isBase64: r.icon_is_base64 === 1,
+      nsfw: r.nsfw === 1,
+      visibility: (r.visibility || 'private') as 'private' | 'public'
     }));
+  }
+
+  setCategoryNsfw(categoryName: string, nsfw: boolean): boolean {
+    const result = this.db.prepare(
+      'UPDATE categories SET nsfw = ? WHERE name = ?'
+    ).run(nsfw ? 1 : 0, categoryName);
+    return result.changes > 0;
   }
 
   setCategoryIcon(categoryName: string, iconBase64: string): boolean {
@@ -407,6 +464,48 @@ export class SoundDb {
         const uncroppedPath = path.join(this.soundsDir, `${base}_uncropped${ext}`);
         return fs.existsSync(uncroppedPath);
       });
+  }
+
+  // ── Visibility / Store ──────────────────────────────────────────────────
+
+  setCategoryVisibility(categoryName: string, visibility: 'private' | 'public'): boolean {
+    const result = this.db.prepare(
+      'UPDATE categories SET visibility = ? WHERE name = ?'
+    ).run(visibility, categoryName);
+    return result.changes > 0;
+  }
+
+  getCategoryVisibility(categoryName: string): 'private' | 'public' {
+    const row = this.db.prepare(
+      'SELECT visibility FROM categories WHERE name = ?'
+    ).get(categoryName) as { visibility: string } | undefined;
+    return (row?.visibility as 'private' | 'public') || 'private';
+  }
+
+  getPublicCategories(): CategoryRow[] {
+    return this.db.prepare(
+      "SELECT * FROM categories WHERE visibility = 'public' ORDER BY sort_order"
+    ).all() as CategoryRow[];
+  }
+
+  setCategoryStoreId(categoryName: string, storeId: number | null): boolean {
+    const result = this.db.prepare(
+      'UPDATE categories SET store_id = ? WHERE name = ?'
+    ).run(storeId, categoryName);
+    return result.changes > 0;
+  }
+
+  getCategoryStoreId(categoryName: string): number | null {
+    const row = this.db.prepare(
+      'SELECT store_id FROM categories WHERE name = ?'
+    ).get(categoryName) as { store_id: number | null } | undefined;
+    return row?.store_id ?? null;
+  }
+
+  getSoundsByCategory(categoryId: number): SoundRow[] {
+    return this.db.prepare(
+      'SELECT * FROM sounds WHERE category_id = ? ORDER BY sort_order'
+    ).all(categoryId) as SoundRow[];
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────────
@@ -438,6 +537,7 @@ export class SoundDb {
       icon: row.icon || undefined,
       iconIsBase64: row.icon_is_base64 === 1 || undefined,
       hideTitle: row.hide_title === 1 || undefined,
+      nsfw: row.nsfw === 1 || undefined,
     };
   }
 

@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import { SoundDb } from './sound-db';
 import { AudioEngine } from './audio-engine';
 import { getSetting } from './database';
+import { trySyncIfPublic, syncCategoryToStore, removeCategoryFromStore } from './store-sync';
 
 // ── Module-level state (set by initRoutes) ─────────────────────────────────
 
@@ -211,6 +212,11 @@ router.post('/sounds/:id/rename', (req: Request, res: Response) => {
 
     const ok = soundDb.renameSound(id, title.trim());
     if (ok) {
+      // Sync hook: find which category this sound belongs to and sync
+      const allSounds = soundDb.getAllSounds();
+      const sound = allSounds.find(s => s.id === id);
+      if (sound) trySyncIfPublic(soundDb, sound.category);
+
       notifySseClients();
       res.json({ message: 'Sound renamed' });
     } else {
@@ -230,7 +236,7 @@ router.post('/sounds/:id/update-details', (req: Request, res: Response) => {
       return;
     }
 
-    const { customTag, artist, category, icon, hideTitle } = req.body;
+    const { customTag, artist, category, icon, hideTitle, nsfw } = req.body;
     if (typeof customTag !== 'string' || !customTag.trim()) {
       res.status(400).json({ error: 'customTag must be a non-empty string' });
       return;
@@ -255,9 +261,14 @@ router.post('/sounds/:id/update-details', (req: Request, res: Response) => {
       icon: typeof icon === 'string' ? icon : undefined,
       iconIsBase64: typeof icon === 'string' ? (icon.length > 0) : undefined,
       hideTitle: typeof hideTitle === 'boolean' ? hideTitle : undefined,
+      nsfw: typeof nsfw === 'boolean' ? nsfw : undefined,
     });
 
     if (ok) {
+      // Sync hook: sync the category this sound belongs to
+      const updatedSound = soundDb.getAllSounds().find(s => s.id === id);
+      if (updatedSound) trySyncIfPublic(soundDb, updatedSound.category);
+
       notifySseClients();
       res.json({ message: 'Sound details updated' });
     } else {
@@ -265,6 +276,30 @@ router.post('/sounds/:id/update-details', (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(500).json({ error: 'Failed to update sound details' });
+  }
+});
+
+// Toggle NSFW flag on a sound
+router.post('/sounds/:id/toggle-nsfw', (req: Request, res: Response) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ error: 'Invalid sound id' });
+      return;
+    }
+
+    const ok = soundDb.updateSoundDetails(id, {
+      nsfw: req.body.nsfw === true,
+    });
+
+    if (ok) {
+      notifySseClients();
+      res.json({ message: 'Sound NSFW flag updated' });
+    } else {
+      res.status(404).json({ error: 'Sound not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update sound NSFW flag' });
   }
 });
 
@@ -292,6 +327,13 @@ router.delete('/sounds/:id', (req: Request, res: Response) => {
     const base = path.basename(deleted.fileName, ext);
     const uncroppedPath = path.join(soundDb.getSoundsDir(), `${base}_uncropped${ext}`);
     try { fs.unlinkSync(uncroppedPath); } catch { /* ignore */ }
+
+    // Sync hook: we need to find the category - look up from request context
+    // Since the sound is deleted, check all public categories for sync
+    const publicCats = soundDb.getPublicCategories();
+    for (const cat of publicCats) {
+      trySyncIfPublic(soundDb, cat.name);
+    }
 
     notifySseClients();
     res.json({ message: 'Sound deleted' });
@@ -369,6 +411,40 @@ router.post('/categories/reorder', (req: Request, res: Response) => {
   }
 });
 
+// ── Delete category ───────────────────────────────────────────────────────
+
+router.delete('/categories/:name', (req: Request, res: Response) => {
+  try {
+    const categoryName = decodeURIComponent(req.params.name);
+
+    // Remove from store server first if public
+    removeCategoryFromStore(soundDb, categoryName).catch(() => {});
+
+    const deleted = soundDb.deleteCategory(categoryName);
+    if (!deleted) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+
+    // Delete sound files from disk
+    for (const fileName of deleted.fileNames) {
+      const filePath = path.join(soundDb.getSoundsDir(), fileName);
+      try { fs.unlinkSync(filePath); } catch { /* file may not exist */ }
+
+      // Also delete uncropped backup if present
+      const ext = path.extname(fileName);
+      const base = path.basename(fileName, ext);
+      const uncroppedPath = path.join(soundDb.getSoundsDir(), `${base}_uncropped${ext}`);
+      try { fs.unlinkSync(uncroppedPath); } catch { /* ignore */ }
+    }
+
+    notifySseClients();
+    res.json({ message: 'Category deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete category' });
+  }
+});
+
 // ── Category icons ─────────────────────────────────────────────────────────
 
 router.get('/category-icons', (_req: Request, res: Response) => {
@@ -395,6 +471,7 @@ router.put('/category-icon', (req: Request, res: Response) => {
 
     const ok = soundDb.setCategoryIcon(categoryName.trim(), iconBase64.trim());
     if (ok) {
+      trySyncIfPublic(soundDb, categoryName.trim());
       notifySseClients();
       res.json({ message: 'Category icon updated' });
     } else {
@@ -402,6 +479,34 @@ router.put('/category-icon', (req: Request, res: Response) => {
     }
   } catch (error) {
     res.status(500).json({ error: 'Failed to update category icon' });
+  }
+});
+
+// ── Category NSFW ─────────────────────────────────────────────────────────
+
+router.put('/category-nsfw', (req: Request, res: Response) => {
+  try {
+    const { categoryName, nsfw } = req.body;
+
+    if (typeof categoryName !== 'string' || !categoryName.trim()) {
+      res.status(400).json({ error: 'categoryName must be a non-empty string' });
+      return;
+    }
+    if (typeof nsfw !== 'boolean') {
+      res.status(400).json({ error: 'nsfw must be a boolean' });
+      return;
+    }
+
+    const ok = soundDb.setCategoryNsfw(categoryName.trim(), nsfw);
+    if (ok) {
+      trySyncIfPublic(soundDb, categoryName.trim());
+      notifySseClients();
+      res.json({ message: 'Category NSFW flag updated' });
+    } else {
+      res.status(404).json({ error: 'Category not found' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update category NSFW flag' });
   }
 });
 
@@ -413,6 +518,244 @@ router.get('/categories', (_req: Request, res: Response) => {
     res.json(categories);
   } catch (error) {
     res.status(500).json({ error: 'Failed to get categories' });
+  }
+});
+
+// ── Category Visibility ──────────────────────────────────────────────────
+
+router.put('/category-visibility', async (req: Request, res: Response) => {
+  try {
+    const { categoryName, visibility } = req.body;
+
+    if (typeof categoryName !== 'string' || !categoryName.trim()) {
+      res.status(400).json({ error: 'categoryName must be a non-empty string' });
+      return;
+    }
+    if (visibility !== 'private' && visibility !== 'public') {
+      res.status(400).json({ error: 'visibility must be "private" or "public"' });
+      return;
+    }
+
+    const ok = soundDb.setCategoryVisibility(categoryName.trim(), visibility);
+    if (!ok) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+
+    // Trigger sync/unsync based on new visibility
+    if (visibility === 'public') {
+      syncCategoryToStore(soundDb, categoryName.trim()).catch(err => {
+        console.warn(`[store-sync] Failed to publish category "${categoryName}":`, err);
+      });
+    } else {
+      removeCategoryFromStore(soundDb, categoryName.trim()).catch(err => {
+        console.warn(`[store-sync] Failed to unpublish category "${categoryName}":`, err);
+      });
+    }
+
+    notifySseClients();
+    res.json({ message: `Category visibility set to ${visibility}` });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update category visibility' });
+  }
+});
+
+// ── Store proxy endpoints ──────────────────────────────────────────────────
+
+router.get('/store/categories', async (_req: Request, res: Response) => {
+  try {
+    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const response = await fetch(`${storeUrl}/api/categories`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      res.status(response.status).json({ error: 'Store server error' });
+      return;
+    }
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    res.status(502).json({ error: 'Cannot reach store server' });
+  }
+});
+
+router.get('/store/categories/:id', async (req: Request, res: Response) => {
+  try {
+    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const response = await fetch(`${storeUrl}/api/categories/${req.params.id}`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!response.ok) {
+      res.status(response.status).json({ error: 'Store server error' });
+      return;
+    }
+    const data = await response.json() as any;
+    // Reshape: the store server returns a flat object with sounds array;
+    // the frontend expects { category: {...}, sounds: [...] }
+    const { sounds, ...categoryFields } = data;
+    res.json({ category: categoryFields, sounds: sounds || [] });
+  } catch (error) {
+    res.status(502).json({ error: 'Cannot reach store server' });
+  }
+});
+
+// ── Local category names (for "already downloaded" check) ─────────────────
+
+router.get('/store/local-category-names', (_req: Request, res: Response) => {
+  try {
+    const categories = soundDb.getCategoriesList();
+    const names = categories.map((c: any) => c.name);
+    res.json(names);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to get local categories' });
+  }
+});
+
+// ── Store sound file proxy (for preview playback) ─────────────────────────
+
+router.get('/store/sound-file/:fileName', async (req: Request, res: Response) => {
+  try {
+    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const fileName = req.params.fileName;
+    const response = await fetch(`${storeUrl}/api/sound-files/${encodeURIComponent(fileName)}`, {
+      signal: AbortSignal.timeout(30000),
+    });
+    if (!response.ok) {
+      res.status(response.status).json({ error: 'Store server error' });
+      return;
+    }
+    const contentType = response.headers.get('content-type');
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    res.send(Buffer.from(arrayBuffer));
+  } catch (error) {
+    res.status(502).json({ error: 'Cannot reach store server' });
+  }
+});
+
+// ── Store download ─────────────────────────────────────────────────────────
+
+router.post('/store/download/:categoryId', async (req: Request, res: Response) => {
+  try {
+    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const categoryId = req.params.categoryId;
+
+    // SSE headers for progress
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+
+    const send = (event: string, data: object) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // Fetch manifest
+    send('phase', { phase: 'fetching_manifest' });
+    const manifestRes = await fetch(`${storeUrl}/api/categories/${categoryId}/download`, {
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!manifestRes.ok) {
+      send('error', { message: 'Failed to fetch category manifest' });
+      res.end();
+      return;
+    }
+
+    const manifest = await manifestRes.json() as {
+      category: { name: string; icon: string; icon_is_base64: boolean };
+      sounds: Array<{
+        title: string;
+        file_name: string;
+        artist: string;
+        duration_ms: number;
+        sort_order: number;
+        icon: string;
+        icon_is_base64: boolean;
+        hide_title: boolean;
+        download_url: string;
+      }>;
+    };
+
+    // Create local category
+    const localCatName = manifest.category.name;
+    let localCatId = soundDb.getOrCreateCategory(localCatName);
+
+    // Set icon if provided
+    if (manifest.category.icon && manifest.category.icon_is_base64) {
+      soundDb.setCategoryIcon(localCatName, manifest.category.icon);
+    }
+
+    // Download each sound
+    const totalSounds = manifest.sounds.length;
+    let downloaded = 0;
+
+    send('phase', { phase: 'downloading_sounds', total: totalSounds });
+
+    for (const sound of manifest.sounds) {
+      try {
+        const soundUrl = sound.download_url.startsWith('http')
+          ? sound.download_url
+          : `${storeUrl}${sound.download_url}`;
+
+        const soundRes = await fetch(soundUrl, {
+          signal: AbortSignal.timeout(60000),
+        });
+        if (!soundRes.ok) {
+          console.warn(`[store-download] Failed to download sound "${sound.title}": ${soundRes.statusText}`);
+          downloaded++;
+          send('progress', { current: downloaded, total: totalSounds, title: sound.title, status: 'failed' });
+          continue;
+        }
+
+        const arrayBuffer = await soundRes.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+
+        // Generate unique filename
+        const ext = path.extname(sound.file_name).toLowerCase();
+        const baseName = path.basename(sound.file_name, ext).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+        let fileName = `${baseName}${ext}`;
+        let destPath = path.join(soundDb.getSoundsDir(), fileName);
+        let counter = 1;
+        while (fs.existsSync(destPath)) {
+          fileName = `${baseName}_${counter}${ext}`;
+          destPath = path.join(soundDb.getSoundsDir(), fileName);
+          counter++;
+        }
+
+        fs.writeFileSync(destPath, buffer);
+
+        soundDb.addSound({
+          title: sound.title,
+          fileName,
+          artist: sound.artist || '',
+          durationMs: sound.duration_ms || 0,
+          categoryId: localCatId,
+          icon: sound.icon || '',
+          iconIsBase64: sound.icon_is_base64 || false,
+          hideTitle: sound.hide_title || false,
+        });
+
+        downloaded++;
+        send('progress', { current: downloaded, total: totalSounds, title: sound.title, status: 'ok' });
+      } catch (err) {
+        downloaded++;
+        send('progress', { current: downloaded, total: totalSounds, title: sound.title, status: 'failed' });
+        console.warn(`[store-download] Error downloading sound "${sound.title}":`, err);
+      }
+    }
+
+    notifySseClients();
+    send('done', { categoryName: localCatName, totalDownloaded: downloaded });
+    res.end();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to download category';
+    try {
+      res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+    } catch { /* headers may already be sent */ }
+    res.end();
   }
 });
 
@@ -494,6 +837,9 @@ router.post('/sounds/add', addSoundUpload, async (req: Request, res: Response) =
       iconIsBase64: icon.length > 0,
       hideTitle,
     });
+
+    // Sync hook: sync the category if public
+    trySyncIfPublic(soundDb, categoryName.trim());
 
     notifySseClients();
     res.json({ message: `Sound "${soundTitle}" added` });
@@ -809,12 +1155,12 @@ interface CachedDownload {
 
 function getYtCacheTtl(): number {
   const minutes = getSetting('youtubeCacheTtlMinutes');
-  return (minutes > 0 ? minutes : 120) * 60 * 1000;
+  return (minutes > 0 ? minutes : 4320) * 60 * 1000;
 }
 
 function getYtCacheMaxSizeBytes(): number {
   const mb = getSetting('youtubeCacheMaxSizeMb');
-  return (mb > 0 ? mb : 500) * 1024 * 1024;
+  return (mb > 0 ? mb : 100) * 1024 * 1024;
 }
 
 const ytCache = new Map<string, CachedDownload>();

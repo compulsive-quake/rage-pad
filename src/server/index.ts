@@ -10,7 +10,7 @@ import { initRoutes } from './routes';
 import { SoundDb } from './sound-db';
 import { AudioEngine } from './audio-engine';
 
-import { getSetting, getAllSettings, setSetting, updateSettings, closeDb } from './database';
+import { getSetting, getAllSettings, setSetting, updateSettings, closeDb, dataDir as dbDataDir } from './database';
 
 // ── File logging for release builds ─────────────────────────────────────────
 function setupLogging(): void {
@@ -314,10 +314,98 @@ app.get('/api/vbcable/install', (req: Request, res: Response) => {
 
           send('installing', {});
 
-          // Run the installer silently (requires elevation — uses -i -h flags)
+          // Save current default devices, install VB-Cable, then restore defaults.
+          // Windows automatically sets newly-installed audio devices as the default,
+          // so we capture the current defaults and restore them after installation.
+          const installScript = `
+$ErrorActionPreference = 'SilentlyContinue'
+
+# ── Capture current default playback & recording device IDs ──
+Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+
+[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+internal class MMDeviceEnumeratorClass { }
+
+[ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"),
+ InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMMDeviceEnumerator {
+    int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr devices);
+    int GetDefaultAudioEndpoint(int dataFlow, int role, out IntPtr device);
+}
+
+[ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"),
+ InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IMMDevice {
+    int Activate(ref Guid iid, int clsCtx, IntPtr activationParams, out IntPtr iface);
+    int OpenPropertyStore(int access, out IntPtr props);
+    int GetId([MarshalAs(UnmanagedType.LPWStr)] out string id);
+}
+
+[ComImport, Guid("F8679F50-850A-41CF-9C72-430F290290C8"),
+ InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+internal interface IPolicyConfig {
+    int GetMixFormat(string deviceId, IntPtr format);
+    int GetDeviceFormat(string deviceId, int def, IntPtr format);
+    int ResetDeviceFormat(string deviceId);
+    int SetDeviceFormat(string deviceId, IntPtr format, IntPtr mixFormat);
+    int GetProcessingPeriod(string deviceId, int def, long defaultPeriod, long minPeriod);
+    int SetProcessingPeriod(string deviceId, long period);
+    int GetShareMode(string deviceId, IntPtr mode);
+    int SetShareMode(string deviceId, IntPtr mode);
+    int GetPropertyValue(string deviceId, IntPtr key, IntPtr value);
+    int SetPropertyValue(string deviceId, IntPtr key, IntPtr value);
+    int SetDefaultEndpoint(string deviceId, int role);
+    int SetEndpointVisibility(string deviceId, int visible);
+}
+
+[ComImport, Guid("870AF99C-171D-4F9E-AF0D-E63DF40C2BC9")]
+internal class PolicyConfigClass { }
+
+public static class AudioDefaults {
+    public static string GetDefaultId(int dataFlow) {
+        var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorClass());
+        IntPtr devicePtr;
+        int hr = enumerator.GetDefaultAudioEndpoint(dataFlow, 0, out devicePtr);
+        if (hr != 0) return "";
+        var device = (IMMDevice)Marshal.GetObjectForIUnknown(devicePtr);
+        string id;
+        device.GetId(out id);
+        Marshal.ReleaseComObject(device);
+        Marshal.ReleaseComObject(enumerator);
+        return id ?? "";
+    }
+    public static void SetDefault(string deviceId, int role) {
+        if (string.IsNullOrEmpty(deviceId)) return;
+        var policy = (IPolicyConfig)(new PolicyConfigClass());
+        policy.SetDefaultEndpoint(deviceId, role);
+        Marshal.ReleaseComObject(policy);
+    }
+}
+'@ -IgnoreStandardError 2>$null
+
+$playbackId = [AudioDefaults]::GetDefaultId(0)
+$recordingId = [AudioDefaults]::GetDefaultId(1)
+
+# ── Run VB-Cable installer ──
+Start-Process -FilePath '${installerPath.replace(/'/g, "''")}' -ArgumentList '-i','-h' -Verb RunAs -Wait
+
+# ── Restore original defaults (all three roles: Console=0, Multimedia=1, Communications=2) ──
+if ($playbackId) {
+    [AudioDefaults]::SetDefault($playbackId, 0)
+    [AudioDefaults]::SetDefault($playbackId, 1)
+    [AudioDefaults]::SetDefault($playbackId, 2)
+}
+if ($recordingId) {
+    [AudioDefaults]::SetDefault($recordingId, 0)
+    [AudioDefaults]::SetDefault($recordingId, 1)
+    [AudioDefaults]::SetDefault($recordingId, 2)
+}
+`;
+
           const installer = spawn('powershell', [
-            '-NoProfile', '-Command',
-            `Start-Process -FilePath '${installerPath}' -ArgumentList '-i','-h' -Verb RunAs -Wait`
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', installScript
           ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
           let installStderr = '';
@@ -411,7 +499,39 @@ app.post('/api/audio/restart-engine', async (_req: Request, res: Response) => {
 // ── Settings API ─────────────────────────────────────────────────────────────
 
 app.get('/api/settings', (_req: Request, res: Response) => {
-  res.json(getAllSettings());
+  res.json({ ...getAllSettings(), dataDir: dbDataDir });
+});
+
+app.post('/api/browse-folder', (req: Request, res: Response) => {
+  const startDir = (req.body.startDir as string) || dbDataDir;
+  // Use PowerShell to open a native folder picker dialog
+  const psScript = `
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+$dialog.Description = 'Select YouTube cache folder'
+$dialog.SelectedPath = '${startDir.replace(/'/g, "''")}'
+$dialog.ShowNewFolderButton = $true
+if ($dialog.ShowDialog() -eq 'OK') {
+  Write-Output $dialog.SelectedPath
+} else {
+  Write-Output ''
+}
+`;
+  const ps = spawn('powershell', [
+    '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psScript
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  let stdout = '';
+  ps.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
+
+  ps.on('close', () => {
+    const selected = stdout.trim();
+    res.json({ path: selected });
+  });
+
+  ps.on('error', () => {
+    res.json({ path: '' });
+  });
 });
 
 app.put('/api/settings', (req: Request, res: Response) => {

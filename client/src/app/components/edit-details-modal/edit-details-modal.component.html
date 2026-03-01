@@ -127,6 +127,15 @@
           </label>
         </div>
 
+        <!-- NSFW Toggle -->
+        <div class="hide-title-row" *ngIf="nsfwModeEnabled">
+          <label class="category-label hide-title-label nsfw-label">NSFW</label>
+          <label class="toggle-switch">
+            <input type="checkbox" [(ngModel)]="editNsfw" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
         <!-- Error message -->
         <p *ngIf="errorMessage" class="edit-details-error">{{ errorMessage }}</p>
       </div>

@@ -113,6 +113,37 @@
             </div>
           </div>
         </div>
+
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">NSFW mode</span>
+              <span class="settings-toggle-description">When enabled, sounds and categories can be marked as NSFW and a toggle button appears in the header to show/hide NSFW content</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="draftNsfwMode" (change)="onToggleNsfwMode()" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Store server URL</span>
+              <span class="settings-toggle-description">URL of the sound store server for browsing and sharing soundboards</span>
+            </div>
+            <div class="port-field">
+              <input
+                type="text"
+                class="wake-minutes-input cache-path-input"
+                [ngModel]="draftStoreServerUrl"
+                (ngModelChange)="onStoreServerUrlChange($event)"
+                placeholder="http://localhost:9090"
+              />
+            </div>
+          </div>
+        </div>
       </ng-container>
 
       <!-- ── Audio tab ────────────────────────────────────────────────── -->
@@ -187,16 +218,27 @@
           <div class="settings-toggle-row">
             <div class="settings-toggle-info">
               <span class="settings-toggle-label">YouTube cache location</span>
-              <span class="settings-toggle-description">Directory where downloaded YouTube audio is cached. Leave empty for default (in-memory).</span>
+              <span class="settings-toggle-description">Directory where downloaded YouTube audio is cached</span>
             </div>
             <div class="port-field">
-              <input
-                type="text"
-                class="wake-minutes-input cache-path-input"
-                [ngModel]="draftYoutubeCachePath"
-                (ngModelChange)="onYoutubeCachePathChange($event)"
-                placeholder="Default (in-memory)"
-              />
+              <div class="cache-path-row">
+                <button
+                  class="browse-btn"
+                  (click)="onBrowseCachePath()"
+                  title="Browse for folder"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px;">
+                    <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+                  </svg>
+                </button>
+                <input
+                  type="text"
+                  class="wake-minutes-input cache-path-input"
+                  [ngModel]="draftYoutubeCachePath"
+                  (ngModelChange)="onYoutubeCachePathChange($event)"
+                  placeholder="Default (data folder)"
+                />
+              </div>
             </div>
           </div>
           <div class="settings-toggle-row">
@@ -205,18 +247,18 @@
               <span class="settings-toggle-description">How long to keep cached YouTube downloads before they expire</span>
             </div>
             <div class="interval-field">
-              <div class="cache-input-row">
-                <input
-                  type="number"
-                  class="wake-minutes-input"
-                  [ngModel]="draftYoutubeCacheTtl"
-                  (ngModelChange)="onYoutubeCacheTtlChange($event)"
-                  min="1"
-                  max="10080"
-                  step="1"
-                />
-                <span class="interval-unit">minutes</span>
-              </div>
+              <select
+                class="interval-select"
+                [ngModel]="draftYoutubeCacheTtl"
+                (ngModelChange)="onYoutubeCacheTtlChange($event)"
+              >
+                <option [ngValue]="60">1 hour</option>
+                <option [ngValue]="360">6 hours</option>
+                <option [ngValue]="720">12 hours</option>
+                <option [ngValue]="1440">1 day</option>
+                <option [ngValue]="4320">3 days</option>
+                <option [ngValue]="10080">7 days</option>
+              </select>
             </div>
           </div>
           <div class="settings-toggle-row">
@@ -225,17 +267,17 @@
               <span class="settings-toggle-description">Oldest entries are removed when the cache exceeds this size</span>
             </div>
             <div class="interval-field">
-              <div class="cache-input-row">
+              <div class="suffixed-input">
                 <input
                   type="number"
                   class="wake-minutes-input"
                   [ngModel]="draftYoutubeCacheMaxSize"
                   (ngModelChange)="onYoutubeCacheMaxSizeChange($event)"
-                  min="50"
-                  max="10000"
-                  step="50"
+                  min="10"
+                  max="100"
+                  step="10"
                 />
-                <span class="interval-unit">MB</span>
+                <span class="input-suffix">MB</span>
               </div>
             </div>
           </div>

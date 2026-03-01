@@ -11,30 +11,28 @@ import { VBCableBannerComponent } from '../vbcable-banner/vbcable-banner.compone
   styleUrls: ['./header.component.scss']
 })
 export class HeaderComponent {
-  @Input() isLoading = false;
   @Input() isReorderMode = false;
   @Input() isQueueMode = false;
   @Input() queueLength = 0;
   @Input() playbackProgress = 0;
   @Input() showVBCableBanner = false;
+  @Input() showNsfw = false;
+  @Input() nsfwModeEnabled = false;
 
   isFullscreen = false;
 
   @Output() search = new EventEmitter<string>();
-  @Output() refresh = new EventEmitter<void>();
   @Output() toggleReorderMode = new EventEmitter<void>();
   @Output() toggleQueueMode = new EventEmitter<void>();
   @Output() toggleSettings = new EventEmitter<void>();
   @Output() addSound = new EventEmitter<void>();
+  @Output() toggleNsfwMode = new EventEmitter<void>();
+  @Output() toggleStore = new EventEmitter<void>();
   @Output() vbcableDismissed = new EventEmitter<void>();
   @Output() vbcableInstalled = new EventEmitter<void>();
 
   onSearch(query: string): void {
     this.search.emit(query);
-  }
-
-  onRefresh(): void {
-    this.refresh.emit();
   }
 
   onToggleReorderMode(): void {
@@ -51,6 +49,14 @@ export class HeaderComponent {
 
   onAddSound(): void {
     this.addSound.emit();
+  }
+
+  onToggleNsfwMode(): void {
+    this.toggleNsfwMode.emit();
+  }
+
+  onToggleStore(): void {
+    this.toggleStore.emit();
   }
 
   toggleFullscreen(): void {

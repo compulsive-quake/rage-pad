@@ -57,44 +57,6 @@
   gap: 1rem;
 }
 
-.refresh-btn-icon {
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(155, 89, 182, 0.2);
-  border: 1px solid rgba(155, 89, 182, 0.4);
-  border-radius: 50%;
-  cursor: pointer;
-  transition: all 0.3s ease;
-
-  &:hover:not(:disabled) {
-    background: rgba(155, 89, 182, 0.3);
-    border-color: #9b59b6;
-    transform: scale(1.05);
-  }
-
-  &:active:not(:disabled) {
-    transform: scale(0.95);
-  }
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  svg {
-    width: 20px;
-    height: 20px;
-    color: #9b59b6;
-
-    &.spinning {
-      animation: spin 1s linear infinite;
-    }
-  }
-}
-
 .fullscreen-btn-icon {
   width: 40px;
   height: 40px;
@@ -142,6 +104,36 @@
     background: rgba(255, 255, 255, 0.1);
     border-color: rgba(255, 255, 255, 0.3);
     color: #fff;
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  svg {
+    width: 20px;
+    height: 20px;
+  }
+}
+
+.store-btn-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(100, 120, 220, 0.12);
+  border: 1px solid rgba(100, 120, 220, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: rgba(100, 120, 220, 0.8);
+
+  &:hover {
+    background: rgba(100, 120, 220, 0.22);
+    border-color: rgba(100, 120, 220, 0.6);
+    color: #6478dc;
     transform: scale(1.05);
   }
 
@@ -252,6 +244,43 @@
     border-color: #e67e22;
     color: #e67e22;
     box-shadow: 0 0 12px rgba(230, 126, 34, 0.3);
+  }
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.nsfw-btn-icon {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(231, 76, 60, 0.1);
+  border: 1px solid rgba(231, 76, 60, 0.3);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: rgba(231, 76, 60, 0.8);
+
+  &:hover {
+    background: rgba(231, 76, 60, 0.2);
+    border-color: rgba(231, 76, 60, 0.6);
+    color: #e74c3c;
+    transform: scale(1.05);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &.active {
+    background: rgba(231, 76, 60, 0.25);
+    border-color: #e74c3c;
+    color: #e74c3c;
+    box-shadow: 0 0 12px rgba(231, 76, 60, 0.3);
   }
 
   svg {

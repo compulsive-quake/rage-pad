@@ -17,6 +17,8 @@ export interface SettingsPayload {
   youtubeCachePath: string;
   youtubeCacheTtlMinutes: number;
   youtubeCacheMaxSizeMb: number;
+  nsfwModeEnabled: boolean;
+  storeServerUrl: string;
 }
 
 @Component({
@@ -38,6 +40,8 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() isCheckingForUpdate = false;
   @Input() latestVersion = '';
   @Input() updateAvailable = false;
+  @Input() nsfwModeEnabled = false;
+  @Input() storeServerUrl = 'http://localhost:9090';
 
   @Output() saveSettings = new EventEmitter<SettingsPayload>();
   @Output() closeSettings = new EventEmitter<void>();
@@ -53,14 +57,18 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftServerPort = 8088;
   draftInputDevice = '';
   draftOutputDevice = '';
+  draftNsfwMode = false;
+  draftStoreServerUrl = 'http://localhost:9090';
+  currentStoreServerUrl = 'http://localhost:9090';
 
   // YouTube cache draft values
   draftYoutubeCachePath = '';
-  draftYoutubeCacheTtl = 120;
-  draftYoutubeCacheMaxSize = 500;
+  draftYoutubeCacheTtl = 4320;
+  draftYoutubeCacheMaxSize = 100;
   currentYoutubeCachePath = '';
-  currentYoutubeCacheTtl = 120;
-  currentYoutubeCacheMaxSize = 500;
+  currentYoutubeCacheTtl = 4320;
+  currentYoutubeCacheMaxSize = 100;
+  dataDir = '';
 
   // YouTube cache info
   cacheInfo: YoutubeCacheInfo | null = null;
@@ -106,7 +114,8 @@ export class SettingsComponent implements OnInit, OnChanges {
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes'] ||
-        changes['autoUpdateCheckEnabled'] || changes['updateCheckIntervalMinutes'] || changes['serverPort']) {
+        changes['autoUpdateCheckEnabled'] || changes['updateCheckIntervalMinutes'] || changes['serverPort'] ||
+        changes['nsfwModeEnabled'] || changes['storeServerUrl']) {
       this.snapshotDraft();
     }
 
@@ -125,6 +134,9 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.intervalPreset = [30, 60, 1440].includes(this.updateCheckIntervalMinutes)
       ? String(this.updateCheckIntervalMinutes) : 'custom';
     this.draftServerPort = this.serverPort;
+    this.draftNsfwMode = this.nsfwModeEnabled;
+    this.draftStoreServerUrl = this.storeServerUrl;
+    this.currentStoreServerUrl = this.storeServerUrl;
     this.draftInputDevice = this.currentInputDevice;
     this.draftOutputDevice = this.currentOutputDevice;
     this.draftYoutubeCachePath = this.currentYoutubeCachePath;
@@ -139,6 +151,8 @@ export class SettingsComponent implements OnInit, OnChanges {
            this.draftAutoUpdateCheck !== this.autoUpdateCheckEnabled ||
            this.draftUpdateCheckInterval !== this.updateCheckIntervalMinutes ||
            this.draftServerPort !== this.serverPort ||
+           this.draftNsfwMode !== this.nsfwModeEnabled ||
+           this.draftStoreServerUrl !== this.currentStoreServerUrl ||
            this.draftInputDevice !== this.currentInputDevice ||
            this.draftOutputDevice !== this.currentOutputDevice ||
            this.draftYoutubeCachePath !== this.currentYoutubeCachePath ||
@@ -175,8 +189,16 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftUpdateCheckInterval = value;
   }
 
+  onToggleNsfwMode(): void {
+    this.draftNsfwMode = !this.draftNsfwMode;
+  }
+
   onServerPortChange(value: number): void {
     this.draftServerPort = value;
+  }
+
+  onStoreServerUrlChange(value: string): void {
+    this.draftStoreServerUrl = value;
   }
 
   onInputDeviceChange(device: string): void {
@@ -189,6 +211,16 @@ export class SettingsComponent implements OnInit, OnChanges {
 
   onYoutubeCachePathChange(value: string): void {
     this.draftYoutubeCachePath = value;
+  }
+
+  onBrowseCachePath(): void {
+    this.soundService.browseFolder(this.draftYoutubeCachePath || this.dataDir)
+      .pipe(take(1))
+      .subscribe(result => {
+        if (result.path) {
+          this.draftYoutubeCachePath = result.path;
+        }
+      });
   }
 
   onYoutubeCacheTtlChange(value: number): void {
@@ -232,6 +264,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   onSave(): void {
     this.currentInputDevice = this.draftInputDevice;
     this.currentOutputDevice = this.draftOutputDevice;
+    this.currentStoreServerUrl = this.draftStoreServerUrl;
     this.currentYoutubeCachePath = this.draftYoutubeCachePath;
     this.currentYoutubeCacheTtl = this.draftYoutubeCacheTtl;
     this.currentYoutubeCacheMaxSize = this.draftYoutubeCacheMaxSize;
@@ -248,6 +281,8 @@ export class SettingsComponent implements OnInit, OnChanges {
       youtubeCachePath: this.draftYoutubeCachePath,
       youtubeCacheTtlMinutes: this.draftYoutubeCacheTtl,
       youtubeCacheMaxSizeMb: this.draftYoutubeCacheMaxSize,
+      nsfwModeEnabled: this.draftNsfwMode,
+      storeServerUrl: this.draftStoreServerUrl,
     });
   }
 
@@ -303,14 +338,18 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.soundService.getSettings()
       .pipe(take(1))
       .subscribe(settings => {
+        this.dataDir = settings.dataDir || '';
         this.currentInputDevice = settings.audioInputDevice || '';
         this.currentOutputDevice = settings.audioOutputDevice || '';
         this.draftInputDevice = this.currentInputDevice;
         this.draftOutputDevice = this.currentOutputDevice;
+        // Store server URL
+        this.currentStoreServerUrl = settings.storeServerUrl || 'http://localhost:9090';
+        this.draftStoreServerUrl = this.currentStoreServerUrl;
         // YouTube cache settings
         this.currentYoutubeCachePath = settings.youtubeCachePath || '';
-        this.currentYoutubeCacheTtl = settings.youtubeCacheTtlMinutes || 120;
-        this.currentYoutubeCacheMaxSize = settings.youtubeCacheMaxSizeMb || 500;
+        this.currentYoutubeCacheTtl = settings.youtubeCacheTtlMinutes || 4320;
+        this.currentYoutubeCacheMaxSize = settings.youtubeCacheMaxSizeMb || 100;
         this.draftYoutubeCachePath = this.currentYoutubeCachePath;
         this.draftYoutubeCacheTtl = this.currentYoutubeCacheTtl;
         this.draftYoutubeCacheMaxSize = this.currentYoutubeCacheMaxSize;

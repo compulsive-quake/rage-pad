@@ -11,7 +11,7 @@ export interface UpdateInfo {
   latestVersion: string;
   downloadUrl: string;
 }
-import { Sound, ConnectionStatus, CategoryIcon, AudioDevices } from '../models/sound.model';
+import { Sound, ConnectionStatus, CategoryIcon, AudioDevices, StoreCategory, StoreCategoryDetail } from '../models/sound.model';
 
 export interface YoutubeFetchProgress {
   type: 'phase' | 'metadata' | 'progress' | 'done' | 'error';
@@ -61,6 +61,18 @@ export interface VBCableInstallProgress {
   message?: string;
 }
 
+export interface StoreDownloadProgress {
+  type: 'phase' | 'progress' | 'done' | 'error';
+  phase?: 'fetching_manifest' | 'downloading_sounds';
+  current?: number;
+  total?: number;
+  title?: string;
+  status?: string;
+  categoryName?: string;
+  totalDownloaded?: number;
+  message?: string;
+}
+
 export interface AppSettings {
   keepAwakeEnabled: boolean;
   idleTimeoutEnabled: boolean;
@@ -73,6 +85,10 @@ export interface AppSettings {
   youtubeCachePath: string;
   youtubeCacheTtlMinutes: number;
   youtubeCacheMaxSizeMb: number;
+  nsfwModeEnabled: boolean;
+  storeServerUrl: string;
+  storeUploaderToken: string;
+  dataDir?: string;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -85,8 +101,11 @@ const DEFAULT_SETTINGS: AppSettings = {
   audioInputDevice: '',
   audioOutputDevice: '',
   youtubeCachePath: '',
-  youtubeCacheTtlMinutes: 120,
-  youtubeCacheMaxSizeMb: 500,
+  youtubeCacheTtlMinutes: 4320,
+  youtubeCacheMaxSizeMb: 100,
+  nsfwModeEnabled: false,
+  storeServerUrl: 'http://localhost:9090',
+  storeUploaderToken: '',
 };
 
 @Injectable({
@@ -134,6 +153,12 @@ export class SoundService implements OnDestroy {
   saveSettings(partial: Partial<AppSettings>): Observable<AppSettings> {
     return this.http.put<AppSettings>(`${this.apiUrl}/settings`, partial).pipe(
       catchError(() => of({ ...DEFAULT_SETTINGS, ...partial }))
+    );
+  }
+
+  browseFolder(startDir?: string): Observable<{ path: string }> {
+    return this.http.post<{ path: string }>(`${this.apiUrl}/browse-folder`, { startDir }).pipe(
+      catchError(() => of({ path: '' }))
     );
   }
 
@@ -216,9 +241,9 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  updateSoundDetails(id: number, customTag: string, artist: string, category?: string, icon?: string, hideTitle?: boolean): Observable<any> {
+  updateSoundDetails(id: number, customTag: string, artist: string, category?: string, icon?: string, hideTitle?: boolean, nsfw?: boolean): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/${id}/update-details`, {
-      customTag, artist, category, icon, hideTitle
+      customTag, artist, category, icon, hideTitle, nsfw
     }).pipe(
       catchError(error => {
         console.error('Failed to update sound details:', error);
@@ -241,6 +266,15 @@ export class SoundService implements OnDestroy {
       catchError(error => {
         console.error('Failed to delete sound:', error);
         return of({ error: 'Failed to delete sound' });
+      })
+    );
+  }
+
+  deleteCategory(categoryName: string): Observable<any> {
+    return this.http.delete(`${this.apiUrl}/categories/${encodeURIComponent(categoryName)}`).pipe(
+      catchError(error => {
+        console.error('Failed to delete category:', error);
+        return of({ error: 'Failed to delete category' });
       })
     );
   }
@@ -291,6 +325,24 @@ export class SoundService implements OnDestroy {
       catchError(error => {
         console.error('Failed to update category icon:', error);
         return of({ error: 'Failed to update category icon' });
+      })
+    );
+  }
+
+  toggleSoundNsfw(id: number, nsfw: boolean): Observable<any> {
+    return this.http.post(`${this.apiUrl}/sounds/${id}/toggle-nsfw`, { nsfw }).pipe(
+      catchError(error => {
+        console.error('Failed to toggle sound NSFW:', error);
+        return of({ error: 'Failed to toggle sound NSFW' });
+      })
+    );
+  }
+
+  setCategoryNsfw(categoryName: string, nsfw: boolean): Observable<any> {
+    return this.http.put(`${this.apiUrl}/category-nsfw`, { categoryName, nsfw }).pipe(
+      catchError(error => {
+        console.error('Failed to set category NSFW:', error);
+        return of({ error: 'Failed to set category NSFW' });
       })
     );
   }
@@ -635,6 +687,91 @@ export class SoundService implements OnDestroy {
         return of({ message: 'Failed to restart audio engine' });
       })
     );
+  }
+
+  // ── Store / Sharing ──────────────────────────────────────────────────────
+
+  setCategoryVisibility(categoryName: string, visibility: 'private' | 'public'): Observable<any> {
+    return this.http.put(`${this.apiUrl}/category-visibility`, { categoryName, visibility }).pipe(
+      catchError(error => {
+        console.error('Failed to set category visibility:', error);
+        return of({ error: 'Failed to set category visibility' });
+      })
+    );
+  }
+
+  getStoreCategories(): Observable<StoreCategory[]> {
+    return this.http.get<StoreCategory[]>(`${this.apiUrl}/store/categories`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  getStoreCategoryDetail(id: number): Observable<StoreCategoryDetail | null> {
+    return this.http.get<StoreCategoryDetail>(`${this.apiUrl}/store/categories/${id}`).pipe(
+      catchError(() => of(null))
+    );
+  }
+
+  getLocalCategoryNames(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.apiUrl}/store/local-category-names`).pipe(
+      catchError(() => of([]))
+    );
+  }
+
+  getStoreSoundAudio(fileName: string): Observable<Blob> {
+    return this.http.get(`${this.apiUrl}/store/sound-file/${encodeURIComponent(fileName)}`, {
+      responseType: 'blob',
+    });
+  }
+
+  downloadStoreCategory(id: number): Observable<StoreDownloadProgress> {
+    return new Observable<StoreDownloadProgress>(observer => {
+      const es = new EventSource(`${this.apiUrl}/store/download/${id}`);
+      let done = false;
+
+      const handleEvent = (type: string) => (event: MessageEvent) => {
+        try {
+          const data = JSON.parse(event.data);
+          this.ngZone.run(() => observer.next({ type: type as any, ...data }));
+        } catch { /* ignore parse errors */ }
+      };
+
+      es.addEventListener('phase', handleEvent('phase'));
+      es.addEventListener('progress', handleEvent('progress'));
+      es.addEventListener('done', (event: MessageEvent) => {
+        done = true;
+        es.close();
+        try {
+          const data = JSON.parse(event.data);
+          this.ngZone.run(() => {
+            observer.next({ type: 'done', ...data });
+            observer.complete();
+          });
+        } catch { /* ignore */ }
+      });
+      es.addEventListener('error', (event: MessageEvent) => {
+        if (done) return;
+        done = true;
+        es.close();
+        if (event.data) {
+          try {
+            const data = JSON.parse(event.data);
+            this.ngZone.run(() => observer.error(new Error(data.message || 'Download failed')));
+          } catch {
+            this.ngZone.run(() => observer.error(new Error('Download failed')));
+          }
+        }
+      });
+
+      es.onerror = () => {
+        if (done) return;
+        done = true;
+        es.close();
+        this.ngZone.run(() => observer.error(new Error('Connection to server lost')));
+      };
+
+      return () => { done = true; es.close(); };
+    });
   }
 
   private isNewerVersion(latest: string, current: string): boolean {

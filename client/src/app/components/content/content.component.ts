@@ -41,8 +41,12 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Output() reorderCategory = new EventEmitter<{ categoryName: string; targetPosition: number }>();
   @Output() dragStateChange = new EventEmitter<boolean>();
   @Output() soundContextMenu = new EventEmitter<{ sound: Sound; event: MouseEvent }>();
+  @Input() nsfwModeEnabled = false;
   @Output() updateCategoryIcon = new EventEmitter<{ categoryName: string; iconBase64: string }>();
   @Output() updateSoundIcon = new EventEmitter<{ sound: Sound; iconBase64: string }>();
+  @Output() toggleCategoryNsfw = new EventEmitter<{ categoryName: string; nsfw: boolean }>();
+  @Output() toggleCategoryVisibility = new EventEmitter<{ categoryName: string; visibility: 'private' | 'public' }>();
+  @Output() deleteCategory = new EventEmitter<string>();
 
   @ViewChild('mainContent') mainContent!: ElementRef;
   @ViewChild('categoryNavList') categoryNavList!: ElementRef;

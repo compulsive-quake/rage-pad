@@ -18,6 +18,7 @@ export class EditDetailsModalComponent implements OnChanges {
   @Input() sound: Sound | null = null;
   @Input() sounds: Sound[] = [];
   @Input() categoryIconsMap: Map<string, CategoryIcon> = new Map();
+  @Input() nsfwModeEnabled = false;
   @Output() closed = new EventEmitter<void>();
   @Output() saved = new EventEmitter<void>();
 
@@ -27,6 +28,7 @@ export class EditDetailsModalComponent implements OnChanges {
   editIcon = '';
   editIconIsBase64 = false;
   editHideTitle = false;
+  editNsfw = false;
   iconPreviewUrl = '';
   categories: { name: string; parentCategory: string }[] = [];
   errorMessage = '';
@@ -58,6 +60,7 @@ export class EditDetailsModalComponent implements OnChanges {
     this.editIcon = sound.icon || '';
     this.editIconIsBase64 = sound.iconIsBase64 || false;
     this.editHideTitle = sound.hideTitle || false;
+    this.editNsfw = sound.nsfw || false;
     this.iconPreviewUrl = this.editIcon
       ? (this.editIconIsBase64 ? `data:image/png;base64,${this.editIcon}` : this.editIcon)
       : '';
@@ -266,13 +269,19 @@ export class EditDetailsModalComponent implements OnChanges {
       ? this.editHideTitle
       : undefined;
 
+    // Determine nsfw value
+    const nsfwValue = this.editNsfw !== (this.sound.nsfw || false)
+      ? this.editNsfw
+      : undefined;
+
     this.soundService.updateSoundDetails(
       this.sound.id,
       tag,
       this.editArtist.trim(),
       categoryChanged ? this.editCategory : undefined,
       iconValue,
-      hideTitleValue
+      hideTitleValue,
+      nsfwValue
     ).pipe(take(1)).subscribe({
       next: (result: any) => {
         this.isSaving = false;

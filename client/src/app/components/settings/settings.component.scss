@@ -497,15 +497,81 @@
 
 // ── YouTube cache styles ────────────────────────────────────────────────
 
+.cache-path-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .cache-path-input {
   width: 100%;
-  min-width: 200px;
+  min-width: 300px;
+}
+
+.browse-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(155, 89, 182, 0.2);
+  border: 1px solid rgba(155, 89, 182, 0.4);
+  border-radius: 6px;
+  cursor: pointer;
+  color: #c39bd3;
+  transition: all 0.2s;
+
+  &:hover {
+    background: rgba(155, 89, 182, 0.35);
+    border-color: rgba(155, 89, 182, 0.7);
+    color: #d7bde2;
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
 }
 
 .cache-input-row {
   display: flex;
   align-items: center;
   gap: 0.5rem;
+}
+
+.suffixed-input {
+  display: flex;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:focus-within {
+    border-color: rgba(155, 89, 182, 0.6);
+    box-shadow: 0 0 0 3px rgba(155, 89, 182, 0.15);
+  }
+
+  .input-suffix {
+    padding: 0.5rem 0.65rem 0.5rem 0;
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.45);
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .wake-minutes-input {
+    border: none;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+    padding-right: 0.35rem;
+
+    &:focus {
+      border-color: transparent;
+      box-shadow: none;
+    }
+  }
 }
 
 .cache-info-inline {

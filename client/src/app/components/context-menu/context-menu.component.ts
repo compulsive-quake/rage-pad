@@ -1,5 +1,6 @@
 import { Component, Input, Output, EventEmitter, HostListener, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { Sound } from '../../models/sound.model';
 
 @Component({
   selector: 'app-context-menu',
@@ -30,6 +31,12 @@ import { CommonModule } from '@angular/common';
             <path d="M2.5 4v3h5v12h3V7h5V4h-13zm19 5h-9v3h3v7h3v-7h3V9z"/>
           </svg>
           Rename Sound
+        </button>
+        <button *ngIf="nsfwModeEnabled" class="context-menu-item nsfw" (click)="onToggleNsfw()">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+          </svg>
+          {{ sound?.nsfw ? 'Unmark NSFW' : 'Mark as NSFW' }}
         </button>
         <button class="context-menu-item delete" (click)="onDelete()">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
@@ -104,6 +111,14 @@ import { CommonModule } from '@angular/common';
       &.delete:hover {
         background: rgba(231, 76, 60, 0.15);
       }
+
+      &.nsfw {
+        color: #e74c3c;
+      }
+
+      &.nsfw:hover {
+        background: rgba(231, 76, 60, 0.15);
+      }
     }
   `]
 })
@@ -111,10 +126,13 @@ export class ContextMenuComponent {
   @Input() visible = false;
   @Input() x = 0;
   @Input() y = 0;
+  @Input() sound: Sound | null = null;
+  @Input() nsfwModeEnabled = false;
   @Output() closed = new EventEmitter<void>();
   @Output() editSound = new EventEmitter<void>();
   @Output() renameSound = new EventEmitter<void>();
   @Output() deleteSound = new EventEmitter<void>();
+  @Output() toggleNsfw = new EventEmitter<void>();
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
@@ -140,5 +158,9 @@ export class ContextMenuComponent {
 
   onDelete(): void {
     this.deleteSound.emit();
+  }
+
+  onToggleNsfw(): void {
+    this.toggleNsfw.emit();
   }
 }

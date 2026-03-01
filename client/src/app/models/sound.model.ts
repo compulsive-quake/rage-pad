@@ -16,6 +16,7 @@ export interface Sound {
   icon?: string;
   iconIsBase64?: boolean;
   hideTitle?: boolean;
+  nsfw?: boolean;
 }
 
 export interface Category {
@@ -23,6 +24,36 @@ export interface Category {
   sounds: Sound[];
   image: string;
   subCategories: Category[];
+  nsfw?: boolean;
+  visibility?: 'private' | 'public';
+}
+
+export interface StoreCategory {
+  id: number;
+  name: string;
+  icon: string;
+  icon_is_base64: boolean;
+  uploader_name: string;
+  sound_count: number;
+  uploaded_at: string;
+  updated_at: string;
+}
+
+export interface StoreSound {
+  id: number;
+  title: string;
+  file_name: string;
+  artist: string;
+  duration_ms: number;
+  sort_order: number;
+  icon: string;
+  icon_is_base64: boolean;
+  hide_title: boolean;
+}
+
+export interface StoreCategoryDetail {
+  category: StoreCategory;
+  sounds: StoreSound[];
 }
 
 export interface ConnectionStatus {
@@ -34,6 +65,8 @@ export interface CategoryIcon {
   name: string;
   icon: string;
   isBase64: boolean;
+  nsfw: boolean;
+  visibility?: 'private' | 'public';
 }
 
 export interface AudioDevices {

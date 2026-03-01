@@ -15,6 +15,9 @@ export interface AppSettings {
   youtubeCachePath: string;
   youtubeCacheTtlMinutes: number;
   youtubeCacheMaxSizeMb: number;
+  nsfwModeEnabled: boolean;
+  storeServerUrl: string;
+  storeUploaderToken: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -27,13 +30,16 @@ export const DEFAULT_SETTINGS: AppSettings = {
   audioInputDevice: '',
   audioOutputDevice: '',
   youtubeCachePath: '',
-  youtubeCacheTtlMinutes: 120,
-  youtubeCacheMaxSizeMb: 500,
+  youtubeCacheTtlMinutes: 4320,
+  youtubeCacheMaxSizeMb: 100,
+  nsfwModeEnabled: false,
+  storeServerUrl: 'http://localhost:9090',
+  storeUploaderToken: '',
 };
 
 // ── Data dir & file path ─────────────────────────────────────────────────────
 
-const dataDir = process.env['RAGE_PAD_DATA_DIR']
+export const dataDir = process.env['RAGE_PAD_DATA_DIR']
   ? path.resolve(process.env['RAGE_PAD_DATA_DIR'])
   : path.resolve(__dirname, '../../data');
 

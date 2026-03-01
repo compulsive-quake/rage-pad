@@ -14,6 +14,7 @@ import { Sound } from '../../models/sound.model';
       [class.queued]="queuePositions.length > 0"
       [class.has-icon]="iconUrl"
       [class.hide-title]="sound.hideTitle"
+      [class.nsfw]="sound.nsfw"
       [class.icon-drag-over]="isIconDragOver"
       [style.backgroundImage]="iconUrl ? 'url(' + iconUrl + ')' : ''"
       (click)="onClick()"
@@ -24,6 +25,7 @@ import { Sound } from '../../models/sound.model';
     >
       <span class="sound-title">{{ sound.title }}</span>
       <span class="queue-badge" *ngIf="queuePositions.length > 0">{{ queuePositions.join(', ') }}</span>
+      <span class="nsfw-badge" *ngIf="sound.nsfw">18+</span>
     </button>
   `,
   styles: [`
@@ -161,6 +163,25 @@ import { Sound } from '../../models/sound.model';
       background: rgba(42, 42, 62, 0.35);
       border-radius: 11px;
       pointer-events: none;
+    }
+
+    .sound-button.nsfw {
+      border-color: rgba(231, 76, 60, 0.35);
+    }
+
+    .nsfw-badge {
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      padding: 1px 6px;
+      background: rgba(231, 76, 60, 0.9);
+      border-radius: 4px;
+      font-size: 0.65rem;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.4;
+      pointer-events: none;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
     }
 
   `]
