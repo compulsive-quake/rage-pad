@@ -323,9 +323,7 @@ router.delete('/sounds/:id', (req: Request, res: Response) => {
     try { fs.unlinkSync(filePath); } catch { /* file may not exist */ }
 
     // Also delete uncropped backup if present
-    const ext = path.extname(deleted.fileName);
-    const base = path.basename(deleted.fileName, ext);
-    const uncroppedPath = path.join(soundDb.getSoundsDir(), `${base}_uncropped${ext}`);
+    const uncroppedPath = soundDb.getUncroppedPath(deleted.fileName);
     try { fs.unlinkSync(uncroppedPath); } catch { /* ignore */ }
 
     // Sync hook: we need to find the category - look up from request context
@@ -432,11 +430,14 @@ router.delete('/categories/:name', (req: Request, res: Response) => {
       try { fs.unlinkSync(filePath); } catch { /* file may not exist */ }
 
       // Also delete uncropped backup if present
-      const ext = path.extname(fileName);
-      const base = path.basename(fileName, ext);
-      const uncroppedPath = path.join(soundDb.getSoundsDir(), `${base}_uncropped${ext}`);
+      const uncroppedPath = soundDb.getUncroppedPath(fileName);
       try { fs.unlinkSync(uncroppedPath); } catch { /* ignore */ }
     }
+
+    // Remove the category subfolder if empty
+    const sanitizedCatName = categoryName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+    const catDir = path.join(soundDb.getSoundsDir(), sanitizedCatName);
+    try { fs.rmdirSync(catDir); } catch { /* not empty or doesn't exist */ }
 
     notifySseClients();
     res.json({ message: 'Category deleted' });
@@ -713,17 +714,22 @@ router.post('/store/download/:categoryId', async (req: Request, res: Response) =
         const arrayBuffer = await soundRes.arrayBuffer();
         const buffer = Buffer.from(arrayBuffer);
 
-        // Generate unique filename
+        // Generate unique filename inside category subfolder
+        const sanitizedCatName = localCatName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+        const catDir = path.join(soundDb.getSoundsDir(), sanitizedCatName);
+        fs.mkdirSync(catDir, { recursive: true });
+
         const ext = path.extname(sound.file_name).toLowerCase();
         const baseName = path.basename(sound.file_name, ext).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
-        let fileName = `${baseName}${ext}`;
-        let destPath = path.join(soundDb.getSoundsDir(), fileName);
+        let plainName = `${baseName}${ext}`;
+        let destPath = path.join(catDir, plainName);
         let counter = 1;
         while (fs.existsSync(destPath)) {
-          fileName = `${baseName}_${counter}${ext}`;
-          destPath = path.join(soundDb.getSoundsDir(), fileName);
+          plainName = `${baseName}_${counter}${ext}`;
+          destPath = path.join(catDir, plainName);
           counter++;
         }
+        const fileName = path.join(sanitizedCatName, plainName);
 
         fs.writeFileSync(destPath, buffer);
 
@@ -793,21 +799,26 @@ router.post('/sounds/add', addSoundUpload, async (req: Request, res: Response) =
     // Get or create the category
     const categoryId = soundDb.getOrCreateCategory(categoryName.trim());
 
-    // Generate a unique filename
+    // Generate a unique filename inside category subfolder
+    const sanitizedCatName = categoryName.trim().replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
+    const catDir = path.join(soundDb.getSoundsDir(), sanitizedCatName);
+    fs.mkdirSync(catDir, { recursive: true });
+
     const ext = path.extname(soundFile.originalname).toLowerCase();
     const baseName = displayName
       ? displayName.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
       : path.basename(soundFile.originalname, ext).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_');
-    let fileName = `${baseName}${ext}`;
-    let destPath = path.join(soundDb.getSoundsDir(), fileName);
+    let plainName = `${baseName}${ext}`;
+    let destPath = path.join(catDir, plainName);
 
     // Avoid collisions
     let counter = 1;
     while (fs.existsSync(destPath)) {
-      fileName = `${baseName}_${counter}${ext}`;
-      destPath = path.join(soundDb.getSoundsDir(), fileName);
+      plainName = `${baseName}_${counter}${ext}`;
+      destPath = path.join(catDir, plainName);
       counter++;
     }
+    const fileName = path.join(sanitizedCatName, plainName);
 
     // Copy uploaded file to sounds dir
     fs.copyFileSync(soundFile.path, destPath);
@@ -817,8 +828,8 @@ router.post('/sounds/add', addSoundUpload, async (req: Request, res: Response) =
     let hasUncropped = false;
     if (originalFile) {
       const origExt = path.extname(originalFile.originalname).toLowerCase();
-      const uncroppedName = `${path.basename(fileName, ext)}_uncropped${origExt}`;
-      const uncroppedDest = path.join(soundDb.getSoundsDir(), uncroppedName);
+      const uncroppedName = `${path.basename(plainName, ext)}_uncropped${origExt}`;
+      const uncroppedDest = path.join(catDir, uncroppedName);
       fs.copyFileSync(originalFile.path, uncroppedDest);
       try { fs.unlinkSync(originalFile.path); } catch { /* ignore */ }
       hasUncropped = true;
@@ -1000,9 +1011,8 @@ router.post('/sounds/reset-crop', (req: Request, res: Response) => {
 
     // Update DB flag
     // Find the sound by matching its file path
-    const fileName = path.basename(soundUrl);
     const sounds = soundDb.getAllSounds();
-    const sound = sounds.find(s => path.basename(s.url) === fileName);
+    const sound = sounds.find(s => s.url === soundUrl);
     if (sound) {
       soundDb.setHasUncropped(sound.id, false);
     }

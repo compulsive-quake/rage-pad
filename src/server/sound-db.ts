@@ -164,7 +164,8 @@ export class SoundDb {
   getUncroppedPath(fileName: string): string {
     const ext = path.extname(fileName);
     const base = path.basename(fileName, ext);
-    return path.join(this.soundsDir, `${base}_uncropped${ext}`);
+    const dir = path.dirname(fileName);
+    return path.join(this.soundsDir, dir, `${base}_uncropped${ext}`);
   }
 
   // ── Sounds CRUD ──────────────────────────────────────────────────────────
@@ -456,14 +457,11 @@ export class SoundDb {
     return rows
       .map(r => ({
         id: r.id,
-        url: path.join(this.soundsDir, r.file_name)
+        url: path.join(this.soundsDir, r.file_name),
+        fileName: r.file_name,
       }))
-      .filter(r => {
-        const ext = path.extname(r.url);
-        const base = path.basename(r.url, ext);
-        const uncroppedPath = path.join(this.soundsDir, `${base}_uncropped${ext}`);
-        return fs.existsSync(uncroppedPath);
-      });
+      .filter(r => fs.existsSync(this.getUncroppedPath(r.fileName)))
+      .map(({ id, url }) => ({ id, url }));
   }
 
   // ── Visibility / Store ──────────────────────────────────────────────────
