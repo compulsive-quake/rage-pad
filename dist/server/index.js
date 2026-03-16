@@ -137,6 +137,21 @@ app.get('/api/qr-code', async (_req, res) => {
         res.status(500).json({ error: 'Failed to generate QR code' });
     }
 });
+// Return a QR code for downloading the Android APK from GitHub releases
+app.get('/api/qr-android', async (_req, res) => {
+    const releaseUrl = 'https://github.com/compulsive-quake/rage-pad/releases/latest';
+    try {
+        const dataUrl = await qrcode_1.default.toDataURL(releaseUrl, {
+            width: 300,
+            margin: 2,
+            color: { dark: '#ffffffff', light: '#00000000' },
+        });
+        res.json({ url: releaseUrl, qrDataUrl: dataUrl });
+    }
+    catch (err) {
+        res.status(500).json({ error: 'Failed to generate QR code' });
+    }
+});
 // ── Update download & install ────────────────────────────────────────────────
 function httpsGetFollowRedirects(url, onResponse, onError) {
     https_1.default.get(url, { headers: { 'User-Agent': 'RagePad' } }, (res) => {

@@ -1,4 +1,4 @@
-import { Component, Input, Output, EventEmitter, OnChanges, OnInit, OnDestroy, SimpleChanges, NgZone, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, OnInit, OnDestroy, NgZone, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { AuthService, AuthUser } from '../../services/auth.service';
@@ -11,8 +11,7 @@ import { Subject, take, takeUntil } from 'rxjs';
   templateUrl: './profile-modal.component.html',
   styleUrls: ['./profile-modal.component.scss']
 })
-export class ProfileModalComponent implements OnChanges, OnInit, OnDestroy {
-  @Input() isOpen = false;
+export class ProfileModalComponent implements OnInit, OnDestroy {
   @Input() user: AuthUser | null = null;
   @Output() closed = new EventEmitter<void>();
 
@@ -39,6 +38,11 @@ export class ProfileModalComponent implements OnChanges, OnInit, OnDestroy {
   constructor(private authService: AuthService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {}
 
   ngOnInit(): void {
+    this.resetState();
+    if (this.user) {
+      this.email = this.user.email || '';
+    }
+
     this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe(user => {
       this.user = user;
       this.cdr.detectChanges();
@@ -48,15 +52,6 @@ export class ProfileModalComponent implements OnChanges, OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-  }
-
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['isOpen'] && this.isOpen) {
-      this.resetState();
-      if (this.user) {
-        this.email = this.user.email || '';
-      }
-    }
   }
 
   private resetState(): void {

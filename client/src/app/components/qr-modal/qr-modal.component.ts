@@ -14,10 +14,18 @@ export class QrModalComponent implements OnChanges {
   @Input() isOpen = false;
   @Output() closed = new EventEmitter<void>();
 
+  activeTab: 'browser' | 'android' = 'browser';
+
   qrDataUrl = '';
   serverUrl = '';
   isLoading = false;
   error = '';
+
+  androidQrDataUrl = '';
+  androidUrl = '';
+  isAndroidLoading = false;
+  androidError = '';
+
   private mouseDownOnOverlay = false;
 
   constructor(private soundService: SoundService) {}
@@ -36,11 +44,16 @@ export class QrModalComponent implements OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen) {
       this.loadQrCode();
+      this.loadAndroidQr();
     }
   }
 
   onClose(): void {
     this.closed.emit();
+  }
+
+  switchTab(tab: 'browser' | 'android'): void {
+    this.activeTab = tab;
   }
 
   private loadQrCode(): void {
@@ -57,6 +70,24 @@ export class QrModalComponent implements OnChanges {
         error: () => {
           this.error = 'Failed to generate QR code';
           this.isLoading = false;
+        }
+      });
+  }
+
+  private loadAndroidQr(): void {
+    this.isAndroidLoading = true;
+    this.androidError = '';
+    this.soundService.getAndroidQr()
+      .pipe(take(1))
+      .subscribe({
+        next: (data) => {
+          this.androidQrDataUrl = data.qrDataUrl;
+          this.androidUrl = data.url;
+          this.isAndroidLoading = false;
+        },
+        error: () => {
+          this.androidError = 'Failed to generate QR code';
+          this.isAndroidLoading = false;
         }
       });
   }

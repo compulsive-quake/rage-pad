@@ -1,0 +1,75 @@
+<div class="connect-screen">
+  <div class="connect-card">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" class="connect-logo">
+      <defs>
+        <radialGradient id="connectBg" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stop-color="#2a1538"/>
+          <stop offset="100%" stop-color="#0f0f1a"/>
+        </radialGradient>
+        <linearGradient id="connectFire" x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%" stop-color="#e74c3c"/>
+          <stop offset="40%" stop-color="#e67e22"/>
+          <stop offset="80%" stop-color="#f1c40f"/>
+          <stop offset="100%" stop-color="#fff5cc"/>
+        </linearGradient>
+        <linearGradient id="connectNote" x1="0" y1="1" x2="0.3" y2="0">
+          <stop offset="0%" stop-color="#8e44ad"/>
+          <stop offset="100%" stop-color="#d5a6e6"/>
+        </linearGradient>
+        <linearGradient id="connectRing" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#9b59b6"/>
+          <stop offset="50%" stop-color="#e74c3c"/>
+          <stop offset="100%" stop-color="#e67e22"/>
+        </linearGradient>
+      </defs>
+      <circle cx="256" cy="256" r="230" fill="url(#connectBg)"/>
+      <circle cx="256" cy="256" r="230" fill="none" stroke="url(#connectRing)" stroke-width="12"/>
+      <g opacity="0.9">
+        <path d="M256 100 C240 160, 200 180, 210 220 C215 245, 235 250, 240 230 C245 215, 230 200, 240 170 C250 145, 256 130, 262 145 C272 170, 258 200, 265 220 C270 235, 285 240, 290 220 C300 180, 270 165, 256 100Z" fill="url(#connectFire)"/>
+        <path d="M200 180 C190 155, 175 150, 180 135 C184 125, 196 130, 195 145 C194 155, 202 160, 200 180Z" fill="url(#connectFire)" opacity="0.7"/>
+        <path d="M312 180 C322 155, 337 150, 332 135 C328 125, 316 130, 317 145 C318 155, 310 160, 312 180Z" fill="url(#connectFire)" opacity="0.7"/>
+      </g>
+      <ellipse cx="222" cy="340" rx="52" ry="40" transform="rotate(-15, 222, 340)" fill="url(#connectNote)"/>
+      <rect x="268" y="148" width="14" height="205" rx="7" fill="url(#connectNote)"/>
+      <path d="M282 148 C282 148, 330 170, 330 210 C330 240, 300 245, 290 230 C310 225, 318 205, 282 185Z" fill="url(#connectNote)"/>
+    </svg>
+
+    <h1>RagePad</h1>
+    <p class="connect-subtitle">Connect to your RagePad server</p>
+
+    <div class="connect-form">
+      <div class="input-row">
+        <div class="input-group host-group">
+          <label for="server-host">Server IP</label>
+          <input
+            id="server-host"
+            type="text"
+            [(ngModel)]="serverHost"
+            placeholder="192.168.1.100"
+            (keydown.enter)="connect()"
+            [disabled]="isConnecting"
+          />
+        </div>
+        <div class="input-group port-group">
+          <label for="server-port">Port</label>
+          <input
+            id="server-port"
+            type="text"
+            [(ngModel)]="serverPort"
+            placeholder="8088"
+            (keydown.enter)="connect()"
+            [disabled]="isConnecting"
+          />
+        </div>
+      </div>
+
+      <button class="connect-btn" (click)="connect()" [disabled]="isConnecting">
+        <span *ngIf="!isConnecting">Connect</span>
+        <span *ngIf="isConnecting">Connecting...</span>
+      </button>
+
+      <p class="connect-error" *ngIf="error">{{ error }}</p>
+      <p class="connect-hint">Enter the IP address shown in your RagePad desktop app's QR code dialog.</p>
+    </div>
+  </div>
+</div>

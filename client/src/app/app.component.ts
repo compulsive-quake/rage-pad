@@ -19,6 +19,7 @@ import { EditDetailsModalComponent } from './components/edit-details-modal/edit-
 import { StoreModalComponent } from './components/store-modal/store-modal.component';
 import { LoginComponent } from './components/login/login.component';
 import { ProfileModalComponent } from './components/profile-modal/profile-modal.component';
+import { ConnectModalComponent } from './components/connect-modal/connect-modal.component';
 import { AuthUser } from './services/auth.service';
 
 @Component({
@@ -40,11 +41,14 @@ import { AuthUser } from './services/auth.service';
     StoreModalComponent,
     LoginComponent,
     ProfileModalComponent,
+    ConnectModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent implements OnInit, OnDestroy {
+  isCapacitor = SoundService.isCapacitor;
+  needsServerConnect = false;
   isAuthenticated = false;
   isAuthChecking = true;
   currentUser: AuthUser | null = null;
@@ -177,6 +181,31 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // On Capacitor, check if we have a saved server URL
+    if (this.isCapacitor) {
+      const savedUrl = SoundService.getServerUrl();
+      if (savedUrl) {
+        SoundService.setServerUrl(savedUrl);
+        this.needsServerConnect = false;
+        this.checkAuth();
+      } else {
+        this.needsServerConnect = true;
+        this.isAuthChecking = false;
+      }
+      return;
+    }
+
+    this.checkAuth();
+  }
+
+  onServerConnected(url: string): void {
+    SoundService.setServerUrl(url);
+    this.needsServerConnect = false;
+    this.isAuthChecking = true;
+    this.checkAuth();
+  }
+
+  private checkAuth(): void {
     // Check auth before loading the app
     this.authService.verifyToken().pipe(take(1)).subscribe(user => {
       this.isAuthChecking = false;
@@ -711,6 +740,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   openProfileModal(): void {
+    this.isSettingsModalOpen = false;
+    this.isStoreOpen = false;
     this.isProfileModalOpen = true;
   }
 

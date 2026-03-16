@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">RagePad</string>
+    <string name="title_activity_main">RagePad</string>
+    <string name="package_name">com.ragepads.app</string>
+    <string name="custom_url_scheme">com.ragepads.app</string>
+</resources>

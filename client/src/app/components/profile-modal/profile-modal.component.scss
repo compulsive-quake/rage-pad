@@ -1,34 +1,21 @@
 :host {
-  display: contents;
-}
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10000;
-  animation: modalFadeIn 0.2s ease;
-}
-
-.modal-content {
-  background: #1a1a2e;
-  border-radius: 16px;
-  border: 1px solid rgba(155, 89, 182, 0.3);
-  width: 90%;
-  max-width: 480px;
-  max-height: 85vh;
+  display: block;
+  flex: 1;
   overflow-y: auto;
-  animation: modalSlideUp 0.3s ease;
 }
 
-.modal-header {
+.profile-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.profile-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 1.5rem 1.5rem 0;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid rgba(155, 89, 182, 0.2);
 
   h2 {
     margin: 0;
@@ -38,17 +25,17 @@
   }
 }
 
-.close-btn {
-  width: 32px;
-  height: 32px;
+.back-btn {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.75rem;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
+  border-radius: 8px;
   cursor: pointer;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
   transition: all 0.2s ease;
 
   &:hover {
@@ -62,8 +49,9 @@
   }
 }
 
-.modal-body {
+.profile-body {
   padding: 1.5rem;
+  max-width: 480px;
 }
 
 .section {
@@ -207,14 +195,4 @@
   margin: 0.5rem 0 0;
   font-size: 0.8rem;
   color: #e74c3c;
-}
-
-@keyframes modalFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes modalSlideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
 }

@@ -112,7 +112,25 @@ const DEFAULT_SETTINGS: AppSettings = {
   providedIn: 'root'
 })
 export class SoundService implements OnDestroy {
+  private static serverOverride: string | null = null;
+
+  static get isCapacitor(): boolean {
+    return !!(window as any).Capacitor?.isNativePlatform?.();
+  }
+
+  static setServerUrl(url: string): void {
+    SoundService.serverOverride = url;
+    localStorage.setItem('ragepad-server-url', url);
+  }
+
+  static getServerUrl(): string | null {
+    return SoundService.serverOverride || localStorage.getItem('ragepad-server-url');
+  }
+
   private get apiUrl(): string {
+    if (SoundService.serverOverride) {
+      return `${SoundService.serverOverride}/api`;
+    }
     return `${window.location.origin}/api`;
   }
 
@@ -142,6 +160,10 @@ export class SoundService implements OnDestroy {
 
   getQrCode(): Observable<{ url: string; qrDataUrl: string }> {
     return this.http.get<{ url: string; qrDataUrl: string }>(`${this.apiUrl}/qr-code`);
+  }
+
+  getAndroidQr(): Observable<{ url: string; qrDataUrl: string }> {
+    return this.http.get<{ url: string; qrDataUrl: string }>(`${this.apiUrl}/qr-android`);
   }
 
   getSettings(): Observable<AppSettings> {

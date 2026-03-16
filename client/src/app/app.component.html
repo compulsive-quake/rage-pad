@@ -1,5 +1,8 @@
+<!-- Server Connect Screen (Capacitor / Android) -->
+<app-connect-modal *ngIf="needsServerConnect" (connected)="onServerConnected($event)"></app-connect-modal>
+
 <!-- Login Screen -->
-<app-login *ngIf="!isAuthenticated && !isAuthChecking" (loggedIn)="onLoginSuccess()"></app-login>
+<app-login *ngIf="!needsServerConnect && !isAuthenticated && !isAuthChecking" (loggedIn)="onLoginSuccess()"></app-login>
 
 <!-- Main App -->
 <div class="app-container" *ngIf="isAuthenticated" [class.wake-blur]="isWakeDialogOpen" [class.wake-dimmed]="isUiDimmed">
@@ -27,7 +30,7 @@
 
   <!-- Main Content / Settings / Store -->
   <app-content
-    *ngIf="!isSettingsModalOpen && !isStoreOpen"
+    *ngIf="!isSettingsModalOpen && !isStoreOpen && !isProfileModalOpen"
     [categories]="categories"
     [filteredSounds]="filteredSounds"
     [isLoading]="isLoading"
@@ -71,10 +74,16 @@
   ></app-settings>
 
   <app-store-modal
-    *ngIf="isStoreOpen && !isSettingsModalOpen"
+    *ngIf="isStoreOpen && !isSettingsModalOpen && !isProfileModalOpen"
     (closed)="isStoreOpen = false"
     (categoryDownloaded)="onCategoryDownloaded($event)"
   ></app-store-modal>
+
+  <app-profile-modal
+    *ngIf="isProfileModalOpen"
+    [user]="currentUser"
+    (closed)="onProfileClosed()"
+  ></app-profile-modal>
 
   <!-- Footer with Playback Controls -->
   <app-footer
@@ -144,13 +153,6 @@
     (closed)="onEditDetailsClosed()"
     (saved)="onEditDetailsSaved()"
   ></app-edit-details-modal>
-
-  <!-- Profile Modal -->
-  <app-profile-modal
-    [isOpen]="isProfileModalOpen"
-    [user]="currentUser"
-    (closed)="onProfileClosed()"
-  ></app-profile-modal>
 
   <!-- Delete Sound Confirmation Dialog -->
   <div class="modal-backdrop" *ngIf="isDeleteConfirmOpen" (click)="cancelDelete()">

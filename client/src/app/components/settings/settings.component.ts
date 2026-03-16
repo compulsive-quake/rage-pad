@@ -101,10 +101,15 @@ export class SettingsComponent implements OnInit, OnChanges {
   qrServerUrl = '';
   isLoadingQr = false;
 
+  // Android QR code
+  androidQrDataUrl = '';
+  androidQrUrl = '';
+
   constructor(private soundService: SoundService) {}
 
   ngOnInit(): void {
     this.loadQrCode();
+    this.loadAndroidQr();
     this.loadAudioDevices();
     this.loadAudioSettings();
     this.loadYoutubeCacheInfo();
@@ -321,6 +326,18 @@ export class SettingsComponent implements OnInit, OnChanges {
         error: () => {
           this.isLoadingQr = false;
         }
+      });
+  }
+
+  private loadAndroidQr(): void {
+    this.soundService.getAndroidQr()
+      .pipe(take(1))
+      .subscribe({
+        next: (data) => {
+          this.androidQrDataUrl = data.qrDataUrl;
+          this.androidQrUrl = data.url;
+        },
+        error: () => {}
       });
   }
 
