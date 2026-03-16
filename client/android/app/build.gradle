@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.ragepads.app"
+    namespace "com.ragepads.ragepad"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.ragepads.app"
+        applicationId "com.ragepads.ragepad"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

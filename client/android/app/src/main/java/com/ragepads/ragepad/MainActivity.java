@@ -1,4 +1,4 @@
-package com.ragepads.app;
+package com.ragepads.ragepad;
 
 import com.getcapacitor.BridgeActivity;
 
