@@ -30,6 +30,8 @@ if (-not $Version) {
 $Tag = "v$Version"
 $InstallerName = "Ragepad_${Version}_x64-setup.exe"
 $InstallerPath = Join-Path "builds" $InstallerName
+$ApkName = "RagePad-${Version}.apk"
+$ApkPath = Join-Path "builds" $ApkName
 
 Write-Host "==> Preparing release $Tag" -ForegroundColor Cyan
 
@@ -107,6 +109,30 @@ if (-not (Test-Path $InstallerPath)) {
 $InstallerSize = [math]::Round((Get-Item $InstallerPath).Length / 1MB, 1)
 Write-Host "==> Installer built: $InstallerName (${InstallerSize} MB)" -ForegroundColor Green
 
+# ── Build Android ─────────────────────────────────────────────────────────
+
+Write-Host "==> Building Android release (npm run build:android)" -ForegroundColor Cyan
+npm run build:android
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: Android build failed." -ForegroundColor Red
+    exit 1
+}
+
+# Copy APK to builds directory
+$ApkSource = Join-Path "src-tauri" "gen" "android" "app" "build" "outputs" "apk" "universal" "release" "app-universal-release.apk"
+if (-not (Test-Path $ApkSource)) {
+    # Try alternate path
+    $ApkSource = Join-Path "src-tauri" "gen" "android" "app" "build" "outputs" "apk" "universal" "release" "app-universal-release-unsigned.apk"
+}
+if (-not (Test-Path $ApkSource)) {
+    Write-Host "ERROR: Android APK not found. Checked paths under src-tauri/gen/android/app/build/outputs/apk/" -ForegroundColor Red
+    exit 1
+}
+
+Copy-Item $ApkSource $ApkPath -Force
+$ApkSize = [math]::Round((Get-Item $ApkPath).Length / 1MB, 1)
+Write-Host "==> APK built: $ApkName (${ApkSize} MB)" -ForegroundColor Green
+
 # ── Tag ────────────────────────────────────────────────────────────────────
 
 Write-Host "==> Creating git tag $Tag" -ForegroundColor Cyan
@@ -118,8 +144,8 @@ if ($LASTEXITCODE -ne 0) { exit 1 }
 
 # ── Create GitHub release & upload installer ───────────────────────────────
 
-Write-Host "==> Creating GitHub release $Tag and uploading installer" -ForegroundColor Cyan
-gh release create $Tag $InstallerPath --title $Tag --generate-notes
+Write-Host "==> Creating GitHub release $Tag and uploading assets" -ForegroundColor Cyan
+gh release create $Tag $InstallerPath $ApkPath --title $Tag --generate-notes
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 $ReleaseUrl = (gh release view $Tag --json url -q ".url").Trim()

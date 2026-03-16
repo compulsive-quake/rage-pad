@@ -20,9 +20,18 @@ pub fn run() {
             let client_dist = resource_dir.join("client-dist");
             let server_bundle = resource_dir.join("server-bundle.js");
 
-            // Writable directories go under %APPDATA% (app_data_dir) so we don't
+            // Writable directories go under %APPDATA%\ragepad so we don't
             // need admin rights when installed to Program Files.
-            let app_data = app.path().app_data_dir()?;
+            let app_data = std::path::PathBuf::from(
+                std::env::var("APPDATA").unwrap_or_else(|_| {
+                    app.path()
+                        .app_data_dir()
+                        .expect("no app data dir")
+                        .to_string_lossy()
+                        .into_owned()
+                }),
+            )
+            .join("ragepad");
             let data_dir = app_data.join("data");
             let tmp_dir = app_data.join("tmp");
 
@@ -36,54 +45,58 @@ pub fn run() {
             // Audio engine binary bundled alongside the server
             let audio_engine_path = resource_dir.join("ragepad-audio-engine.exe");
 
-            let (mut rx, _child) = app
-                .shell()
-                .sidecar("ragepad-server")?
-                .args([server_bundle.to_str().unwrap_or("")])
-                .env("RAGE_PAD_CLIENT_DIST", client_dist.to_str().unwrap_or(""))
-                .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
-                .env("RAGE_PAD_DATA_DIR", data_dir.to_str().unwrap_or(""))
-                .env("RAGE_PAD_YT_DLP", yt_dlp_path.to_str().unwrap_or(""))
-                .env("RAGE_PAD_AUDIO_ENGINE", audio_engine_path.to_str().unwrap_or(""))
-                .spawn()?;
+            // In dev mode the servers are started by beforeDevCommand, so skip
+            // the sidecar. In production the bundled Node binary runs the server.
+            if !cfg!(dev) {
+                let (mut rx, _child) = app
+                    .shell()
+                    .sidecar("ragepad-server")?
+                    .args([server_bundle.to_str().unwrap_or("")])
+                    .env("RAGE_PAD_CLIENT_DIST", client_dist.to_str().unwrap_or(""))
+                    .env("RAGE_PAD_TMP_DIR", tmp_dir.to_str().unwrap_or(""))
+                    .env("RAGE_PAD_DATA_DIR", data_dir.to_str().unwrap_or(""))
+                    .env("RAGE_PAD_YT_DLP", yt_dlp_path.to_str().unwrap_or(""))
+                    .env("RAGE_PAD_AUDIO_ENGINE", audio_engine_path.to_str().unwrap_or(""))
+                    .spawn()?;
 
-            // Drain sidecar stdout/stderr into a log file for debugging.
-            // When the server process terminates, exit the Tauri app as well
-            // (e.g. the server exits after launching an update installer).
-            let log_path = data_dir.join("server.log");
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let mut file = fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_path)
-                    .ok();
-                while let Some(event) = rx.recv().await {
-                    if let Some(ref mut f) = file {
-                        match &event {
-                            CommandEvent::Stdout(line) => {
-                                let _ = writeln!(f, "[stdout] {}", String::from_utf8_lossy(line));
+                // Drain sidecar stdout/stderr into a log file for debugging.
+                // When the server process terminates, exit the Tauri app as well
+                // (e.g. the server exits after launching an update installer).
+                let log_path = data_dir.join("server.log");
+                let app_handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let mut file = fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(&log_path)
+                        .ok();
+                    while let Some(event) = rx.recv().await {
+                        if let Some(ref mut f) = file {
+                            match &event {
+                                CommandEvent::Stdout(line) => {
+                                    let _ = writeln!(f, "[stdout] {}", String::from_utf8_lossy(line));
+                                }
+                                CommandEvent::Stderr(line) => {
+                                    let _ = writeln!(f, "[stderr] {}", String::from_utf8_lossy(line));
+                                }
+                                CommandEvent::Terminated(payload) => {
+                                    let _ = writeln!(
+                                        f,
+                                        "[terminated] code={:?} signal={:?}",
+                                        payload.code, payload.signal
+                                    );
+                                    // Server exited — quit the Tauri app
+                                    app_handle.exit(0);
+                                }
+                                CommandEvent::Error(err) => {
+                                    let _ = writeln!(f, "[error] {}", err);
+                                }
+                                _ => {}
                             }
-                            CommandEvent::Stderr(line) => {
-                                let _ = writeln!(f, "[stderr] {}", String::from_utf8_lossy(line));
-                            }
-                            CommandEvent::Terminated(payload) => {
-                                let _ = writeln!(
-                                    f,
-                                    "[terminated] code={:?} signal={:?}",
-                                    payload.code, payload.signal
-                                );
-                                // Server exited — quit the Tauri app
-                                app_handle.exit(0);
-                            }
-                            CommandEvent::Error(err) => {
-                                let _ = writeln!(f, "[error] {}", err);
-                            }
-                            _ => {}
                         }
                     }
-                }
-            });
+                });
+            }
 
             // Wait for the server to be reachable before showing the window,
             // so users never see an error page on startup.

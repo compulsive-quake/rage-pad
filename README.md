@@ -1,11 +1,11 @@
 # Rage Pad
 
-A Node.js application with an Angular frontend that integrates with Soundpad software API to list and play sounds. Ships as a standalone Windows desktop app via Tauri, or runs in any browser on your local network.
+A Node.js application with an Angular frontend that provides a soundboard to list and play sounds. Ships as a standalone Windows desktop app via Tauri, or runs in any browser on your local network.
 
 ## Screenshots
 
 ### Soundboard
-Browse your entire Soundpad library organized by category with a clean dark-themed UI.
+Browse your entire sound library organized by category with a clean dark-themed UI.
 
 ![Soundboard](docs/screenshots/soundboard.png)
 
@@ -17,7 +17,7 @@ Drag & drop audio files or paste a YouTube URL to add new sounds.
 
 ## Features
 
-- Browse all sounds from your Soundpad library organized by category
+- Browse all sounds organized by category
 - Search sounds by title, artist, or category
 - Play sounds with a single click
 - Pause/Resume and Stop playback controls
@@ -29,11 +29,6 @@ Drag & drop audio files or paste a YouTube URL to add new sounds.
 - QR code for quick phone access on your local network
 - Responsive design for desktop and mobile
 - Clean, modern dark-themed UI
-
-## Prerequisites
-
-- **Soundpad** software installed and running on Windows
-- Soundpad's Remote Control feature must be enabled
 
 ## Installation (Windows)
 
@@ -60,8 +55,7 @@ rage-pad/
 ├── src/
 │   └── server/           # Express backend
 │       ├── index.ts      # Server entry point
-│       ├── routes.ts     # API routes
-│       └── soundpad-client.ts  # Soundpad API client
+│       └── routes.ts     # API routes
 ├── client/               # Angular frontend
 │   └── src/
 │       └── app/
@@ -128,23 +122,14 @@ The application will be available at `http://localhost:3000`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/status` | Check Soundpad connection status |
-| GET | `/api/sounds` | Get all sounds from Soundpad |
+| GET | `/api/status` | Check connection status |
+| GET | `/api/sounds` | Get all sounds |
 | GET | `/api/sounds/search?q=query` | Search sounds by title/artist |
 | POST | `/api/sounds/:index/play` | Play a sound by index |
 | POST | `/api/stop` | Stop current playback |
 | POST | `/api/pause` | Toggle pause/resume |
 | GET | `/api/playback` | Get current playback status |
 | POST | `/api/volume` | Set volume (0-100) |
-
-## Soundpad Configuration
-
-Make sure Soundpad is running with Remote Control enabled:
-
-1. Open Soundpad
-2. Go to **File** → **Preferences** → **Remote Control**
-3. Enable **"Allow remote control"**
-4. The application communicates via named pipe: `\\.\pipe\sp_remote_control`
 
 ## Technologies Used
 
@@ -166,19 +151,15 @@ Make sure Soundpad is running with Remote Control enabled:
 ## Troubleshooting
 
 ### "Disconnected" status
-- Make sure Soundpad is running
-- Verify Remote Control is enabled in Soundpad preferences
 - Restart the backend server
 
 ### No sounds appearing
-- Ensure Soundpad has sounds loaded in its library
+- Ensure sounds are loaded in the library
 - Click the "Refresh" button to reload sounds
 - Check the browser console for errors
 
 ### Sounds not playing
-- Verify Soundpad is not muted
 - Check that the sound file exists and is valid
-- Try playing the sound directly in Soundpad first
 
 ## License
 
