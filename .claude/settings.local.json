@@ -18,7 +18,8 @@
       "WebFetch(domain:forum.vb-audio.com)",
       "WebFetch(domain:github.com)",
       "Bash(curl:*)",
-      "Bash(netstat:*)"
+      "Bash(netstat:*)",
+      "Bash(find:*)"
     ]
   }
 }

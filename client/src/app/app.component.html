@@ -1,4 +1,8 @@
-<div class="app-container" [class.wake-blur]="isWakeDialogOpen" [class.wake-dimmed]="isUiDimmed">
+<!-- Login Screen -->
+<app-login *ngIf="!isAuthenticated && !isAuthChecking" (loggedIn)="onLoginSuccess()"></app-login>
+
+<!-- Main App -->
+<div class="app-container" *ngIf="isAuthenticated" [class.wake-blur]="isWakeDialogOpen" [class.wake-dimmed]="isUiDimmed">
   <!-- Header -->
   <app-header
     [isReorderMode]="isReorderMode"
@@ -17,6 +21,8 @@
     [showVBCableBanner]="showVBCableBanner"
     (vbcableDismissed)="onVBCableDismissed()"
     (vbcableInstalled)="onVBCableInstalled()"
+    [user]="currentUser"
+    (openProfile)="openProfileModal()"
   ></app-header>
 
   <!-- Main Content / Settings / Store -->
@@ -138,6 +144,13 @@
     (closed)="onEditDetailsClosed()"
     (saved)="onEditDetailsSaved()"
   ></app-edit-details-modal>
+
+  <!-- Profile Modal -->
+  <app-profile-modal
+    [isOpen]="isProfileModalOpen"
+    [user]="currentUser"
+    (closed)="onProfileClosed()"
+  ></app-profile-modal>
 
   <!-- Delete Sound Confirmation Dialog -->
   <div class="modal-backdrop" *ngIf="isDeleteConfirmOpen" (click)="cancelDelete()">

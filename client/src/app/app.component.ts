@@ -5,6 +5,7 @@ import { HttpClientModule } from '@angular/common/http';
 import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { SoundService, AppSettings } from './services/sound.service';
+import { AuthService } from './services/auth.service';
 import { Sound, ConnectionStatus, Category, CategoryIcon } from './models/sound.model';
 import { HeaderComponent } from './components/header/header.component';
 import { FooterComponent } from './components/footer/footer.component';
@@ -16,6 +17,9 @@ import { ContextMenuComponent } from './components/context-menu/context-menu.com
 import { EditSoundModalComponent } from './components/edit-sound-modal/edit-sound-modal.component';
 import { EditDetailsModalComponent } from './components/edit-details-modal/edit-details-modal.component';
 import { StoreModalComponent } from './components/store-modal/store-modal.component';
+import { LoginComponent } from './components/login/login.component';
+import { ProfileModalComponent } from './components/profile-modal/profile-modal.component';
+import { AuthUser } from './services/auth.service';
 
 @Component({
   selector: 'app-root',
@@ -34,11 +38,18 @@ import { StoreModalComponent } from './components/store-modal/store-modal.compon
     EditSoundModalComponent,
     EditDetailsModalComponent,
     StoreModalComponent,
+    LoginComponent,
+    ProfileModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
 })
 export class AppComponent implements OnInit, OnDestroy {
+  isAuthenticated = false;
+  isAuthChecking = true;
+  currentUser: AuthUser | null = null;
+  isProfileModalOpen = false;
+
   sounds: Sound[] = [];
   filteredSounds: Sound[] = [];
   categories: Category[] = [];
@@ -155,7 +166,7 @@ export class AppComponent implements OnInit, OnDestroy {
   private searchSubject$ = new Subject<string>();
   private playbackTimer: any = null;
 
-  constructor(private soundService: SoundService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
+  constructor(private soundService: SoundService, private authService: AuthService, private ngZone: NgZone, private cdr: ChangeDetectorRef) {
     this.autoUpdateCheckEnabled = true;
     this.serverPort = Number(window.location.port) || 8088;
   }
@@ -166,6 +177,27 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
+    // Check auth before loading the app
+    this.authService.verifyToken().pipe(take(1)).subscribe(user => {
+      this.isAuthChecking = false;
+      if (user) {
+        this.isAuthenticated = true;
+        this.initializeApp();
+      }
+    });
+  }
+
+  onLoginSuccess(): void {
+    this.isAuthenticated = true;
+    this.initializeApp();
+  }
+
+  private initializeApp(): void {
+    // Subscribe to user profile changes
+    this.authService.user$.pipe(takeUntil(this.destroy$)).subscribe(user => {
+      this.currentUser = user;
+    });
+
     // Load settings from the server DB, then initialise features
     this.soundService.getSettings()
       .pipe(take(1))
@@ -676,6 +708,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   toggleSettingsModal(): void {
     this.isSettingsModalOpen = !this.isSettingsModalOpen;
+  }
+
+  openProfileModal(): void {
+    this.isProfileModalOpen = true;
+  }
+
+  onProfileClosed(): void {
+    this.isProfileModalOpen = false;
   }
 
   onSaveSettings(payload: SettingsPayload): void {

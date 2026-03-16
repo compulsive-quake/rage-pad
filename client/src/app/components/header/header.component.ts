@@ -2,6 +2,7 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { SearchBarComponent } from '../search-bar/search-bar.component';
 import { VBCableBannerComponent } from '../vbcable-banner/vbcable-banner.component';
+import { AuthUser } from '../../services/auth.service';
 
 @Component({
   selector: 'app-header',
@@ -18,6 +19,7 @@ export class HeaderComponent {
   @Input() showVBCableBanner = false;
   @Input() showNsfw = false;
   @Input() nsfwModeEnabled = false;
+  @Input() user: AuthUser | null = null;
 
   isFullscreen = false;
 
@@ -30,6 +32,7 @@ export class HeaderComponent {
   @Output() toggleStore = new EventEmitter<void>();
   @Output() vbcableDismissed = new EventEmitter<void>();
   @Output() vbcableInstalled = new EventEmitter<void>();
+  @Output() openProfile = new EventEmitter<void>();
 
   onSearch(query: string): void {
     this.search.emit(query);
@@ -57,6 +60,17 @@ export class HeaderComponent {
 
   onToggleStore(): void {
     this.toggleStore.emit();
+  }
+
+  onOpenProfile(): void {
+    this.openProfile.emit();
+  }
+
+  get profilePictureUrl(): string {
+    if (this.user?.profilePicture) {
+      return `data:image/png;base64,${this.user.profilePicture}`;
+    }
+    return '';
   }
 
   toggleFullscreen(): void {
