@@ -111,7 +111,7 @@ Write-Host "==> Installer built: $InstallerName (${InstallerSize} MB)" -Foregrou
 
 # ── Set JAVA_HOME from local JDK if available ────────────────────────────
 
-$LocalJdk = Join-Path $RepoRoot ".jdk" "temurin-17"
+$LocalJdk = Join-Path (Join-Path $RepoRoot ".jdk") "temurin-17"
 if (Test-Path $LocalJdk) {
     $JdkHome = Get-ChildItem $LocalJdk -Directory | Select-Object -First 1 -ExpandProperty FullName
     if ($JdkHome) {
@@ -130,10 +130,10 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Copy APK to builds directory
-$ApkSource = Join-Path "src-tauri" "gen" "android" "app" "build" "outputs" "apk" "universal" "release" "app-universal-release.apk"
+$ApkSource = [IO.Path]::Combine("src-tauri", "gen", "android", "app", "build", "outputs", "apk", "universal", "release", "app-universal-release.apk")
 if (-not (Test-Path $ApkSource)) {
     # Try alternate path
-    $ApkSource = Join-Path "src-tauri" "gen" "android" "app" "build" "outputs" "apk" "universal" "release" "app-universal-release-unsigned.apk"
+    $ApkSource = [IO.Path]::Combine("src-tauri", "gen", "android", "app", "build", "outputs", "apk", "universal", "release", "app-universal-release-unsigned.apk")
 }
 if (-not (Test-Path $ApkSource)) {
     Write-Host "ERROR: Android APK not found. Checked paths under src-tauri/gen/android/app/build/outputs/apk/" -ForegroundColor Red
