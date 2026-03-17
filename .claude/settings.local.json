@@ -19,7 +19,14 @@
       "WebFetch(domain:github.com)",
       "Bash(curl:*)",
       "Bash(netstat:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "WebFetch(domain:tauri.app)",
+      "WebFetch(domain:v2.tauri.app)",
+      "WebFetch(domain:adoptium.net)",
+      "Bash(cd:*)",
+      "Bash(export:*)",
+      "Bash(which npm:*)"
     ]
   }
 }

@@ -1,6 +1,6 @@
 /tmp
 /out-tsc
-
+/.*
 /node_modules
 /dist
 npm-debug.log*
@@ -14,6 +14,9 @@ yarn-error.log*
 
 # Builds
 /builds/
+
+# JDK
+/.jdk/
 
 # Tauri
 /data/

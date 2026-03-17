@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "externalBin": [],
+    "resources": {
+      "../client/dist/rage-pad-client/browser/*": "client-dist/"
+    }
+  }
+}

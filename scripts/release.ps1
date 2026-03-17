@@ -109,6 +109,17 @@ if (-not (Test-Path $InstallerPath)) {
 $InstallerSize = [math]::Round((Get-Item $InstallerPath).Length / 1MB, 1)
 Write-Host "==> Installer built: $InstallerName (${InstallerSize} MB)" -ForegroundColor Green
 
+# ── Set JAVA_HOME from local JDK if available ────────────────────────────
+
+$LocalJdk = Join-Path $RepoRoot ".jdk" "temurin-17"
+if (Test-Path $LocalJdk) {
+    $JdkHome = Get-ChildItem $LocalJdk -Directory | Select-Object -First 1 -ExpandProperty FullName
+    if ($JdkHome) {
+        $env:JAVA_HOME = $JdkHome
+        Write-Host "==> Using local JDK: $env:JAVA_HOME" -ForegroundColor Cyan
+    }
+}
+
 # ── Build Android ─────────────────────────────────────────────────────────
 
 Write-Host "==> Building Android release (npm run build:android)" -ForegroundColor Cyan
