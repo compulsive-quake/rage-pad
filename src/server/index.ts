@@ -646,8 +646,8 @@ app.use((err: Error, req: Request, res: Response) => {
 });
 
 // Start server
-let server = app.listen(startupPort, () => {
-  console.log(`Rage Pad server running on http://localhost:${startupPort}`);
+let server = app.listen(startupPort, '0.0.0.0', () => {
+  console.log(`Rage Pad server running on http://0.0.0.0:${startupPort}`);
   console.log(`API available at http://localhost:${startupPort}/api`);
   console.log(`Audio engine ready`);
 });

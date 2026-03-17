@@ -76,6 +76,11 @@ export class ProfileModalComponent implements OnInit, OnDestroy {
     this.closed.emit();
   }
 
+  logout(): void {
+    this.authService.logout();
+    this.closed.emit();
+  }
+
   saveEmail(): void {
     if (!this.email.trim()) {
       this.emailError = 'Email is required';

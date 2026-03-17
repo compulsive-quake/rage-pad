@@ -58,7 +58,11 @@ export class LoginComponent {
       },
       error: (err) => {
         this.isLoading = false;
-        this.error = err?.error?.error || 'Login failed. Check your credentials and server URL.';
+        if (err.status === 0) {
+          this.error = 'Could not connect to server. Check that the server is running and the URL is correct.';
+        } else {
+          this.error = err?.error?.error || 'Invalid username or password.';
+        }
       }
     });
   }
