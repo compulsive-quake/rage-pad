@@ -1,12 +1,13 @@
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 
 use cpal::traits::{DeviceTrait, StreamTrait};
 use cpal::{Device, SampleFormat, Stream, StreamConfig};
 use rodio::Decoder;
+use rodio::Source;
 
 use crate::devices;
 
@@ -113,6 +114,72 @@ impl FilePlayback {
 }
 
 // ---------------------------------------------------------------------------
+// Audio resampling helpers
+// ---------------------------------------------------------------------------
+
+/// Resample a buffer of interleaved samples using linear interpolation.
+/// `src_rate` and `dst_rate` are in Hz; `channels` is the channel count.
+fn resample(samples: &[f32], src_rate: u32, dst_rate: u32, channels: u16) -> Vec<f32> {
+    if src_rate == dst_rate || samples.is_empty() || channels == 0 {
+        return samples.to_vec();
+    }
+
+    let ch = channels as usize;
+    let src_frames = samples.len() / ch;
+    if src_frames == 0 {
+        return Vec::new();
+    }
+
+    let ratio = dst_rate as f64 / src_rate as f64;
+    let dst_frames = (src_frames as f64 * ratio).ceil() as usize;
+    let mut out = Vec::with_capacity(dst_frames * ch);
+
+    for i in 0..dst_frames {
+        let src_pos = i as f64 / ratio;
+        let idx = src_pos as usize;
+        let frac = (src_pos - idx as f64) as f32;
+
+        for c in 0..ch {
+            let s0 = samples.get(idx * ch + c).copied().unwrap_or(0.0);
+            let s1 = samples.get((idx + 1) * ch + c).copied().unwrap_or(s0);
+            out.push(s0 + (s1 - s0) * frac);
+        }
+    }
+
+    out
+}
+
+/// Convert between channel counts for interleaved samples.
+fn convert_channels(samples: &[f32], src_ch: u16, dst_ch: u16) -> Vec<f32> {
+    if src_ch == dst_ch || samples.is_empty() {
+        return samples.to_vec();
+    }
+
+    let src = src_ch as usize;
+    let dst = dst_ch as usize;
+    let frames = samples.len() / src;
+    let mut out = Vec::with_capacity(frames * dst);
+
+    for f in 0..frames {
+        let base = f * src;
+        if dst > src {
+            // Upmix: copy existing channels, duplicate last channel for the rest
+            for c in 0..dst {
+                out.push(samples[base + c.min(src - 1)]);
+            }
+        } else {
+            // Downmix: average all source channels into each destination channel
+            let avg: f32 = samples[base..base + src].iter().sum::<f32>() / src as f32;
+            for _ in 0..dst {
+                out.push(avg);
+            }
+        }
+    }
+
+    out
+}
+
+// ---------------------------------------------------------------------------
 // Public mixer API
 // ---------------------------------------------------------------------------
 
@@ -138,6 +205,14 @@ pub struct MixerState {
 
     // --- currently playing file ----------------------------------------
     file_playback: Arc<Mutex<Option<FilePlayback>>>,
+
+    // --- output stream format (for resampling) -------------------------
+    output_sample_rate: Arc<AtomicU32>,
+    output_channels: Arc<AtomicU32>,
+
+    // --- input stream format (for mic resampling) ----------------------
+    input_sample_rate: Arc<AtomicU32>,
+    input_channels: Arc<AtomicU32>,
 }
 
 impl MixerState {
@@ -155,6 +230,10 @@ impl MixerState {
             output_stream: None,
             ring: Arc::new(RingBuffer::new(ring_capacity)),
             file_playback: Arc::new(Mutex::new(None)),
+            output_sample_rate: Arc::new(AtomicU32::new(48000)),
+            output_channels: Arc::new(AtomicU32::new(2)),
+            input_sample_rate: Arc::new(AtomicU32::new(48000)),
+            input_channels: Arc::new(AtomicU32::new(2)),
         }
     }
 
@@ -173,9 +252,15 @@ impl MixerState {
         };
 
         let config = default_stream_config_for(&device, true)?;
+        let in_rate = config.sample_rate.0;
+        let in_ch = config.channels as u32;
+        self.input_sample_rate.store(in_rate, Ordering::Release);
+        self.input_channels.store(in_ch, Ordering::Release);
 
         let ring = Arc::clone(&self.ring);
         let paused = Arc::clone(&self.paused);
+        let out_rate = Arc::clone(&self.output_sample_rate);
+        let out_ch = Arc::clone(&self.output_channels);
 
         let stream = device
             .build_input_stream(
@@ -184,7 +269,18 @@ impl MixerState {
                     if paused.load(Ordering::Relaxed) {
                         return;
                     }
-                    ring.push(data);
+
+                    let dst_rate = out_rate.load(Ordering::Relaxed);
+                    let dst_ch = out_ch.load(Ordering::Relaxed) as u16;
+
+                    // Resample and channel-convert mic input to match output device.
+                    if in_rate != dst_rate || in_ch as u16 != dst_ch {
+                        let resampled = resample(data, in_rate, dst_rate, in_ch as u16);
+                        let converted = convert_channels(&resampled, in_ch as u16, dst_ch);
+                        ring.push(&converted);
+                    } else {
+                        ring.push(data);
+                    }
                 },
                 |err| {
                     eprintln!("[capture error] {err}");
@@ -210,6 +306,10 @@ impl MixerState {
         };
 
         let config = default_stream_config_for(&device, false)?;
+        self.output_sample_rate
+            .store(config.sample_rate.0, Ordering::Release);
+        self.output_channels
+            .store(config.channels as u32, Ordering::Release);
 
         let ring = Arc::clone(&self.ring);
         let file_playback = Arc::clone(&self.file_playback);
@@ -283,16 +383,28 @@ impl MixerState {
     ///
     /// Decoding happens on a background thread so playback begins almost
     /// immediately — the output callback starts reading samples as soon as
-    /// the first chunk has been decoded.
+    /// the first chunk has been decoded.  The decode thread resamples and
+    /// channel-converts the audio to match the output device format.
     pub fn play_file(&mut self, path: &str, file_volume: f32) -> Result<(), String> {
         let file = File::open(path).map_err(|e| format!("Cannot open file: {e}"))?;
         let reader = BufReader::new(file);
         let decoder =
             Decoder::new(reader).map_err(|e| format!("Cannot decode audio file: {e}"))?;
 
-        // Pre-allocate for ~10 seconds at 48kHz to reduce reallocations.
+        // Capture the source file's format before we move the decoder.
+        let src_rate = decoder.sample_rate();
+        let src_channels = decoder.channels();
+
+        // Snapshot the output device format.
+        let dst_rate = self.output_sample_rate.load(Ordering::Acquire);
+        let dst_channels = self.output_channels.load(Ordering::Acquire) as u16;
+
+        let needs_resample = src_rate != dst_rate;
+        let needs_channel_convert = src_channels != dst_channels;
+
+        // Pre-allocate for ~10 seconds at the output rate to reduce reallocations.
         let playback = FilePlayback {
-            samples: Vec::with_capacity(48_000 * 10),
+            samples: Vec::with_capacity(dst_rate as usize * dst_channels as usize * 10),
             position: 0,
             volume: file_volume.clamp(0.0, 1.0),
             decode_complete: false,
@@ -304,8 +416,9 @@ impl MixerState {
         }
         self.playing.store(true, Ordering::Release);
 
-        // Spawn a background thread to decode samples in chunks and push them
-        // into the shared FilePlayback buffer.
+        // Spawn a background thread to decode samples in chunks, resample to
+        // match the output device, and push them into the shared FilePlayback
+        // buffer.
         let file_playback = Arc::clone(&self.file_playback);
         thread::spawn(move || {
             const CHUNK_SIZE: usize = 4096;
@@ -314,11 +427,19 @@ impl MixerState {
             for sample in decoder {
                 chunk.push(sample as f32 / i16::MAX as f32);
                 if chunk.len() >= CHUNK_SIZE {
+                    let processed = process_chunk(
+                        &chunk,
+                        src_rate,
+                        dst_rate,
+                        src_channels,
+                        dst_channels,
+                        needs_resample,
+                        needs_channel_convert,
+                    );
                     if let Ok(mut guard) = file_playback.lock() {
                         if let Some(ref mut fp) = *guard {
-                            fp.samples.extend_from_slice(&chunk);
+                            fp.samples.extend_from_slice(&processed);
                         } else {
-                            // Playback was stopped/replaced — abort decode.
                             return;
                         }
                     }
@@ -330,7 +451,16 @@ impl MixerState {
             if let Ok(mut guard) = file_playback.lock() {
                 if let Some(ref mut fp) = *guard {
                     if !chunk.is_empty() {
-                        fp.samples.extend_from_slice(&chunk);
+                        let processed = process_chunk(
+                            &chunk,
+                            src_rate,
+                            dst_rate,
+                            src_channels,
+                            dst_channels,
+                            needs_resample,
+                            needs_channel_convert,
+                        );
+                        fp.samples.extend_from_slice(&processed);
                     }
                     fp.decode_complete = true;
                 }
@@ -379,6 +509,31 @@ impl MixerState {
             }
         }
         true
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: resample + channel-convert a chunk of decoded audio
+// ---------------------------------------------------------------------------
+
+fn process_chunk(
+    chunk: &[f32],
+    src_rate: u32,
+    dst_rate: u32,
+    src_channels: u16,
+    dst_channels: u16,
+    needs_resample: bool,
+    needs_channel_convert: bool,
+) -> Vec<f32> {
+    match (needs_resample, needs_channel_convert) {
+        (false, false) => chunk.to_vec(),
+        (true, false) => resample(chunk, src_rate, dst_rate, src_channels),
+        (false, true) => convert_channels(chunk, src_channels, dst_channels),
+        (true, true) => {
+            // Resample first (at source channel count), then convert channels.
+            let resampled = resample(chunk, src_rate, dst_rate, src_channels);
+            convert_channels(&resampled, src_channels, dst_channels)
+        }
     }
 }
 

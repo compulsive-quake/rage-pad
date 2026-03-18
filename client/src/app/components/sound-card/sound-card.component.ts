@@ -68,7 +68,7 @@ import { Sound } from '../../models/sound.model';
     }
 
     .sound-title {
-      font-size: 0.9rem;
+      font-size: 1.1rem;
       font-weight: 600;
       color: #fff;
       text-align: center;
