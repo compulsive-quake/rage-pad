@@ -36,6 +36,9 @@ pub enum Command {
     /// Change the master output volume (0.0 .. 1.0).
     SetVolume { volume: f32 },
 
+    /// Change the microphone pass-through volume (0.0 .. 1.0).
+    SetMicVolume { volume: f32 },
+
     /// Query the current mixer state.
     GetStatus,
 
@@ -61,6 +64,7 @@ pub enum Response {
         playing: bool,
         paused: bool,
         volume: f32,
+        mic_volume: f32,
         input_device: Option<String>,
         output_device: Option<String>,
     },

@@ -74,9 +74,9 @@ router.get('/status', async (_req: Request, res: Response) => {
 router.get('/audio/engine-status', async (_req: Request, res: Response) => {
   try {
     const status = await audioEngine.getStatus();
-    res.json({ playing: status.playing, paused: status.paused, volume: status.volume });
+    res.json({ playing: status.playing, paused: status.paused, volume: status.volume, micVolume: status.micVolume });
   } catch {
-    res.json({ playing: false, paused: false, volume: 0 });
+    res.json({ playing: false, paused: false, volume: 0, micVolume: 100 });
   }
 });
 
@@ -222,6 +222,20 @@ router.post('/volume', async (req: Request, res: Response) => {
     res.json({ message: 'Volume set', volume });
   } catch (error) {
     res.status(500).json({ error: 'Failed to set volume' });
+  }
+});
+
+router.post('/mic-volume', async (req: Request, res: Response) => {
+  try {
+    const { volume } = req.body;
+    if (typeof volume !== 'number' || volume < 0 || volume > 150) {
+      res.status(400).json({ error: 'Volume must be a number between 0 and 150' });
+      return;
+    }
+    await audioEngine.setMicVolume(volume);
+    res.json({ message: 'Mic volume set', volume });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to set mic volume' });
   }
 });
 

@@ -94,6 +94,7 @@
     [playbackProgress]="playbackProgress"
     [playbackTimeRemaining]="playbackTimeRemaining"
     [volume]="volume"
+    [micVolume]="micVolume"
     [playbackMode]="playbackMode"
     [updateAvailable]="updateAvailable && !updateDismissed"
     [latestVersion]="latestVersion"
@@ -101,6 +102,7 @@
     (stop)="stopSound()"
     (togglePause)="togglePause()"
     (volumeChange)="setVolume($event)"
+    (micVolumeChange)="setMicVolume($event)"
     (playbackModeChange)="setPlaybackMode($event)"
     (dismissUpdate)="dismissUpdate()"
   ></app-footer>

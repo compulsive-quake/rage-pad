@@ -195,6 +195,8 @@ pub struct MixerState {
     // --- volume --------------------------------------------------------
     /// Master volume shared with the output callback.
     pub volume: Arc<Mutex<f32>>,
+    /// Microphone pass-through volume (0.0 .. 1.0).
+    pub mic_volume: Arc<Mutex<f32>>,
 
     // --- streams (kept alive so WASAPI doesn't close them) -------------
     capture_stream: Option<Stream>,
@@ -226,6 +228,7 @@ impl MixerState {
             playing: Arc::new(AtomicBool::new(false)),
             paused: Arc::new(AtomicBool::new(false)),
             volume: Arc::new(Mutex::new(1.0)),
+            mic_volume: Arc::new(Mutex::new(1.0)),
             capture_stream: None,
             output_stream: None,
             ring: Arc::new(RingBuffer::new(ring_capacity)),
@@ -314,6 +317,7 @@ impl MixerState {
         let ring = Arc::clone(&self.ring);
         let file_playback = Arc::clone(&self.file_playback);
         let volume = Arc::clone(&self.volume);
+        let mic_volume = Arc::clone(&self.mic_volume);
         let playing = Arc::clone(&self.playing);
         let paused = Arc::clone(&self.paused);
 
@@ -333,6 +337,16 @@ impl MixerState {
                     // 1. Pull mic samples from the ring buffer and write them
                     //    directly into the output buffer.
                     ring.pop(data);
+
+                    // 1b. Apply mic volume to the pass-through samples.
+                    if let Ok(mv) = mic_volume.try_lock() {
+                        let v = *mv;
+                        if (v - 1.0).abs() > f32::EPSILON {
+                            for s in data.iter_mut() {
+                                *s *= v;
+                            }
+                        }
+                    }
 
                     // 2. If a file is playing, mix (add) its samples on top.
                     if playing.load(Ordering::Relaxed) {
@@ -492,6 +506,13 @@ impl MixerState {
     pub fn set_volume(&self, vol: f32) {
         if let Ok(mut v) = self.volume.lock() {
             *v = vol.clamp(0.0, 1.0);
+        }
+    }
+
+    /// Set microphone pass-through volume (0.0 .. 1.5).
+    pub fn set_mic_volume(&self, vol: f32) {
+        if let Ok(mut v) = self.mic_volume.lock() {
+            *v = vol.clamp(0.0, 1.5);
         }
     }
 

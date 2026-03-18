@@ -18,6 +18,7 @@ interface EngineResponse {
   playing?: boolean;
   paused?: boolean;
   volume?: number;
+  mic_volume?: number;
   input_device?: string | null;
   output_device?: string | null;
 }
@@ -31,6 +32,7 @@ export interface AudioStatus {
   playing: boolean;
   paused: boolean;
   volume: number;
+  micVolume: number;
   inputDevice: string | null;
   outputDevice: string | null;
 }
@@ -225,12 +227,18 @@ export class AudioEngine extends EventEmitter {
     if (resp.type === 'error') throw new Error(resp.message);
   }
 
+  async setMicVolume(volume: number): Promise<void> {
+    const resp = await this.send({ cmd: 'set_mic_volume', volume: volume / 100 });
+    if (resp.type === 'error') throw new Error(resp.message);
+  }
+
   async getStatus(): Promise<AudioStatus> {
     const resp = await this.send({ cmd: 'get_status' });
     return {
       playing: resp.playing || false,
       paused: resp.paused || false,
       volume: Math.round((resp.volume || 0) * 100),
+      micVolume: Math.round((resp.mic_volume ?? 1) * 100),
       inputDevice: resp.input_device || null,
       outputDevice: resp.output_device || null,
     };

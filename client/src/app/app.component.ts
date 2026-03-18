@@ -65,6 +65,7 @@ export class AppComponent implements OnInit, OnDestroy {
   isActuallyPlaying = false;
   isPaused = false;
   volume = 100;
+  micVolume = 100;
   playbackMode: 'both' | 'mic' | 'speakers' = 'both';
   searchQuery = '';
   isSettingsModalOpen = false;
@@ -803,6 +804,18 @@ export class AppComponent implements OnInit, OnDestroy {
       .subscribe({
         error: (err) => {
           console.error('Failed to set volume:', err);
+        }
+      });
+  }
+
+  setMicVolume(volume: number): void {
+    this.micVolume = volume;
+
+    this.soundService.setMicVolume(volume)
+      .pipe(take(1))
+      .subscribe({
+        error: (err) => {
+          console.error('Failed to set mic volume:', err);
         }
       });
   }

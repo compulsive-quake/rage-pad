@@ -19,6 +19,7 @@ export class FooterComponent {
   @Input() playbackProgress = 0;
   @Input() playbackTimeRemaining = 0;
   @Input() volume = 100;
+  @Input() micVolume = 100;
   @Input() playbackMode: 'both' | 'mic' | 'speakers' = 'both';
 
   /** Update notification inputs */
@@ -35,6 +36,7 @@ export class FooterComponent {
   @Output() stop = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
   @Output() volumeChange = new EventEmitter<number>();
+  @Output() micVolumeChange = new EventEmitter<number>();
   @Output() playbackModeChange = new EventEmitter<'both' | 'mic' | 'speakers'>();
   @Output() dismissUpdate = new EventEmitter<void>();
 
@@ -50,6 +52,10 @@ export class FooterComponent {
 
   onVolumeChange(value: number): void {
     this.volumeChange.emit(value);
+  }
+
+  onMicVolumeChange(value: number): void {
+    this.micVolumeChange.emit(value);
   }
 
   onSetPlaybackMode(mode: 'both' | 'mic' | 'speakers'): void {

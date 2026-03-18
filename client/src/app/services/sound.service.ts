@@ -291,6 +291,15 @@ export class SoundService implements OnDestroy {
     );
   }
 
+  setMicVolume(volume: number): Observable<any> {
+    return this.http.post(`${this.audioApiUrl}/mic-volume`, { volume }).pipe(
+      catchError(error => {
+        console.error('Failed to set mic volume:', error);
+        return of({ error: 'Failed to set mic volume' });
+      })
+    );
+  }
+
   updateSoundDetails(id: number, customTag: string, artist: string, category?: string, icon?: string, hideTitle?: boolean, nsfw?: boolean): Observable<any> {
     return this.http.post(`${this.apiUrl}/sounds/${id}/update-details`, {
       customTag, artist, category, icon, hideTitle, nsfw
@@ -754,9 +763,9 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  getAudioEngineStatus(): Observable<{ playing: boolean; paused: boolean; volume: number }> {
-    return this.http.get<{ playing: boolean; paused: boolean; volume: number }>(`${this.audioApiUrl}/audio/engine-status`).pipe(
-      catchError(() => of({ playing: false, paused: false, volume: 0 }))
+  getAudioEngineStatus(): Observable<{ playing: boolean; paused: boolean; volume: number; micVolume: number }> {
+    return this.http.get<{ playing: boolean; paused: boolean; volume: number; micVolume: number }>(`${this.audioApiUrl}/audio/engine-status`).pipe(
+      catchError(() => of({ playing: false, paused: false, volume: 0, micVolume: 100 }))
     );
   }
 

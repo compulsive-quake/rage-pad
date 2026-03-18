@@ -131,12 +131,19 @@ fn handle_command(mixer: &mut mixer::MixerState, cmd: Command) -> Option<Respons
             Some(Response::Ok)
         }
 
+        Command::SetMicVolume { volume } => {
+            mixer.set_mic_volume(volume);
+            Some(Response::Ok)
+        }
+
         Command::GetStatus => {
             let vol = mixer.volume.lock().map(|v| *v).unwrap_or(1.0);
+            let mic_vol = mixer.mic_volume.lock().map(|v| *v).unwrap_or(1.0);
             Some(Response::Status {
                 playing: mixer.is_playing(),
                 paused: mixer.paused.load(std::sync::atomic::Ordering::Acquire),
                 volume: vol,
+                mic_volume: mic_vol,
                 input_device: mixer.input_device_name.clone(),
                 output_device: mixer.output_device_name.clone(),
             })

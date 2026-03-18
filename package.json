@@ -1,6 +1,6 @@
 {
   "name": "ragepad",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "Sound board with Angular frontend and WASAPI audio engine",
   "main": "dist/server/index.js",
   "repository": {

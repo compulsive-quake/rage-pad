@@ -155,6 +155,30 @@
   text-align: right;
 }
 
+.mic-volume-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mic-volume-icon {
+  width: 18px;
+  height: 18px;
+  color: rgba(255, 255, 255, 0.5);
+  flex-shrink: 0;
+}
+
+.mic-slider {
+  width: 80px;
+}
+
+.volume-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
 .playback-mode-toggle {
   display: flex;
   align-items: center;
