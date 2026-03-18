@@ -79,7 +79,7 @@
           min="0"
           max="150"
           [(ngModel)]="micVolume"
-          (input)="onMicVolumeChange(micVolume)"
+          (ngModelChange)="onMicVolumeChange($event)"
         />
         <span class="volume-value">{{ micVolume }}%</span>
       </div>
@@ -97,7 +97,7 @@
         min="0"
         max="100"
         [(ngModel)]="volume"
-        (input)="onVolumeChange(volume)"
+        (ngModelChange)="onVolumeChange($event)"
       />
       <span class="volume-value">{{ volume }}%</span>
     </div>
