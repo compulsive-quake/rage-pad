@@ -597,7 +597,7 @@ router.put('/category-visibility', async (req, res) => {
 // ── Store proxy endpoints ──────────────────────────────────────────────────
 router.get('/store/categories', async (_req, res) => {
     try {
-        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || 'http://localhost:9090';
+        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
         const response = await fetch(`${storeUrl}/api/categories`, {
             signal: AbortSignal.timeout(10000),
         });
@@ -614,7 +614,7 @@ router.get('/store/categories', async (_req, res) => {
 });
 router.get('/store/categories/:id', async (req, res) => {
     try {
-        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || 'http://localhost:9090';
+        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
         const response = await fetch(`${storeUrl}/api/categories/${req.params.id}`, {
             signal: AbortSignal.timeout(10000),
         });
@@ -646,7 +646,7 @@ router.get('/store/local-category-names', (_req, res) => {
 // ── Store sound file proxy (for preview playback) ─────────────────────────
 router.get('/store/sound-file/:fileName', async (req, res) => {
     try {
-        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || 'http://localhost:9090';
+        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
         const fileName = req.params.fileName;
         const response = await fetch(`${storeUrl}/api/sound-files/${encodeURIComponent(fileName)}`, {
             signal: AbortSignal.timeout(30000),
@@ -669,7 +669,7 @@ router.get('/store/sound-file/:fileName', async (req, res) => {
 // ── Store download ─────────────────────────────────────────────────────────
 router.post('/store/download/:categoryId', async (req, res) => {
     try {
-        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || 'http://localhost:9090';
+        const storeUrl = (0, database_1.getSetting)('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
         const categoryId = req.params.categoryId;
         // SSE headers for progress
         res.writeHead(200, {

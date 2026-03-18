@@ -3,6 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+require("dotenv/config");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const path_1 = __importDefault(require("path"));
@@ -354,7 +355,7 @@ public static class AudioDefaults {
         Marshal.ReleaseComObject(policy);
     }
 }
-'@ -IgnoreStandardError 2>$null
+'@ 2>$null
 
 $playbackId = [AudioDefaults]::GetDefaultId(0)
 $recordingId = [AudioDefaults]::GetDefaultId(1)
@@ -362,7 +363,25 @@ $recordingId = [AudioDefaults]::GetDefaultId(1)
 # ── Run VB-Cable installer ──
 Start-Process -FilePath '${installerPath.replace(/'/g, "''")}' -ArgumentList '-i','-h' -Verb RunAs -Wait
 
+# ── Wait for Windows to finish registering the new audio device ──
+# The driver install can complete asynchronously after the installer process exits,
+# causing Windows to change the default device AFTER our restore runs.
+Start-Sleep -Seconds 3
+
 # ── Restore original defaults (all three roles: Console=0, Multimedia=1, Communications=2) ──
+if ($playbackId) {
+    [AudioDefaults]::SetDefault($playbackId, 0)
+    [AudioDefaults]::SetDefault($playbackId, 1)
+    [AudioDefaults]::SetDefault($playbackId, 2)
+}
+if ($recordingId) {
+    [AudioDefaults]::SetDefault($recordingId, 0)
+    [AudioDefaults]::SetDefault($recordingId, 1)
+    [AudioDefaults]::SetDefault($recordingId, 2)
+}
+
+# ── Second restore pass to handle late device registration ──
+Start-Sleep -Seconds 2
 if ($playbackId) {
     [AudioDefaults]::SetDefault($playbackId, 0)
     [AudioDefaults]::SetDefault($playbackId, 1)
