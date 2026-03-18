@@ -15,6 +15,7 @@ import { trySyncIfPublic, syncCategoryToStore, removeCategoryFromStore } from '.
 let soundDb: SoundDb;
 let audioEngine: AudioEngine;
 
+
 export function initRoutes(db: SoundDb, engine: AudioEngine): Router {
   soundDb = db;
   audioEngine = engine;
@@ -50,6 +51,13 @@ function notifySseClients(): void {
   }
 }
 
+function broadcastSseEvent(event: string, data: Record<string, unknown>): void {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of sseClients) {
+    client.write(payload);
+  }
+}
+
 // ── Status ─────────────────────────────────────────────────────────────────
 
 router.get('/status', async (_req: Request, res: Response) => {
@@ -58,6 +66,17 @@ router.get('/status', async (_req: Request, res: Response) => {
     res.json({ connected: engineRunning });
   } catch {
     res.status(500).json({ connected: false, error: 'Failed to check status' });
+  }
+});
+
+// ── Audio engine playback status ───────────────────────────────────────────
+
+router.get('/audio/engine-status', async (_req: Request, res: Response) => {
+  try {
+    const status = await audioEngine.getStatus();
+    res.json({ playing: status.playing, paused: status.paused, volume: status.volume });
+  } catch {
+    res.json({ playing: false, paused: false, volume: 0 });
   }
 });
 
@@ -134,11 +153,14 @@ router.post('/sounds/:id/play', async (req: Request, res: Response) => {
 
     const filePath = soundDb.getSoundFilePath(id);
     if (!filePath || !fs.existsSync(filePath)) {
+      console.warn(`[play] Sound ${id} file not found: ${filePath}`);
       res.status(404).json({ error: 'Sound file not found' });
       return;
     }
 
-    const { speakersOnly = false, micOnly = false } = req.body;
+    const { speakersOnly = false, micOnly = false, speakerPlayback = false } = req.body;
+
+    console.log(`[play] id=${id} speakersOnly=${speakersOnly} micOnly=${micOnly} speakerPlayback=${speakerPlayback} engineRunning=${audioEngine.running} file=${filePath}`);
 
     // Play through audio engine (mic/VB-Cable output) unless speakers-only.
     // Fire-and-forget: don't await the decode — respond immediately so the
@@ -147,12 +169,19 @@ router.post('/sounds/:id/play', async (req: Request, res: Response) => {
       audioEngine.playFireAndForget(filePath);
     }
 
+    // Mobile clients can't use Web Audio — tell connected desktop clients
+    // to play the sound through their speakers via Web Audio.
+    if (speakerPlayback) {
+      broadcastSseEvent('play-sound', { id });
+    }
+
     // Record the play
     soundDb.recordPlay(id);
 
-    res.json({ message: 'Sound playing', speakersOnly, micOnly });
+    res.json({ message: 'Sound playing', speakersOnly, micOnly, speakerPlayback });
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Failed to play sound';
+    console.error(`[play] Error: ${errMsg}`);
     res.status(500).json({ error: errMsg });
   }
 });
@@ -160,6 +189,7 @@ router.post('/sounds/:id/play', async (req: Request, res: Response) => {
 router.post('/stop', async (_req: Request, res: Response) => {
   try {
     await audioEngine.stopPlayback();
+    broadcastSseEvent('stop-sound', {});
     res.json({ message: 'Sound stopped' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to stop sound' });

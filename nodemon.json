@@ -4,7 +4,7 @@
   "delay": 1000,
   "legacyWatch": true,
   "env": {
-    "PORT": "3000"
+    "PORT": "8088"
   },
   "exec": "ts-node src/server/index.ts"
 }

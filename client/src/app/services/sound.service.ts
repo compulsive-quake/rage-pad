@@ -88,6 +88,7 @@ export interface AppSettings {
   nsfwModeEnabled: boolean;
   storeServerUrl: string;
   storeUploaderToken: string;
+  audioEngineUrl: string;
   dataDir?: string;
 }
 
@@ -106,6 +107,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   nsfwModeEnabled: false,
   storeServerUrl: 'http://localhost:9090',
   storeUploaderToken: '',
+  audioEngineUrl: '',
 };
 
 @Injectable({
@@ -113,9 +115,17 @@ const DEFAULT_SETTINGS: AppSettings = {
 })
 export class SoundService implements OnDestroy {
   private static serverOverride: string | null = null;
+  private static audioEngineOverride: string | null = null;
 
   static get isCapacitor(): boolean {
     return !!(window as any).Capacitor?.isNativePlatform?.();
+  }
+
+  /** True when running as a mobile app (Capacitor or Tauri Android) that needs a remote server URL. */
+  static get isMobileApp(): boolean {
+    if (SoundService.isCapacitor) return true;
+    // Tauri Android: __TAURI_INTERNALS__ exists but no local server is bundled
+    return !!(window as any).__TAURI_INTERNALS__ && /android/i.test(navigator.userAgent);
   }
 
   static setServerUrl(url: string): void {
@@ -127,11 +137,27 @@ export class SoundService implements OnDestroy {
     return SoundService.serverOverride || localStorage.getItem('ragepad-server-url');
   }
 
+  static setAudioEngineUrl(url: string): void {
+    SoundService.audioEngineOverride = url || null;
+  }
+
+  static getAudioEngineUrl(): string | null {
+    return SoundService.audioEngineOverride;
+  }
+
   private get apiUrl(): string {
     if (SoundService.serverOverride) {
       return `${SoundService.serverOverride}/api`;
     }
     return `${window.location.origin}/api`;
+  }
+
+  /** API URL for audio engine commands (play/stop/pause/volume). Falls back to main apiUrl. */
+  private get audioApiUrl(): string {
+    if (SoundService.audioEngineOverride) {
+      return `${SoundService.audioEngineOverride}/api`;
+    }
+    return this.apiUrl;
   }
 
   private connectionStatus$ = new BehaviorSubject<ConnectionStatus>({ connected: false });
@@ -227,17 +253,18 @@ export class SoundService implements OnDestroy {
     );
   }
 
-  playSound(id: number, speakersOnly = false, micOnly = false): Observable<any> {
-    return this.http.post(`${this.apiUrl}/sounds/${id}/play`, { speakersOnly, micOnly }).pipe(
+  playSound(id: number, speakersOnly = false, micOnly = false, speakerPlayback = false): Observable<any> {
+    const url = `${this.audioApiUrl}/sounds/${id}/play`;
+    return this.http.post(url, { speakersOnly, micOnly, speakerPlayback }).pipe(
       catchError(error => {
         console.error('Failed to play sound:', error);
-        return of({ error: 'Failed to play sound' });
+        throw error;
       })
     );
   }
 
   stopSound(): Observable<any> {
-    return this.http.post(`${this.apiUrl}/stop`, {}).pipe(
+    return this.http.post(`${this.audioApiUrl}/stop`, {}).pipe(
       catchError(error => {
         console.error('Failed to stop sound:', error);
         return of({ error: 'Failed to stop sound' });
@@ -246,7 +273,7 @@ export class SoundService implements OnDestroy {
   }
 
   togglePause(): Observable<any> {
-    return this.http.post(`${this.apiUrl}/pause`, {}).pipe(
+    return this.http.post(`${this.audioApiUrl}/pause`, {}).pipe(
       catchError(error => {
         console.error('Failed to toggle pause:', error);
         return of({ error: 'Failed to toggle pause' });
@@ -255,7 +282,7 @@ export class SoundService implements OnDestroy {
   }
 
   setVolume(volume: number): Observable<any> {
-    return this.http.post(`${this.apiUrl}/volume`, { volume }).pipe(
+    return this.http.post(`${this.audioApiUrl}/volume`, { volume }).pipe(
       catchError(error => {
         console.error('Failed to set volume:', error);
         return of({ error: 'Failed to set volume' });
@@ -426,6 +453,30 @@ export class SoundService implements OnDestroy {
 
       es.onerror = () => {
         console.warn('[config-watch] SSE connection error; browser will retry');
+      };
+
+      return () => es.close();
+    });
+  }
+
+  /** Emits sound IDs that a mobile client wants played through desktop speakers. */
+  listenForRemotePlay(): Observable<{ event: 'play'; id: number } | { event: 'stop' }> {
+    return new Observable(observer => {
+      const es = new EventSource(`${this.apiUrl}/config-watch`);
+
+      es.addEventListener('play-sound', (e: any) => {
+        this.ngZone.run(() => {
+          const data = JSON.parse(e.data);
+          observer.next({ event: 'play', id: data.id });
+        });
+      });
+
+      es.addEventListener('stop-sound', () => {
+        this.ngZone.run(() => observer.next({ event: 'stop' }));
+      });
+
+      es.onerror = () => {
+        console.warn('[remote-play] SSE connection error; browser will retry');
       };
 
       return () => es.close();
@@ -699,6 +750,12 @@ export class SoundService implements OnDestroy {
         console.error('Failed to auto-select VB-Cable:', error);
         return of({ message: 'Failed', device: '' });
       })
+    );
+  }
+
+  getAudioEngineStatus(): Observable<{ playing: boolean; paused: boolean; volume: number }> {
+    return this.http.get<{ playing: boolean; paused: boolean; volume: number }>(`${this.audioApiUrl}/audio/engine-status`).pipe(
+      catchError(() => of({ playing: false, paused: false, volume: 0 }))
     );
   }
 

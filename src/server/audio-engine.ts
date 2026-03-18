@@ -192,7 +192,6 @@ export class AudioEngine extends EventEmitter {
       volume: volume !== undefined ? volume / 100 : undefined,
     };
     const json = JSON.stringify(command) + '\n';
-    // Add a pending handler that just logs errors silently
     this.pendingRequests.push({
       resolve: (resp) => {
         if (resp.type === 'error') {

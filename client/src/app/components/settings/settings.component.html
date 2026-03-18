@@ -157,6 +157,24 @@
             </div>
           </div>
         </div>
+
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Audio engine URL</span>
+              <span class="settings-toggle-description">URL of the audio engine server for sound playback</span>
+            </div>
+            <div class="port-field">
+              <input
+                type="text"
+                class="wake-minutes-input cache-path-input"
+                [ngModel]="draftAudioEngineUrl"
+                (ngModelChange)="onAudioEngineUrlChange($event)"
+                placeholder="http://localhost:8089"
+              />
+            </div>
+          </div>
+        </div>
       </ng-container>
 
       <!-- ── Audio tab ────────────────────────────────────────────────── -->

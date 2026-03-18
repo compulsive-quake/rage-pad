@@ -19,6 +19,7 @@ export interface SettingsPayload {
   youtubeCacheMaxSizeMb: number;
   nsfwModeEnabled: boolean;
   storeServerUrl: string;
+  audioEngineUrl: string;
 }
 
 @Component({
@@ -42,6 +43,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() updateAvailable = false;
   @Input() nsfwModeEnabled = false;
   @Input() storeServerUrl = 'http://localhost:9090';
+  @Input() audioEngineUrl = '';
 
   @Output() saveSettings = new EventEmitter<SettingsPayload>();
   @Output() closeSettings = new EventEmitter<void>();
@@ -60,6 +62,8 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftNsfwMode = false;
   draftStoreServerUrl = 'http://localhost:9090';
   currentStoreServerUrl = 'http://localhost:9090';
+  draftAudioEngineUrl = '';
+  currentAudioEngineUrl = '';
 
   // YouTube cache draft values
   draftYoutubeCachePath = '';
@@ -120,7 +124,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['keepAwakeEnabled'] || changes['idleTimeoutEnabled'] || changes['wakeMinutes'] ||
         changes['autoUpdateCheckEnabled'] || changes['updateCheckIntervalMinutes'] || changes['serverPort'] ||
-        changes['nsfwModeEnabled'] || changes['storeServerUrl']) {
+        changes['nsfwModeEnabled'] || changes['storeServerUrl'] || changes['audioEngineUrl']) {
       this.snapshotDraft();
     }
 
@@ -142,6 +146,8 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.draftNsfwMode = this.nsfwModeEnabled;
     this.draftStoreServerUrl = this.storeServerUrl;
     this.currentStoreServerUrl = this.storeServerUrl;
+    this.draftAudioEngineUrl = this.audioEngineUrl;
+    this.currentAudioEngineUrl = this.audioEngineUrl;
     this.draftInputDevice = this.currentInputDevice;
     this.draftOutputDevice = this.currentOutputDevice;
     this.draftYoutubeCachePath = this.currentYoutubeCachePath;
@@ -158,6 +164,7 @@ export class SettingsComponent implements OnInit, OnChanges {
            this.draftServerPort !== this.serverPort ||
            this.draftNsfwMode !== this.nsfwModeEnabled ||
            this.draftStoreServerUrl !== this.currentStoreServerUrl ||
+           this.draftAudioEngineUrl !== this.currentAudioEngineUrl ||
            this.draftInputDevice !== this.currentInputDevice ||
            this.draftOutputDevice !== this.currentOutputDevice ||
            this.draftYoutubeCachePath !== this.currentYoutubeCachePath ||
@@ -204,6 +211,10 @@ export class SettingsComponent implements OnInit, OnChanges {
 
   onStoreServerUrlChange(value: string): void {
     this.draftStoreServerUrl = value;
+  }
+
+  onAudioEngineUrlChange(value: string): void {
+    this.draftAudioEngineUrl = value;
   }
 
   onInputDeviceChange(device: string): void {
@@ -270,6 +281,7 @@ export class SettingsComponent implements OnInit, OnChanges {
     this.currentInputDevice = this.draftInputDevice;
     this.currentOutputDevice = this.draftOutputDevice;
     this.currentStoreServerUrl = this.draftStoreServerUrl;
+    this.currentAudioEngineUrl = this.draftAudioEngineUrl;
     this.currentYoutubeCachePath = this.draftYoutubeCachePath;
     this.currentYoutubeCacheTtl = this.draftYoutubeCacheTtl;
     this.currentYoutubeCacheMaxSize = this.draftYoutubeCacheMaxSize;
@@ -288,6 +300,7 @@ export class SettingsComponent implements OnInit, OnChanges {
       youtubeCacheMaxSizeMb: this.draftYoutubeCacheMaxSize,
       nsfwModeEnabled: this.draftNsfwMode,
       storeServerUrl: this.draftStoreServerUrl,
+      audioEngineUrl: this.draftAudioEngineUrl,
     });
   }
 
@@ -363,6 +376,9 @@ export class SettingsComponent implements OnInit, OnChanges {
         // Store server URL
         this.currentStoreServerUrl = settings.storeServerUrl || 'http://localhost:9090';
         this.draftStoreServerUrl = this.currentStoreServerUrl;
+        // Audio engine URL
+        this.currentAudioEngineUrl = settings.audioEngineUrl || '';
+        this.draftAudioEngineUrl = this.currentAudioEngineUrl;
         // YouTube cache settings
         this.currentYoutubeCachePath = settings.youtubeCachePath || '';
         this.currentYoutubeCacheTtl = settings.youtubeCacheTtlMinutes || 4320;

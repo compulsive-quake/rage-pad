@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, NgZone, ChangeDetectorRef, HostListener }
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClientModule } from '@angular/common/http';
-import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer } from 'rxjs';
+import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer, interval } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { SoundService, AppSettings } from './services/sound.service';
 import { AuthService } from './services/auth.service';
@@ -48,6 +48,7 @@ import { AuthUser } from './services/auth.service';
 })
 export class AppComponent implements OnInit, OnDestroy {
   isCapacitor = SoundService.isCapacitor;
+  isMobileApp = SoundService.isMobileApp;
   needsServerConnect = false;
   isAuthenticated = false;
   isAuthChecking = true;
@@ -77,6 +78,7 @@ export class AppComponent implements OnInit, OnDestroy {
   // Store modal state
   isStoreOpen = false;
   storeServerUrl = 'http://localhost:9090';
+  audioEngineUrl = '';
 
   // Add Sound modal state
   isAddSoundModalOpen = false;
@@ -112,6 +114,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // SSE config-watch
   private configWatchSub: Subscription | null = null;
+  private enginePollSub: Subscription | null = null;
+  private remotePlaySub: Subscription | null = null;
 
   // Wake Lock
   keepAwakeEnabled: boolean = false;
@@ -181,8 +185,8 @@ export class AppComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    // On Capacitor, check if we have a saved server URL
-    if (this.isCapacitor) {
+    // On mobile (Capacitor or Tauri Android), check if we have a saved server URL
+    if (this.isMobileApp) {
       const savedUrl = SoundService.getServerUrl();
       if (savedUrl) {
         SoundService.setServerUrl(savedUrl);
@@ -239,6 +243,10 @@ export class AppComponent implements OnInit, OnDestroy {
         this.serverPort = settings.serverPort;
         this.nsfwModeEnabled = settings.nsfwModeEnabled;
         this.storeServerUrl = settings.storeServerUrl || 'http://localhost:9090';
+        this.audioEngineUrl = settings.audioEngineUrl || '';
+        if (this.audioEngineUrl) {
+          SoundService.setAudioEngineUrl(this.audioEngineUrl);
+        }
         this.initializeAfterSettingsLoad();
       });
 
@@ -272,6 +280,7 @@ export class AppComponent implements OnInit, OnDestroy {
     }
 
     this.checkVBCableStatus();
+    this.startRemotePlayListener();
   }
 
   private startConfigWatch(): void {
@@ -292,6 +301,29 @@ export class AppComponent implements OnInit, OnDestroy {
     if (this.configWatchSub) {
       this.configWatchSub.unsubscribe();
       this.configWatchSub = null;
+    }
+  }
+
+  // ── Remote play (mobile → desktop speaker relay) ────────────────────────
+
+  private startRemotePlayListener(): void {
+    if (this.isMobileApp) return; // Only desktop listens
+    this.remotePlaySub = this.soundService.listenForRemotePlay()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(msg => {
+        if (msg.event === 'play') {
+          console.log(`[remote-play] Playing sound ${msg.id} via Web Audio`);
+          this.playWebAudio(msg.id);
+        } else if (msg.event === 'stop') {
+          this.stopWebAudio();
+        }
+      });
+  }
+
+  private stopRemotePlayListener(): void {
+    if (this.remotePlaySub) {
+      this.remotePlaySub.unsubscribe();
+      this.remotePlaySub = null;
     }
   }
 
@@ -342,6 +374,8 @@ export class AppComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.stopConfigWatch();
     this.stopUpdateCheck();
+    this.stopEngineStatusPoll();
+    this.stopRemotePlayListener();
     this.releaseWakeLock();
     this.clearWakeTimers();
     this.stopWebAudio();
@@ -533,6 +567,25 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.startProgressTimer();
 
+    if (this.isMobileApp) {
+      // Mobile app: always play through the server audio engine only — never
+      // through the device speakers via Web Audio.
+      const playingSoundId = sound.id;
+      this.soundService.playSound(sound.id, false, false, true)
+        .pipe(take(1))
+        .subscribe({
+          next: () => {
+            // Poll the audio engine status to detect when playback ends
+            this.startEngineStatusPoll(playingSoundId);
+          },
+          error: (err) => {
+            console.error('Failed to play sound on audio engine:', err);
+            this.onSoundPlaybackEnded();
+          }
+        });
+      return;
+    }
+
     // Start Web Audio speaker playback immediately (in parallel with server call)
     if (!micOnly) {
       this.playWebAudio(sound.id);
@@ -642,6 +695,32 @@ export class AppComponent implements OnInit, OnDestroy {
     }
   }
 
+  // ── Audio engine status polling (mobile) ────────────────────────────────
+
+  private startEngineStatusPoll(soundId: number): void {
+    this.stopEngineStatusPoll();
+    this.enginePollSub = interval(500).pipe(
+      takeUntil(this.destroy$),
+      switchMap(() => this.soundService.getAudioEngineStatus())
+    ).subscribe(status => {
+      if (this.currentlyPlayingId !== soundId) {
+        this.stopEngineStatusPoll();
+        return;
+      }
+      if (!status.playing && !status.paused) {
+        this.stopEngineStatusPoll();
+        this.onSoundPlaybackEnded();
+      }
+    });
+  }
+
+  private stopEngineStatusPoll(): void {
+    if (this.enginePollSub) {
+      this.enginePollSub.unsubscribe();
+      this.enginePollSub = null;
+    }
+  }
+
   parseDuration(duration: string): number {
     if (!duration) return 0;
     const parts = duration.split(':');
@@ -672,6 +751,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   stopSound(): void {
     this.soundQueue = [];
+    this.stopEngineStatusPoll();
     this.soundService.stopSound()
       .pipe(take(1))
       .subscribe({
@@ -817,6 +897,11 @@ export class AppComponent implements OnInit, OnDestroy {
 
     if (payload.storeServerUrl !== this.storeServerUrl) {
       this.storeServerUrl = payload.storeServerUrl;
+    }
+
+    if (payload.audioEngineUrl !== this.audioEngineUrl) {
+      this.audioEngineUrl = payload.audioEngineUrl;
+      SoundService.setAudioEngineUrl(this.audioEngineUrl);
     }
   }
 
@@ -1070,6 +1155,7 @@ export class AppComponent implements OnInit, OnDestroy {
   // ── VB-Cable ────────────────────────────────────────────────────────────
 
   get showVBCableBanner(): boolean {
+    if (SoundService.isMobileApp) return false;
     return !this.vbCableInstalled && !this.vbCableDismissed;
   }
 

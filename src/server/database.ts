@@ -18,6 +18,7 @@ export interface AppSettings {
   nsfwModeEnabled: boolean;
   storeServerUrl: string;
   storeUploaderToken: string;
+  audioEngineUrl: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -35,6 +36,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nsfwModeEnabled: false,
   storeServerUrl: 'http://localhost:9090',
   storeUploaderToken: '',
+  audioEngineUrl: '',
 };
 
 // ── Data dir & file path ─────────────────────────────────────────────────────
