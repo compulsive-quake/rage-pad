@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { BehaviorSubject, Observable, of } from 'rxjs';
 import { map, catchError, tap } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface AuthUser {
   userId: number;
@@ -54,7 +55,7 @@ export class AuthService {
   }
 
   get storeServerUrl(): string {
-    return localStorage.getItem(this.STORE_URL_KEY) || 'http://localhost:9090';
+    return localStorage.getItem(this.STORE_URL_KEY) || environment.storeServerUrl;
   }
 
   set storeServerUrl(url: string) {

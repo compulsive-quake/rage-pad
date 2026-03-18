@@ -595,7 +595,7 @@ router.put('/category-visibility', async (req: Request, res: Response) => {
 
 router.get('/store/categories', async (_req: Request, res: Response) => {
   try {
-    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const storeUrl = getSetting('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
     const response = await fetch(`${storeUrl}/api/categories`, {
       signal: AbortSignal.timeout(10000),
     });
@@ -612,7 +612,7 @@ router.get('/store/categories', async (_req: Request, res: Response) => {
 
 router.get('/store/categories/:id', async (req: Request, res: Response) => {
   try {
-    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const storeUrl = getSetting('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
     const response = await fetch(`${storeUrl}/api/categories/${req.params.id}`, {
       signal: AbortSignal.timeout(10000),
     });
@@ -646,7 +646,7 @@ router.get('/store/local-category-names', (_req: Request, res: Response) => {
 
 router.get('/store/sound-file/:fileName', async (req: Request, res: Response) => {
   try {
-    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const storeUrl = getSetting('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
     const fileName = req.params.fileName;
     const response = await fetch(`${storeUrl}/api/sound-files/${encodeURIComponent(fileName)}`, {
       signal: AbortSignal.timeout(30000),
@@ -670,7 +670,7 @@ router.get('/store/sound-file/:fileName', async (req: Request, res: Response) =>
 
 router.post('/store/download/:categoryId', async (req: Request, res: Response) => {
   try {
-    const storeUrl = getSetting('storeServerUrl') || 'http://localhost:9090';
+    const storeUrl = getSetting('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
     const categoryId = req.params.categoryId;
 
     // SSE headers for progress

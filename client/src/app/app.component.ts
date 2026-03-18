@@ -5,6 +5,7 @@ import { HttpClientModule } from '@angular/common/http';
 import { Subject, Subscription, takeUntil, debounceTime, distinctUntilChanged, take, forkJoin, timer, interval } from 'rxjs';
 import { switchMap } from 'rxjs/operators';
 import { SoundService, AppSettings } from './services/sound.service';
+import { environment } from '../environments/environment';
 import { AuthService } from './services/auth.service';
 import { Sound, ConnectionStatus, Category, CategoryIcon } from './models/sound.model';
 import { HeaderComponent } from './components/header/header.component';
@@ -77,7 +78,7 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // Store modal state
   isStoreOpen = false;
-  storeServerUrl = 'http://localhost:9090';
+  storeServerUrl = 'https://rage-web.simdrift.com';
   audioEngineUrl = '';
 
   // Add Sound modal state
@@ -242,7 +243,7 @@ export class AppComponent implements OnInit, OnDestroy {
         this.updateCheckIntervalMinutes = settings.updateCheckIntervalMinutes;
         this.serverPort = settings.serverPort;
         this.nsfwModeEnabled = settings.nsfwModeEnabled;
-        this.storeServerUrl = settings.storeServerUrl || 'http://localhost:9090';
+        this.storeServerUrl = settings.storeServerUrl || environment.storeServerUrl;
         this.audioEngineUrl = settings.audioEngineUrl || '';
         if (this.audioEngineUrl) {
           SoundService.setAudioEngineUrl(this.audioEngineUrl);

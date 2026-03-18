@@ -1,7 +1,10 @@
-import { Component, EventEmitter, Output } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { take } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
+import { SoundService } from '../../services/sound.service';
+import { environment } from '../../../environments/environment';
 
 @Component({
   selector: 'app-login',
@@ -10,7 +13,7 @@ import { AuthService } from '../../services/auth.service';
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss']
 })
-export class LoginComponent {
+export class LoginComponent implements OnInit {
   @Output() loggedIn = new EventEmitter<void>();
 
   isRegisterMode = false;
@@ -22,8 +25,18 @@ export class LoginComponent {
   error = '';
   isLoading = false;
 
-  constructor(private authService: AuthService) {
+  constructor(private authService: AuthService, private soundService: SoundService) {
     this.storeServerUrl = authService.storeServerUrl;
+  }
+
+  ngOnInit(): void {
+    // Fetch the store URL from the server (which reads .env) so the input
+    // shows the configured value instead of the compile-time default.
+    this.soundService.getSettings().pipe(take(1)).subscribe(settings => {
+      if (settings.storeServerUrl && !localStorage.getItem('rage_store_url')) {
+        this.storeServerUrl = settings.storeServerUrl;
+      }
+    });
   }
 
   toggleMode(): void {
@@ -35,7 +48,7 @@ export class LoginComponent {
     this.error = '';
 
     // Save server URL
-    this.authService.storeServerUrl = this.storeServerUrl.trim() || 'http://localhost:9090';
+    this.authService.storeServerUrl = this.storeServerUrl.trim() || environment.storeServerUrl;
 
     if (this.isRegisterMode) {
       this.doRegister();

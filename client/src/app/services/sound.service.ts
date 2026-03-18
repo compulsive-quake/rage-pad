@@ -12,6 +12,7 @@ export interface UpdateInfo {
   downloadUrl: string;
 }
 import { Sound, ConnectionStatus, CategoryIcon, AudioDevices, StoreCategory, StoreCategoryDetail } from '../models/sound.model';
+import { environment } from '../../environments/environment';
 
 export interface YoutubeFetchProgress {
   type: 'phase' | 'metadata' | 'progress' | 'done' | 'error';
@@ -105,7 +106,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   youtubeCacheTtlMinutes: 4320,
   youtubeCacheMaxSizeMb: 100,
   nsfwModeEnabled: false,
-  storeServerUrl: 'http://localhost:9090',
+  storeServerUrl: environment.storeServerUrl,
   storeUploaderToken: '',
   audioEngineUrl: '',
 };

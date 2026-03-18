@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
 import { APP_VERSION, SoundService, VBCableStatus, YoutubeCacheInfo } from '../../services/sound.service';
 import { AudioDevices } from '../../models/sound.model';
+import { environment } from '../../../environments/environment';
 
 export interface SettingsPayload {
   keepAwakeEnabled: boolean;
@@ -42,7 +43,7 @@ export class SettingsComponent implements OnInit, OnChanges {
   @Input() latestVersion = '';
   @Input() updateAvailable = false;
   @Input() nsfwModeEnabled = false;
-  @Input() storeServerUrl = 'http://localhost:9090';
+  @Input() storeServerUrl = environment.storeServerUrl;
   @Input() audioEngineUrl = '';
 
   @Output() saveSettings = new EventEmitter<SettingsPayload>();
@@ -60,8 +61,8 @@ export class SettingsComponent implements OnInit, OnChanges {
   draftInputDevice = '';
   draftOutputDevice = '';
   draftNsfwMode = false;
-  draftStoreServerUrl = 'http://localhost:9090';
-  currentStoreServerUrl = 'http://localhost:9090';
+  draftStoreServerUrl = environment.storeServerUrl;
+  currentStoreServerUrl = environment.storeServerUrl;
   draftAudioEngineUrl = '';
   currentAudioEngineUrl = '';
 
@@ -374,7 +375,7 @@ export class SettingsComponent implements OnInit, OnChanges {
         this.draftInputDevice = this.currentInputDevice;
         this.draftOutputDevice = this.currentOutputDevice;
         // Store server URL
-        this.currentStoreServerUrl = settings.storeServerUrl || 'http://localhost:9090';
+        this.currentStoreServerUrl = settings.storeServerUrl || environment.storeServerUrl;
         this.draftStoreServerUrl = this.currentStoreServerUrl;
         // Audio engine URL
         this.currentAudioEngineUrl = settings.audioEngineUrl || '';

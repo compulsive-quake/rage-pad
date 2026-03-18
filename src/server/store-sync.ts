@@ -7,7 +7,7 @@ import { getSetting, setSetting } from './database';
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function getStoreUrl(): string {
-  return getSetting('storeServerUrl') || 'http://localhost:9090';
+  return getSetting('storeServerUrl') || process.env.STORE_SERVER_URL || 'http://localhost:9090';
 }
 
 function getUploaderToken(): string {

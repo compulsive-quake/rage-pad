@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   youtubeCacheTtlMinutes: 4320,
   youtubeCacheMaxSizeMb: 100,
   nsfwModeEnabled: false,
-  storeServerUrl: 'http://localhost:9090',
+  storeServerUrl: process.env.STORE_SERVER_URL || 'http://localhost:9090',
   storeUploaderToken: '',
   audioEngineUrl: '',
 };
