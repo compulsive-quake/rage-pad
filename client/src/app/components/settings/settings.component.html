@@ -24,6 +24,7 @@
       <button class="settings-tab" [class.active]="activeTab === 'audio'" (click)="activeTab = 'audio'">Audio</button>
       <button class="settings-tab" [class.active]="activeTab === 'youtube'" (click)="activeTab = 'youtube'">YouTube</button>
       <button class="settings-tab" [class.active]="activeTab === 'updates'" (click)="activeTab = 'updates'">Updates</button>
+      <button class="settings-tab" [class.active]="activeTab === 'ptt'" (click)="activeTab = 'ptt'; loadPttData()">PTT</button>
     </div>
 
     <div class="settings-scroll">
@@ -397,6 +398,136 @@
               </svg>
               <span *ngIf="!isCheckingForUpdate">Check for updates</span>
             </button>
+          </div>
+        </div>
+      </ng-container>
+
+      <!-- ── PTT tab ──────────────────────────────────────────────────── -->
+      <ng-container *ngIf="activeTab === 'ptt'">
+        <div class="settings-section">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Push-to-Talk auto-hold</span>
+              <span class="settings-toggle-description">Automatically holds down your PTT key while a sound plays through VB-Cable. Detects which game is running and uses that game's configured key.</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="pttEnabled" (change)="onTogglePtt()" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- PTT Status -->
+        <div class="settings-section" *ngIf="pttEnabled && pttStatus">
+          <div class="settings-toggle-row">
+            <div class="settings-toggle-info">
+              <span class="settings-toggle-label">Status</span>
+              <span class="settings-toggle-description ptt-status-text" [class.ptt-active]="pttStatus.detectedGame">
+                {{ pttStatus.detectedGame
+                  ? 'Detected: ' + pttStatus.detectedGame + ' (Key: ' + pttStatus.activeKeyLabel + ')'
+                  : 'No game detected — monitoring...' }}
+              </span>
+            </div>
+            <div class="ptt-status-dot" [class.active]="pttStatus.detectedGame"></div>
+          </div>
+        </div>
+
+        <!-- Game Profiles -->
+        <div class="settings-section" *ngIf="pttProfiles.length > 0">
+          <div class="ptt-section-header">
+            <span class="settings-toggle-label">Game Profiles</span>
+            <button class="ptt-add-btn" (click)="showAddCustomGame = true" title="Add custom game">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="ptt-profile-list">
+            <div class="ptt-profile-row" *ngFor="let profile of pttProfiles; let i = index">
+              <label class="toggle-switch toggle-small">
+                <input type="checkbox" [checked]="profile.enabled" (change)="onToggleProfile(i)" />
+                <span class="toggle-slider"></span>
+              </label>
+              <div class="ptt-profile-info">
+                <span class="ptt-profile-name">{{ profile.name }}</span>
+                <span class="ptt-profile-process">{{ profile.processName }}</span>
+              </div>
+              <select
+                class="ptt-key-select"
+                [ngModel]="profile.pttKeyCode"
+                (ngModelChange)="onProfileKeyChange(i, $event)"
+              >
+                <option *ngFor="let key of pttKeyOptions" [ngValue]="key.code">{{ key.label }}</option>
+              </select>
+              <button
+                class="ptt-delete-btn"
+                *ngIf="!profile.isPreset"
+                (click)="onDeleteProfile(i)"
+                title="Remove"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="16" height="16">
+                  <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add custom game dialog (inline) -->
+        <div class="settings-section" *ngIf="showAddCustomGame">
+          <div class="ptt-section-header">
+            <span class="settings-toggle-label">Add Custom Game</span>
+          </div>
+          <div class="ptt-add-form">
+            <div class="ptt-add-field">
+              <label>Game name</label>
+              <input type="text" [(ngModel)]="customGameName" placeholder="My Game" class="wake-minutes-input cache-path-input" />
+            </div>
+            <div class="ptt-add-field">
+              <label>Process name</label>
+              <div class="ptt-process-row">
+                <input type="text" [(ngModel)]="customProcessName" placeholder="game.exe" class="wake-minutes-input cache-path-input" />
+                <button class="ptt-browse-btn" (click)="onBrowseProcesses()" [disabled]="loadingProcesses" title="Pick from running processes">
+                  {{ loadingProcesses ? '...' : 'Browse' }}
+                </button>
+              </div>
+            </div>
+            <div class="ptt-add-field">
+              <label>PTT Key</label>
+              <select [(ngModel)]="customKeyCode" class="ptt-key-select">
+                <option *ngFor="let key of pttKeyOptions" [ngValue]="key.code">{{ key.label }}</option>
+              </select>
+            </div>
+            <div class="ptt-add-actions">
+              <button class="discard-cancel-btn" (click)="showAddCustomGame = false">Cancel</button>
+              <button class="save-btn" [disabled]="!customGameName || !customProcessName" (click)="onAddCustomGame()">Add</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Process picker dialog -->
+        <div class="discard-overlay" *ngIf="showProcessPicker" (click)="showProcessPicker = false">
+          <div class="discard-dialog ptt-process-dialog" (click)="$event.stopPropagation()">
+            <h3>Running Processes</h3>
+            <input
+              type="text"
+              class="wake-minutes-input cache-path-input ptt-process-search"
+              [(ngModel)]="processFilter"
+              placeholder="Filter processes..."
+            />
+            <div class="ptt-process-list">
+              <div
+                class="ptt-process-item"
+                *ngFor="let proc of filteredProcesses"
+                (click)="onPickProcess(proc)"
+              >
+                {{ proc }}
+              </div>
+            </div>
+            <div class="discard-actions">
+              <button class="discard-cancel-btn" (click)="showProcessPicker = false">Cancel</button>
+            </div>
           </div>
         </div>
       </ng-container>

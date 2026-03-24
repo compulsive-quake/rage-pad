@@ -42,6 +42,12 @@ pub enum Command {
     /// Query the current mixer state.
     GetStatus,
 
+    /// Configure a push-to-talk key to hold during playback.
+    SetPttKey { virtual_key_code: u16 },
+
+    /// Disable push-to-talk key holding.
+    ClearPttKey,
+
     /// Gracefully shut down the audio engine process.
     Shutdown,
 }

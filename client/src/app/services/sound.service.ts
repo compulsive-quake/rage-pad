@@ -47,6 +47,24 @@ export interface YoutubeCacheInfo {
   cachePath: string;
 }
 
+export interface GameProfile {
+  id: string;
+  name: string;
+  processName: string;
+  pttKeyCode: number;
+  pttKeyLabel: string;
+  enabled: boolean;
+  isPreset: boolean;
+}
+
+export interface PttStatus {
+  enabled: boolean;
+  detectedGame: string | null;
+  detectedProcessName: string | null;
+  activeKeyLabel: string | null;
+  activeKeyCode: number | null;
+}
+
 export interface VBCableStatus {
   installed: boolean;
   devices: string[];
@@ -127,6 +145,14 @@ export class SoundService implements OnDestroy {
     if (SoundService.isCapacitor) return true;
     // Tauri Android: __TAURI_INTERNALS__ exists but no local server is bundled
     return !!(window as any).__TAURI_INTERNALS__ && /android/i.test(navigator.userAgent);
+  }
+
+  /** True on any mobile/tablet device (native app OR mobile browser).
+   *  Used to route audio through the server engine instead of local Web Audio. */
+  static get isMobileDevice(): boolean {
+    if (SoundService.isMobileApp) return true;
+    return /Android|iPhone|iPad|iPod|Mobile|Tablet/i.test(navigator.userAgent)
+      || (navigator.maxTouchPoints > 1 && !/Win/i.test(navigator.userAgent));
   }
 
   static setServerUrl(url: string): void {
@@ -861,6 +887,32 @@ export class SoundService implements OnDestroy {
 
       return () => { done = true; es.close(); };
     });
+  }
+
+  // ── PTT (Push-to-Talk) ───────────────────────────────────────────────────
+
+  getPttStatus(): Observable<PttStatus> {
+    return this.http.get<PttStatus>(`${this.apiUrl}/ptt/status`);
+  }
+
+  getPttProfiles(): Observable<GameProfile[]> {
+    return this.http.get<GameProfile[]>(`${this.apiUrl}/ptt/profiles`);
+  }
+
+  getPttPresets(): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/ptt/presets`);
+  }
+
+  setPttEnabled(enabled: boolean): Observable<PttStatus> {
+    return this.http.put<PttStatus>(`${this.apiUrl}/ptt/enabled`, { enabled });
+  }
+
+  savePttProfiles(profiles: GameProfile[]): Observable<GameProfile[]> {
+    return this.http.put<GameProfile[]>(`${this.apiUrl}/ptt/profiles`, { profiles });
+  }
+
+  getPttProcesses(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.apiUrl}/ptt/processes`);
   }
 
   private isNewerVersion(latest: string, current: string): boolean {

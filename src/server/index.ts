@@ -12,6 +12,7 @@ import { SoundDb } from './sound-db';
 import { AudioEngine } from './audio-engine';
 
 import { getSetting, getAllSettings, setSetting, updateSettings, closeDb, dataDir as dbDataDir } from './database';
+import { HotkeyManager, PRESET_GAMES } from './hotkey-manager';
 
 // ── File logging for release builds ─────────────────────────────────────────
 function setupLogging(): void {
@@ -94,6 +95,11 @@ audioEngine.on('exit', (code: number | null) => {
   console.warn(`[audio-engine] Process exited (code ${code}), restarting...`);
   setTimeout(() => audioEngine.start(), 1000);
 });
+
+// ── Initialize hotkey manager (PTT) ──────────────────────────────────────────
+
+const hotkeyManager = new HotkeyManager(audioEngine);
+hotkeyManager.start();
 
 // ── Express app ─────────────────────────────────────────────────────────────
 
@@ -587,6 +593,46 @@ app.put('/api/settings', (req: Request, res: Response) => {
   }
 
   res.json(updated);
+});
+
+// ── PTT (Push-to-Talk) API ───────────────────────────────────────────────────
+
+app.get('/api/ptt/status', (_req: Request, res: Response) => {
+  res.json(hotkeyManager.getStatus());
+});
+
+app.get('/api/ptt/profiles', (_req: Request, res: Response) => {
+  res.json(hotkeyManager.getProfiles());
+});
+
+app.get('/api/ptt/presets', (_req: Request, res: Response) => {
+  res.json(PRESET_GAMES);
+});
+
+app.put('/api/ptt/enabled', (req: Request, res: Response) => {
+  const { enabled } = req.body;
+  hotkeyManager.setEnabled(!!enabled);
+  res.json(hotkeyManager.getStatus());
+});
+
+app.put('/api/ptt/profiles', (req: Request, res: Response) => {
+  const profiles = req.body.profiles;
+  if (!Array.isArray(profiles)) {
+    res.status(400).json({ error: 'profiles must be an array' });
+    return;
+  }
+  hotkeyManager.saveProfiles(profiles);
+  // Re-evaluate detected game with updated profiles
+  if (hotkeyManager.enabled) {
+    hotkeyManager.stop();
+    hotkeyManager.setEnabled(true);
+  }
+  res.json(hotkeyManager.getProfiles());
+});
+
+app.get('/api/ptt/processes', async (_req: Request, res: Response) => {
+  const processes = await hotkeyManager.listProcesses();
+  res.json(processes);
 });
 
 // Change the server port at runtime

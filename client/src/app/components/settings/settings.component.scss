@@ -754,3 +754,225 @@
   font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.4);
 }
+
+// ── PTT styles ────────────────────────────────────────────────────────────
+
+.ptt-status-text {
+  &.ptt-active {
+    color: #2ecc71;
+  }
+}
+
+.ptt-status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  flex-shrink: 0;
+
+  &.active {
+    background: #2ecc71;
+    box-shadow: 0 0 8px rgba(46, 204, 113, 0.5);
+  }
+}
+
+.ptt-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 0.75rem;
+}
+
+.ptt-add-btn {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.ptt-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ptt-profile-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+.toggle-small {
+  transform: scale(0.8);
+  flex-shrink: 0;
+}
+
+.ptt-profile-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ptt-profile-name {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ptt-profile-process {
+  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-family: 'Consolas', 'Monaco', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ptt-key-select {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  min-width: 90px;
+
+  option {
+    background: #1a1a2e;
+    color: #fff;
+  }
+}
+
+.ptt-delete-btn {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+
+  &:hover {
+    color: #e74c3c;
+    background: rgba(231, 76, 60, 0.1);
+  }
+}
+
+.ptt-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ptt-add-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  label {
+    font-size: 0.78rem;
+    color: rgba(255, 255, 255, 0.5);
+  }
+}
+
+.ptt-process-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.ptt-browse-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.25);
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.ptt-add-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.ptt-process-dialog {
+  max-width: 400px;
+  width: 90%;
+}
+
+.ptt-process-search {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.ptt-process-list {
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.ptt-process-item {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.1s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+  }
+
+  &:last-child {
+    border-bottom: none;
+  }
+}

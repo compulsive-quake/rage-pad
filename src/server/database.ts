@@ -19,6 +19,8 @@ export interface AppSettings {
   storeServerUrl: string;
   storeUploaderToken: string;
   audioEngineUrl: string;
+  pttEnabled: boolean;
+  pttGameProfiles: string;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -37,6 +39,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   storeServerUrl: process.env.STORE_SERVER_URL || 'http://localhost:9090',
   storeUploaderToken: '',
   audioEngineUrl: '',
+  pttEnabled: false,
+  pttGameProfiles: '',
 };
 
 // ── Data dir & file path ─────────────────────────────────────────────────────

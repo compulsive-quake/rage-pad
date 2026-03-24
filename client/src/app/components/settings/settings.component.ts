@@ -2,7 +2,7 @@ import { Component, Input, Output, EventEmitter, OnInit, OnChanges, SimpleChange
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { take } from 'rxjs';
-import { APP_VERSION, SoundService, VBCableStatus, YoutubeCacheInfo } from '../../services/sound.service';
+import { APP_VERSION, SoundService, VBCableStatus, YoutubeCacheInfo, GameProfile, PttStatus } from '../../services/sound.service';
 import { AudioDevices } from '../../models/sound.model';
 import { environment } from '../../../environments/environment';
 
@@ -92,8 +92,47 @@ export class SettingsComponent implements OnInit, OnChanges {
   // Version
   readonly appVersion = APP_VERSION;
 
+  // PTT
+  pttEnabled = false;
+  pttStatus: PttStatus | null = null;
+  pttProfiles: GameProfile[] = [];
+  pttStatusInterval: any = null;
+  showAddCustomGame = false;
+  customGameName = '';
+  customProcessName = '';
+  customKeyCode = 0x56; // V
+  showProcessPicker = false;
+  runningProcesses: string[] = [];
+  processFilter = '';
+  loadingProcesses = false;
+  pttKeyOptions = [
+    { code: 0x56, label: 'V' },
+    { code: 0x42, label: 'B' },
+    { code: 0x43, label: 'C' },
+    { code: 0x54, label: 'T' },
+    { code: 0x55, label: 'U' },
+    { code: 0x58, label: 'X' },
+    { code: 0x59, label: 'Y' },
+    { code: 0x5A, label: 'Z' },
+    { code: 0x46, label: 'F' },
+    { code: 0x47, label: 'G' },
+    { code: 0x48, label: 'H' },
+    { code: 0x4A, label: 'J' },
+    { code: 0x4B, label: 'K' },
+    { code: 0x4E, label: 'N' },
+    { code: 0x4D, label: 'M' },
+    { code: 0x09, label: 'Tab' },
+    { code: 0x14, label: 'Caps Lock' },
+    { code: 0xA0, label: 'Left Shift' },
+    { code: 0xA2, label: 'Left Ctrl' },
+    { code: 0xA4, label: 'Left Alt' },
+    { code: 0x05, label: 'Mouse 4' },
+    { code: 0x06, label: 'Mouse 5' },
+    { code: 0xC0, label: '~ (Tilde)' },
+  ];
+
   // Tabs
-  activeTab: 'general' | 'audio' | 'youtube' | 'updates' = 'general';
+  activeTab: 'general' | 'audio' | 'youtube' | 'updates' | 'ptt' = 'general';
 
   // Version info dialog
   showVersionDialog = false;
@@ -418,5 +457,104 @@ export class SettingsComponent implements OnInit, OnChanges {
         this.vbCableStatus = status;
         this.isRefreshingVBCable = false;
       });
+  }
+
+  // ── PTT (Push-to-Talk) ──────────────────────────────────────────────────
+
+  loadPttData(): void {
+    this.soundService.getPttStatus().pipe(take(1)).subscribe(status => {
+      this.pttStatus = status;
+      this.pttEnabled = status.enabled;
+    });
+    this.soundService.getPttProfiles().pipe(take(1)).subscribe(profiles => {
+      this.pttProfiles = profiles;
+    });
+    // Poll status while on PTT tab
+    if (this.pttStatusInterval) clearInterval(this.pttStatusInterval);
+    this.pttStatusInterval = setInterval(() => {
+      if (this.activeTab !== 'ptt') {
+        clearInterval(this.pttStatusInterval);
+        this.pttStatusInterval = null;
+        return;
+      }
+      this.soundService.getPttStatus().pipe(take(1)).subscribe(status => {
+        this.pttStatus = status;
+      });
+    }, 3000);
+  }
+
+  onTogglePtt(): void {
+    this.pttEnabled = !this.pttEnabled;
+    this.soundService.setPttEnabled(this.pttEnabled).pipe(take(1)).subscribe(status => {
+      this.pttStatus = status;
+    });
+  }
+
+  onToggleProfile(index: number): void {
+    this.pttProfiles[index].enabled = !this.pttProfiles[index].enabled;
+    this.savePttProfiles();
+  }
+
+  onProfileKeyChange(index: number, keyCode: number): void {
+    this.pttProfiles[index].pttKeyCode = keyCode;
+    const key = this.pttKeyOptions.find(k => k.code === keyCode);
+    if (key) this.pttProfiles[index].pttKeyLabel = key.label;
+    this.savePttProfiles();
+  }
+
+  onDeleteProfile(index: number): void {
+    this.pttProfiles.splice(index, 1);
+    this.savePttProfiles();
+  }
+
+  onAddCustomGame(): void {
+    const key = this.pttKeyOptions.find(k => k.code === this.customKeyCode);
+    const newProfile: GameProfile = {
+      id: 'custom-' + Date.now(),
+      name: this.customGameName,
+      processName: this.customProcessName,
+      pttKeyCode: this.customKeyCode,
+      pttKeyLabel: key?.label || 'V',
+      enabled: true,
+      isPreset: false,
+    };
+    this.pttProfiles.push(newProfile);
+    this.savePttProfiles();
+    this.showAddCustomGame = false;
+    this.customGameName = '';
+    this.customProcessName = '';
+    this.customKeyCode = 0x56;
+  }
+
+  onBrowseProcesses(): void {
+    this.loadingProcesses = true;
+    this.soundService.getPttProcesses().pipe(take(1)).subscribe({
+      next: (processes) => {
+        this.runningProcesses = processes;
+        this.processFilter = '';
+        this.showProcessPicker = true;
+        this.loadingProcesses = false;
+      },
+      error: () => {
+        this.loadingProcesses = false;
+      }
+    });
+  }
+
+  get filteredProcesses(): string[] {
+    if (!this.processFilter) return this.runningProcesses;
+    const filter = this.processFilter.toLowerCase();
+    return this.runningProcesses.filter(p => p.toLowerCase().includes(filter));
+  }
+
+  onPickProcess(processName: string): void {
+    this.customProcessName = processName;
+    this.showProcessPicker = false;
+  }
+
+  private savePttProfiles(): void {
+    this.soundService.savePttProfiles(this.pttProfiles).pipe(take(1)).subscribe(profiles => {
+      this.pttProfiles = profiles;
+    });
   }
 }

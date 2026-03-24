@@ -244,6 +244,16 @@ export class AudioEngine extends EventEmitter {
     };
   }
 
+  async setPttKey(virtualKeyCode: number): Promise<void> {
+    const resp = await this.send({ cmd: 'set_ptt_key', virtual_key_code: virtualKeyCode });
+    if (resp.type === 'error') throw new Error(resp.message);
+  }
+
+  async clearPttKey(): Promise<void> {
+    const resp = await this.send({ cmd: 'clear_ptt_key' });
+    if (resp.type === 'error') throw new Error(resp.message);
+  }
+
   // ── Internal ─────────────────────────────────────────────────────────────
 
   private send(command: Command): Promise<EngineResponse> {

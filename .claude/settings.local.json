@@ -26,7 +26,8 @@
       "WebFetch(domain:adoptium.net)",
       "Bash(cd:*)",
       "Bash(export:*)",
-      "Bash(which npm:*)"
+      "Bash(which npm:*)",
+      "Bash(npm version:*)"
     ]
   }
 }

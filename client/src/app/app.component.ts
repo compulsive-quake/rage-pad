@@ -50,6 +50,7 @@ import { AuthUser } from './services/auth.service';
 export class AppComponent implements OnInit, OnDestroy {
   isCapacitor = SoundService.isCapacitor;
   isMobileApp = SoundService.isMobileApp;
+  isMobileDevice = SoundService.isMobileDevice;
   needsServerConnect = false;
   isAuthenticated = false;
   isAuthChecking = true;
@@ -186,6 +187,19 @@ export class AppComponent implements OnInit, OnDestroy {
     event.preventDefault();
   }
 
+  /** Eagerly unlock the Web Audio context on the first user gesture so that
+   *  SSE-triggered remote playback (from mobile → desktop) doesn't get
+   *  blocked by the browser autoplay policy. */
+  @HostListener('document:click')
+  @HostListener('document:keydown')
+  onUserGesture(): void {
+    if (this.audioContext) return;
+    this.audioContext = new AudioContext();
+    if (this.audioContext.state === 'suspended') {
+      this.audioContext.resume();
+    }
+  }
+
   ngOnInit(): void {
     // On mobile (Capacitor or Tauri Android), check if we have a saved server URL
     if (this.isMobileApp) {
@@ -309,15 +323,21 @@ export class AppComponent implements OnInit, OnDestroy {
   // ── Remote play (mobile → desktop speaker relay) ────────────────────────
 
   private startRemotePlayListener(): void {
-    if (this.isMobileApp) return; // Only desktop listens
+    if (this.isMobileDevice) return; // Only desktop listens
     this.remotePlaySub = this.soundService.listenForRemotePlay()
       .pipe(takeUntil(this.destroy$))
       .subscribe(msg => {
         if (msg.event === 'play') {
           console.log(`[remote-play] Playing sound ${msg.id} via Web Audio`);
+          // Set currentlyPlayingId so startWebAudioPlayback doesn't bail
+          // on its "different sound started while loading" guard.
+          this.currentlyPlayingId = msg.id;
+          this.isActuallyPlaying = true;
           this.playWebAudio(msg.id);
         } else if (msg.event === 'stop') {
           this.stopWebAudio();
+          this.currentlyPlayingId = null;
+          this.isActuallyPlaying = false;
         }
       });
   }
@@ -569,9 +589,9 @@ export class AppComponent implements OnInit, OnDestroy {
 
     this.startProgressTimer();
 
-    if (this.isMobileApp) {
-      // Mobile app: always play through the server audio engine only — never
-      // through the device speakers via Web Audio.
+    if (this.isMobileDevice) {
+      // Mobile device (app or browser): always play through the server audio
+      // engine only — never through the device speakers via Web Audio.
       const playingSoundId = sound.id;
       this.soundService.playSound(sound.id, false, false, true)
         .pipe(take(1))
@@ -1169,7 +1189,7 @@ export class AppComponent implements OnInit, OnDestroy {
   // ── VB-Cable ────────────────────────────────────────────────────────────
 
   get showVBCableBanner(): boolean {
-    if (SoundService.isMobileApp) return false;
+    if (SoundService.isMobileDevice) return false;
     return !this.vbCableInstalled && !this.vbCableDismissed;
   }
 

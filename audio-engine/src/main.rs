@@ -1,6 +1,7 @@
 mod devices;
 mod mixer;
 mod protocol;
+mod ptt;
 
 use std::io::{self, BufRead, Write};
 use std::panic;
@@ -29,8 +30,9 @@ fn main() {
         default_hook(info);
     }));
 
-    // ---- initialise mixer ---------------------------------------------
+    // ---- initialise mixer & PTT ----------------------------------------
     let mut mixer = mixer::MixerState::new();
+    let ptt = ptt::PttState::new();
 
     // ---- main command loop --------------------------------------------
     let stdin = io::stdin();
@@ -62,7 +64,7 @@ fn main() {
             }
         };
 
-        let response = handle_command(&mut mixer, cmd);
+        let response = handle_command(&mut mixer, &ptt, cmd);
 
         // A `None` return means the Shutdown command was received.
         match response {
@@ -82,7 +84,7 @@ fn main() {
 
 /// Dispatch a parsed command to the appropriate mixer / device function.
 /// Returns `None` when the engine should shut down.
-fn handle_command(mixer: &mut mixer::MixerState, cmd: Command) -> Option<Response> {
+fn handle_command(mixer: &mut mixer::MixerState, ptt: &ptt::PttState, cmd: Command) -> Option<Response> {
     match cmd {
         Command::ListDevices => {
             let input = devices::list_input_devices();
@@ -107,12 +109,18 @@ fn handle_command(mixer: &mut mixer::MixerState, cmd: Command) -> Option<Respons
         }
 
         Command::Play { file_path, volume } => match mixer.play_file(&file_path, volume) {
-            Ok(()) => Some(Response::Ok),
+            Ok(()) => {
+                if ptt.is_enabled() {
+                    ptt.press_key();
+                }
+                Some(Response::Ok)
+            }
             Err(e) => Some(Response::error(e)),
         },
 
         Command::Stop => {
             mixer.stop();
+            ptt.release_key();
             Some(Response::Ok)
         }
 
@@ -149,7 +157,20 @@ fn handle_command(mixer: &mut mixer::MixerState, cmd: Command) -> Option<Respons
             })
         }
 
-        Command::Shutdown => None,
+        Command::SetPttKey { virtual_key_code } => {
+            ptt.set_key(virtual_key_code, std::sync::Arc::clone(&mixer.playing));
+            Some(Response::Ok)
+        }
+
+        Command::ClearPttKey => {
+            ptt.clear_key();
+            Some(Response::Ok)
+        }
+
+        Command::Shutdown => {
+            ptt.clear_key();
+            None
+        }
     }
 }
 
