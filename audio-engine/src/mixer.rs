@@ -355,10 +355,10 @@ impl MixerState {
                                 let still_going = fp.mix_into(data);
                                 if !still_going {
                                     *guard = None;
-                                    // We cannot easily clear the atomic from
-                                    // inside the callback without a race, but
-                                    // the main thread polls `file_playback` to
-                                    // detect end-of-file too.
+                                    // Safe to clear here: play_file() also sets
+                                    // playing inside the file_playback lock, so
+                                    // the two stores are mutually exclusive.
+                                    playing.store(false, Ordering::Release);
                                 }
                             }
                         }
@@ -427,8 +427,8 @@ impl MixerState {
         {
             let mut guard = self.file_playback.lock().map_err(|e| e.to_string())?;
             *guard = Some(playback);
+            self.playing.store(true, Ordering::Release);
         }
-        self.playing.store(true, Ordering::Release);
 
         // Spawn a background thread to decode samples in chunks, resample to
         // match the output device, and push them into the shared FilePlayback
@@ -578,12 +578,7 @@ fn default_stream_config_for(
 
     // We always request f32 samples to keep the mixing simple.
     if supported.sample_format() != SampleFormat::F32 {
-        // cpal will convert for us on most backends, but log a note.
-        eprintln!(
-            "[info] device native format is {:?}, requesting f32",
-            supported.sample_format()
-        );
-    }
+        }
 
     Ok(StreamConfig {
         channels: supported.channels(),

@@ -566,6 +566,32 @@ router.get('/categories', (_req: Request, res: Response) => {
   }
 });
 
+router.post('/categories', (req: Request, res: Response) => {
+  try {
+    const { name, icon } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Category name is required' });
+    }
+
+    const trimmedName = name.trim();
+    const existing = soundDb.getCategoryByName(trimmedName);
+    if (existing) {
+      return res.status(409).json({ error: 'Category already exists' });
+    }
+
+    const categoryId = soundDb.getOrCreateCategory(trimmedName);
+
+    if (icon && typeof icon === 'string') {
+      soundDb.setCategoryIcon(trimmedName, icon);
+    }
+
+    res.json({ ok: true, id: categoryId });
+  } catch (error) {
+    console.error('Failed to create category:', error);
+    res.status(500).json({ error: 'Failed to create category' });
+  }
+});
+
 // ── Category Visibility ──────────────────────────────────────────────────
 
 router.put('/category-visibility', async (req: Request, res: Response) => {

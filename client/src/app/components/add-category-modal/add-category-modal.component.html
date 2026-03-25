@@ -1,0 +1,65 @@
+<div class="modal-overlay" *ngIf="isOpen" (mousedown)="onOverlayMouseDown($event)" (mouseup)="onOverlayMouseUp($event)" (mouseleave)="mouseDownOnOverlay = false">
+  <div class="modal-content add-category-modal-content">
+    <div class="modal-header">
+      <h2>New Category</h2>
+      <button class="close-btn" (click)="onClose()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!-- Category Name -->
+      <div class="form-group">
+        <label class="form-label">Category Name</label>
+        <input
+          #nameInput
+          type="text"
+          class="form-input"
+          [(ngModel)]="categoryName"
+          placeholder="Enter category name"
+          (keydown.enter)="confirm()"
+          (keydown.escape)="onClose()"
+        />
+      </div>
+
+      <!-- Category Image -->
+      <div class="form-group">
+        <label class="form-label">Category Image</label>
+        <div
+          class="icon-drop-zone"
+          [class.drag-over]="isDragOver"
+          [class.has-preview]="iconPreview"
+          (dragover)="onIconDragOver($event)"
+          (dragleave)="onIconDragLeave($event)"
+          (drop)="onIconDrop($event)"
+          (click)="iconFileInput.click()"
+        >
+          <img *ngIf="iconPreview" [src]="iconPreview" alt="Category icon preview" class="icon-preview" />
+          <div *ngIf="!iconPreview" class="icon-drop-placeholder">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+            </svg>
+            <span>Drop image here or click to browse</span>
+          </div>
+        </div>
+        <input #iconFileInput type="file" accept="image/*" (change)="onIconFileSelected($event)" style="display: none" />
+        <button *ngIf="iconPreview" class="remove-icon-btn" (click)="removeIcon(); $event.stopPropagation()">Remove image</button>
+      </div>
+
+      <!-- Error Message -->
+      <p class="error-message" *ngIf="errorMessage">{{ errorMessage }}</p>
+
+      <!-- Actions -->
+      <div class="form-actions">
+        <button class="cancel-btn" (click)="onClose()">Cancel</button>
+        <button
+          class="confirm-btn"
+          (click)="confirm()"
+          [disabled]="!categoryName.trim() || isCreating"
+        >
+          <svg *ngIf="isCreating" class="spinning" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" style="width: 16px; height: 16px; margin-right: 6px;">
+            <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
+          </svg>
+          {{ isCreating ? 'Creating...' : 'Create Category' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

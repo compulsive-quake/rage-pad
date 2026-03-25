@@ -51,6 +51,8 @@
     (toggleCategoryNsfw)="onToggleCategoryNsfw($event)"
     (toggleCategoryVisibility)="onToggleCategoryVisibility($event)"
     (deleteCategory)="onDeleteCategory($event)"
+    (addCategory)="openAddCategoryModal()"
+    (filesDroppedOnCategory)="onFilesDroppedOnCategory($event)"
   ></app-content>
 
   <app-settings
@@ -120,9 +122,18 @@
     [isOpen]="isAddSoundModalOpen"
     [sounds]="sounds"
     [categoryIconsMap]="categoryIconsMap"
+    [preSelectedFile]="addSoundPreSelectedFile"
+    [preSelectedCategory]="addSoundPreSelectedCategory"
     (closed)="onAddSoundClosed()"
     (soundAdded)="onSoundAdded()"
   ></app-add-sound-modal>
+
+  <!-- Add Category Modal -->
+  <app-add-category-modal
+    [isOpen]="isAddCategoryModalOpen"
+    (closed)="onAddCategoryClosed()"
+    (categoryAdded)="onCategoryCreated($event)"
+  ></app-add-category-modal>
 
   <!-- Context Menu (desktop Tauri build only) -->
   <app-context-menu

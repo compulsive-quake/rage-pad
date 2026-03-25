@@ -355,6 +355,15 @@ export class SoundService implements OnDestroy {
     );
   }
 
+  createCategory(name: string, icon?: string): Observable<any> {
+    return this.http.post(`${this.apiUrl}/categories`, { name, icon }).pipe(
+      catchError(error => {
+        console.error('Failed to create category:', error);
+        return of({ error: error?.error?.error || 'Failed to create category' });
+      })
+    );
+  }
+
   deleteCategory(categoryName: string): Observable<any> {
     return this.http.delete(`${this.apiUrl}/categories/${encodeURIComponent(categoryName)}`).pipe(
       catchError(error => {

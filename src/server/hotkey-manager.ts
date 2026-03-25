@@ -33,7 +33,7 @@ export const PRESET_GAMES: Omit<GameProfile, 'id' | 'enabled'>[] = [
   { name: 'Overwatch 2', processName: 'Overwatch.exe', pttKeyCode: 0xC0, pttKeyLabel: '~ (Tilde)', isPreset: true },
   { name: 'PUBG', processName: 'TslGame.exe', pttKeyCode: 0x54, pttKeyLabel: 'T', isPreset: true },
   { name: 'Call of Duty: Warzone', processName: 'cod.exe', pttKeyCode: 0x5A, pttKeyLabel: 'Z', isPreset: true },
-  { name: 'Call of Duty: Modern Warfare II', processName: 'cod22-cod.exe', pttKeyCode: 0x56, pttKeyLabel: 'V', isPreset: true },
+  { name: 'Call of Duty: Modern Warfare II', processName: 'cod22-cod.exe', pttKeyCode: 0x5A, pttKeyLabel: 'Z', isPreset: true },
   { name: 'Rainbow Six Siege', processName: 'RainbowSix.exe', pttKeyCode: 0x55, pttKeyLabel: 'U', isPreset: true },
   { name: 'Battlefield 2042', processName: 'BF2042.exe', pttKeyCode: 0x56, pttKeyLabel: 'V', isPreset: true },
   { name: 'Halo Infinite', processName: 'HaloInfinite.exe', pttKeyCode: 0x56, pttKeyLabel: 'V', isPreset: true },

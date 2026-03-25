@@ -50,11 +50,19 @@ impl PttState {
                     let is_playing = playing.load(Ordering::Acquire);
 
                     if was_playing && !is_playing && held.load(Ordering::Acquire) {
-                        // Playback just ended — release the key.
-                        let code = vk.load(Ordering::Acquire);
-                        if code != 0 {
-                            send_key(code, true);
-                            held.store(false, Ordering::Release);
+                        // Playback just ended — small delay to allow a rapid
+                        // back-to-back play to re-assert the key before we
+                        // release it.
+                        thread::sleep(Duration::from_millis(50));
+
+                        // Re-check: if a new play started in the meantime,
+                        // don't release.
+                        if !playing.load(Ordering::Acquire) {
+                            let code = vk.load(Ordering::Acquire);
+                            if code != 0 {
+                                send_key(code, true);
+                                held.store(false, Ordering::Release);
+                            }
                         }
                     }
 
@@ -84,7 +92,7 @@ impl PttState {
     /// Press the PTT key (called when playback starts).
     pub fn press_key(&self) {
         let code = self.vk_code.load(Ordering::Acquire);
-        if code != 0 && !self.key_held.load(Ordering::Acquire) {
+        if code != 0 {
             send_key(code, false);
             self.key_held.store(true, Ordering::Release);
         }
@@ -118,6 +126,10 @@ impl Drop for PttState {
 fn send_key(vk_code: u16, key_up: bool) {
     let scan_code = unsafe { MapVirtualKeyW(vk_code as u32, MAPVK_VK_TO_VSC) } as u16;
 
+    if scan_code == 0 {
+        eprintln!("[ptt] WARNING: MapVirtualKeyW returned scan_code=0 for vk=0x{:02X}", vk_code);
+    }
+
     let mut flags = KEYEVENTF_SCANCODE;
     if key_up {
         flags |= KEYEVENTF_KEYUP;
@@ -136,7 +148,7 @@ fn send_key(vk_code: u16, key_up: bool) {
         },
     };
 
-    unsafe {
-        SendInput(1, &input, std::mem::size_of::<INPUT>() as i32);
-    }
+    let result = unsafe {
+        SendInput(1, &input, std::mem::size_of::<INPUT>() as i32)
+    };
 }

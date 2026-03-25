@@ -1,4 +1,4 @@
-<div class="modal-overlay" *ngIf="isOpen" (mousedown)="onOverlayMouseDown($event)" (mouseup)="onOverlayMouseUp($event)">
+<div class="modal-overlay" *ngIf="isOpen" (mousedown)="onOverlayMouseDown($event)" (mouseup)="onOverlayMouseUp($event)" (mouseleave)="mouseDownOnOverlay = false">
   <div class="modal-content qr-modal-content">
     <div class="modal-header">
       <h2>Connect from Phone</h2>

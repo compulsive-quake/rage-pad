@@ -18,6 +18,7 @@ export interface AppSettings {
   nsfwModeEnabled: boolean;
   storeServerUrl: string;
   storeUploaderToken: string;
+  storeAuthToken: string;
   audioEngineUrl: string;
   pttEnabled: boolean;
   pttGameProfiles: string;
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   nsfwModeEnabled: false,
   storeServerUrl: process.env.STORE_SERVER_URL || 'http://localhost:9090',
   storeUploaderToken: '',
+  storeAuthToken: '',
   audioEngineUrl: '',
   pttEnabled: false,
   pttGameProfiles: '',

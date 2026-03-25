@@ -34,6 +34,8 @@ export interface StoreCategory {
   icon: string;
   icon_is_base64: boolean;
   uploader_name: string;
+  creator_username: string;
+  creator_profile_picture: string;
   sound_count: number;
   uploaded_at: string;
   updated_at: string;

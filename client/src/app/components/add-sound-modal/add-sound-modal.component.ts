@@ -18,6 +18,10 @@ export class AddSoundModalComponent implements OnChanges {
   @Input() isOpen = false;
   @Input() sounds: Sound[] = [];
   @Input() categoryIconsMap: Map<string, CategoryIcon> = new Map();
+  /** Pre-selected file from external drag-and-drop (e.g. from OS file explorer) */
+  @Input() preSelectedFile: File | null = null;
+  /** Pre-selected category name (e.g. from dropping onto a category section) */
+  @Input() preSelectedCategory = '';
   @Output() closed = new EventEmitter<void>();
   @Output() soundAdded = new EventEmitter<void>();
 
@@ -79,13 +83,24 @@ export class AddSoundModalComponent implements OnChanges {
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen) {
       this.resetState();
+      const preFile = this.preSelectedFile;
+      const preCat = this.preSelectedCategory;
       this.soundService.getCategories()
         .pipe(take(1))
         .subscribe({
           next: (cats) => {
             this.addSoundCategories = cats;
-            if (cats.length > 0) {
+            if (preCat && cats.some(c => c.name === preCat)) {
+              this.addSoundCategory = preCat;
+            } else if (cats.length > 0) {
               this.addSoundCategory = cats[0].name;
+            }
+            // If a file was pre-selected (from drag-and-drop), skip to preview
+            if (preFile) {
+              this.addSoundFile = preFile;
+              this.addSoundName = preFile.name.replace(/\.[^/.]+$/, '');
+              this.step = 'preview';
+              this.cdr.markForCheck();
             }
           },
           error: () => {
@@ -143,6 +158,19 @@ export class AddSoundModalComponent implements OnChanges {
   close(): void {
     if (this.isAddingSound) return;
     this.closed.emit();
+  }
+
+  private mouseDownOnOverlay = false;
+
+  onOverlayMouseDown(event: MouseEvent): void {
+    this.mouseDownOnOverlay = event.target === event.currentTarget;
+  }
+
+  onOverlayMouseUp(event: MouseEvent): void {
+    if (this.mouseDownOnOverlay && event.target === event.currentTarget) {
+      this.flashCancelBtn();
+    }
+    this.mouseDownOnOverlay = false;
   }
 
   flashCancelBtn(): void {

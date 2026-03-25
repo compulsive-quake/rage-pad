@@ -1,5 +1,5 @@
-<div class="modal-overlay" *ngIf="isOpen" (click)="flashCancelBtn()">
-  <div class="modal-content add-sound-modal-content" (click)="$event.stopPropagation()">
+<div class="modal-overlay" *ngIf="isOpen" (mousedown)="onOverlayMouseDown($event)" (mouseup)="onOverlayMouseUp($event)">
+  <div class="modal-content add-sound-modal-content">
     <div class="modal-header">
       <h2>{{ step === 'select' ? 'Add Sound' : step === 'preview' ? 'Preview & Crop' : 'Sound Details' }}</h2>
       <button class="close-btn" (click)="close()">&times;</button>

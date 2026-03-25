@@ -22,7 +22,7 @@ export class RenameModalComponent implements OnChanges {
 
   isRenaming = false;
   renameValue = '';
-  private mouseDownOnOverlay = false;
+  mouseDownOnOverlay = false;
 
   constructor(private soundService: SoundService) {}
 

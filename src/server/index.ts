@@ -93,7 +93,33 @@ if (savedOutputDevice) {
 
 audioEngine.on('exit', (code: number | null) => {
   console.warn(`[audio-engine] Process exited (code ${code}), restarting...`);
-  setTimeout(() => audioEngine.start(), 1000);
+  setTimeout(async () => {
+    audioEngine.start();
+
+    // Restore saved device settings
+    const savedInput = getSetting('audioInputDevice') as string | undefined;
+    const savedOutput = getSetting('audioOutputDevice') as string | undefined;
+    if (savedInput) {
+      audioEngine.setInputDevice(savedInput).catch(err => {
+        console.warn(`[audio-engine] Could not restore input device after restart:`, err.message);
+      });
+    }
+    if (savedOutput) {
+      audioEngine.setOutputDevice(savedOutput).catch(err => {
+        console.warn(`[audio-engine] Could not restore output device after restart:`, err.message);
+      });
+    }
+
+    // Re-send PTT key if a game is currently detected
+    if (hotkeyManager.enabled && hotkeyManager.detectedGame) {
+      try {
+        await audioEngine.setPttKey(hotkeyManager.detectedGame.pttKeyCode);
+        console.log(`[audio-engine] Restored PTT key after restart: ${hotkeyManager.detectedGame.pttKeyLabel}`);
+      } catch (err: any) {
+        console.warn(`[audio-engine] Could not restore PTT key after restart:`, err.message);
+      }
+    }
+  }, 1000);
 });
 
 // ── Initialize hotkey manager (PTT) ──────────────────────────────────────────

@@ -39,7 +39,20 @@ export class EditDetailsModalComponent implements OnChanges {
   showArtistSuggestions = false;
   filteredArtistSuggestions: string[] = [];
 
+  private mouseDownOnOverlay = false;
+
   constructor(private soundService: SoundService) {}
+
+  onOverlayMouseDown(event: MouseEvent): void {
+    this.mouseDownOnOverlay = event.target === event.currentTarget;
+  }
+
+  onOverlayMouseUp(event: MouseEvent): void {
+    if (this.mouseDownOnOverlay && event.target === event.currentTarget) {
+      this.close();
+    }
+    this.mouseDownOnOverlay = false;
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['isOpen'] && this.isOpen && this.sound) {

@@ -82,7 +82,8 @@ export class StoreModalComponent implements OnInit, OnDestroy {
       const q = this.searchQuery.toLowerCase();
       this.filteredCategories = this.categories.filter(c =>
         c.name.toLowerCase().includes(q) ||
-        c.uploader_name.toLowerCase().includes(q)
+        c.uploader_name.toLowerCase().includes(q) ||
+        (c.creator_username && c.creator_username.toLowerCase().includes(q))
       );
     }
   }

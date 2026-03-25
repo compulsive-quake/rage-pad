@@ -19,6 +19,10 @@ function getUploaderToken(): string {
   return token;
 }
 
+function getAuthToken(): string {
+  return getSetting('storeAuthToken') || '';
+}
+
 // ── Sync functions ───────────────────────────────────────────────────────────
 
 /**
@@ -43,12 +47,16 @@ export async function syncCategoryToStore(soundDb: SoundDb, categoryName: string
       icon_is_base64: cat.icon_is_base64 === 1,
     };
 
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Uploader-Token': token,
+    };
+    const authToken = getAuthToken();
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
     const res = await fetch(`${storeUrl}/api/categories`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Uploader-Token': token,
-      },
+      headers,
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(15000),
     });
@@ -143,12 +151,16 @@ export async function syncCategoryChanges(soundDb: SoundDb, categoryName: string
   };
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Uploader-Token': token,
+    };
+    const authToken = getAuthToken();
+    if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
     const res = await fetch(`${storeUrl}/api/categories/${storeId}/sync`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Uploader-Token': token,
-      },
+      headers,
       body: JSON.stringify(syncPayload),
       signal: AbortSignal.timeout(30000),
     });

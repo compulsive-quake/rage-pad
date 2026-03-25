@@ -27,6 +27,7 @@
     "sync:version": "node -e \"const fs=require('fs'),v=require('./package.json').version,p='src-tauri/tauri.conf.json',c=JSON.parse(fs.readFileSync(p,'utf8'));c.version=v;fs.writeFileSync(p,JSON.stringify(c,null,2)+'\\n')\"",
     "build:windows": "npm run sync:version && npm run build:audio && npm run build:server && npm run build:client && npm run bundle:server && npm run download:node && npm run download:yt-dlp && node -e \"require('fs').rmSync('src-tauri/target/release/bundle/nsis',{recursive:true,force:true})\" && tauri build && node -e \"const fs=require('fs'),g=require('path').join.bind(require('path'));fs.mkdirSync('builds',{recursive:true});fs.cpSync(g('src-tauri','target','release','bundle','nsis'),g('builds'),{recursive:true,force:true})\"",
     "build:android": "npm run sync:version && npm run build:client && node scripts/with-jdk.js tauri android build --config src-tauri/tauri.android.conf.json",
+    "android:init": "node scripts/with-jdk.js npx tauri android init",
     "android:emulator": "node -e \"const {execSync}=require('child_process'),s=process.env.LOCALAPPDATA+'/Android/Sdk';process.env.ANDROID_SDK_ROOT=s;execSync(s+'/emulator/emulator @RagePad',{stdio:'inherit'})\"",
     "android:install": "node scripts/android-run.js install",
     "android:launch": "node scripts/android-run.js launch",

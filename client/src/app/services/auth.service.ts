@@ -77,6 +77,7 @@ export class AuthService {
       tap(res => {
         localStorage.setItem(this.TOKEN_KEY, res.token);
         this.loggedIn$.next(true);
+        this.syncAuthTokenToServer(res.token);
       })
     );
   }
@@ -86,6 +87,7 @@ export class AuthService {
       tap(res => {
         localStorage.setItem(this.TOKEN_KEY, res.token);
         this.loggedIn$.next(true);
+        this.syncAuthTokenToServer(res.token);
       })
     );
   }
@@ -103,6 +105,7 @@ export class AuthService {
       tap(user => {
         this.loggedIn$.next(true);
         this.currentUser$.next(user);
+        this.syncAuthTokenToServer(token);
       }),
       catchError(() => {
         this.logout();
@@ -151,5 +154,13 @@ export class AuthService {
     localStorage.removeItem(this.TOKEN_KEY);
     this.loggedIn$.next(false);
     this.currentUser$.next(null);
+    this.syncAuthTokenToServer('');
+  }
+
+  /** Persist the store auth token to the rage-pad server so store-sync can use it */
+  private syncAuthTokenToServer(token: string): void {
+    this.http.put('/api/settings', { storeAuthToken: token }).subscribe({
+      error: () => { /* best-effort */ }
+    });
   }
 }

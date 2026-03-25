@@ -47,6 +47,8 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
   @Output() toggleCategoryNsfw = new EventEmitter<{ categoryName: string; nsfw: boolean }>();
   @Output() toggleCategoryVisibility = new EventEmitter<{ categoryName: string; visibility: 'private' | 'public' }>();
   @Output() deleteCategory = new EventEmitter<string>();
+  @Output() addCategory = new EventEmitter<void>();
+  @Output() filesDroppedOnCategory = new EventEmitter<{ files: File[]; categoryName: string }>();
 
   @ViewChild('mainContent') mainContent!: ElementRef;
   @ViewChild('categoryNavList') categoryNavList!: ElementRef;
@@ -54,6 +56,8 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
 
   isDragging = false;
   iconDragOverCategory: string | null = null;
+  /** Category name currently being hovered with audio file(s) from the OS */
+  audioDropOverCategory: string | null = null;
 
   // Category reorder drag state
   categoryDraggingIdx = -1;
@@ -1087,6 +1091,8 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
     'image/bmp', 'image/x-icon', 'image/svg+xml'
   ];
 
+  private static readonly ALLOWED_AUDIO_EXTENSIONS = /\.(mp3|wav|ogg|flac|aac|wma|m4a|opus|aiff|ape)$/i;
+
   onIconDragOver(event: DragEvent, categoryName: string): void {
     event.preventDefault();
     event.stopPropagation();
@@ -1145,6 +1151,79 @@ export class ContentComponent implements AfterViewInit, OnDestroy, OnChanges {
       }
     };
     img.src = URL.createObjectURL(file);
+  }
+
+  // ── Audio file drag-and-drop onto categories ──
+
+  private hasAudioFiles(dataTransfer: DataTransfer | null): boolean {
+    if (!dataTransfer) return false;
+    // Check items (available during dragover)
+    if (dataTransfer.items) {
+      for (let i = 0; i < dataTransfer.items.length; i++) {
+        const item = dataTransfer.items[i];
+        if (item.kind === 'file' && (
+          item.type.startsWith('audio/') ||
+          // Some OS don't set MIME during dragover, check on drop
+          item.type === ''
+        )) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  onAudioDragOver(event: DragEvent, categoryName: string): void {
+    // Don't interfere with CDK reorder dragging
+    if (this.isDragging || this.isReorderMode) return;
+    // Only respond to external file drags (not image icon drops)
+    if (!this.hasAudioFiles(event.dataTransfer)) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+    if (this.audioDropOverCategory !== categoryName) {
+      this.audioDropOverCategory = categoryName;
+      this.cdr.markForCheck();
+    }
+  }
+
+  onAudioDragLeave(event: DragEvent): void {
+    if (this.isDragging || this.isReorderMode) return;
+    // Only clear if leaving the category-section entirely (not entering a child)
+    const related = event.relatedTarget as HTMLElement | null;
+    const section = (event.currentTarget as HTMLElement);
+    if (related && section.contains(related)) return;
+
+    event.preventDefault();
+    this.audioDropOverCategory = null;
+    this.cdr.markForCheck();
+  }
+
+  onAudioDrop(event: DragEvent, categoryName: string): void {
+    if (this.isDragging || this.isReorderMode) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    this.audioDropOverCategory = null;
+    this.cdr.markForCheck();
+
+    const files = event.dataTransfer?.files;
+    if (!files || files.length === 0) return;
+
+    const audioFiles: File[] = [];
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (file.type.startsWith('audio/') || ContentComponent.ALLOWED_AUDIO_EXTENSIONS.test(file.name)) {
+        audioFiles.push(file);
+      }
+    }
+
+    if (audioFiles.length > 0) {
+      this.filesDroppedOnCategory.emit({ files: audioFiles, categoryName });
+    }
   }
 
 }

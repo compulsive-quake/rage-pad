@@ -26,7 +26,7 @@ export class QrModalComponent implements OnChanges {
   isAndroidLoading = false;
   androidError = '';
 
-  private mouseDownOnOverlay = false;
+  mouseDownOnOverlay = false;
 
   constructor(private soundService: SoundService) {}
 

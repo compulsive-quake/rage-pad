@@ -57,7 +57,17 @@
           <div class="store-card-info">
             <span class="store-card-name">{{ cat.name }}</span>
             <span class="store-card-meta">{{ cat.sound_count }} sounds</span>
-            <span class="store-card-uploader" *ngIf="cat.uploader_name">by {{ cat.uploader_name }}</span>
+            <span class="store-card-creator" *ngIf="cat.creator_username">
+              <img *ngIf="cat.creator_profile_picture"
+                   class="creator-avatar"
+                   [src]="'data:image/png;base64,' + cat.creator_profile_picture"
+                   alt="" />
+              <span class="creator-avatar-placeholder" *ngIf="!cat.creator_profile_picture">
+                {{ cat.creator_username.charAt(0).toUpperCase() }}
+              </span>
+              <span>{{ cat.creator_username }}</span>
+            </span>
+            <span class="store-card-uploader" *ngIf="!cat.creator_username && cat.uploader_name">by {{ cat.uploader_name }}</span>
           </div>
           <span class="store-card-added" *ngIf="isCategoryDownloaded(cat.name)">
             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
@@ -91,7 +101,17 @@
           <div class="store-detail-info">
             <h3>{{ selectedCategory.category.name }}</h3>
             <span class="store-detail-meta">{{ selectedCategory.sounds.length }} sounds</span>
-            <span class="store-detail-uploader" *ngIf="selectedCategory.category.uploader_name">
+            <span class="store-detail-creator" *ngIf="selectedCategory.category.creator_username">
+              <img *ngIf="selectedCategory.category.creator_profile_picture"
+                   class="creator-avatar"
+                   [src]="'data:image/png;base64,' + selectedCategory.category.creator_profile_picture"
+                   alt="" />
+              <span class="creator-avatar-placeholder" *ngIf="!selectedCategory.category.creator_profile_picture">
+                {{ selectedCategory.category.creator_username.charAt(0).toUpperCase() }}
+              </span>
+              <span>{{ selectedCategory.category.creator_username }}</span>
+            </span>
+            <span class="store-detail-uploader" *ngIf="!selectedCategory.category.creator_username && selectedCategory.category.uploader_name">
               by {{ selectedCategory.category.uploader_name }}
             </span>
           </div>

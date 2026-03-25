@@ -21,6 +21,7 @@ import { StoreModalComponent } from './components/store-modal/store-modal.compon
 import { LoginComponent } from './components/login/login.component';
 import { ProfileModalComponent } from './components/profile-modal/profile-modal.component';
 import { ConnectModalComponent } from './components/connect-modal/connect-modal.component';
+import { AddCategoryModalComponent } from './components/add-category-modal/add-category-modal.component';
 import { AuthUser } from './services/auth.service';
 
 @Component({
@@ -43,6 +44,7 @@ import { AuthUser } from './services/auth.service';
     LoginComponent,
     ProfileModalComponent,
     ConnectModalComponent,
+    AddCategoryModalComponent,
   ],
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.scss']
@@ -85,6 +87,8 @@ export class AppComponent implements OnInit, OnDestroy {
 
   // Add Sound modal state
   isAddSoundModalOpen = false;
+  addSoundPreSelectedFile: File | null = null;
+  addSoundPreSelectedCategory = '';
 
   // Context menu state (desktop Tauri build only)
   isTauri = !!(window as any).__TAURI_INTERNALS__;
@@ -109,6 +113,9 @@ export class AppComponent implements OnInit, OnDestroy {
   isDeleteConfirmOpen = false;
   soundToDelete: Sound | null = null;
   isDeleting = false;
+
+  // Add category modal state
+  isAddCategoryModalOpen = false;
 
   // Delete category confirmation state
   isDeleteCategoryConfirmOpen = false;
@@ -484,6 +491,14 @@ export class AppComponent implements OnInit, OnDestroy {
 
   groupSoundsByCategory(sounds: Sound[]): void {
     const topLevelMap = new Map<string, { sounds: Sound[], image: string, subCategories: Map<string, { sounds: Sound[], image: string }> }>();
+
+    // Seed the map with all known categories so empty ones are included
+    this.categoryIconsMap.forEach((icon, name) => {
+      if (!topLevelMap.has(name)) {
+        const image = this.resolveCategoryImageUrl(icon);
+        topLevelMap.set(name, { sounds: [], image, subCategories: new Map() });
+      }
+    });
 
     sounds.forEach(sound => {
       const category = sound.category || 'Uncategorized';
@@ -1116,6 +1131,21 @@ export class AppComponent implements OnInit, OnDestroy {
     this.loadSounds(true);
   }
 
+  // ── Add category ──────────────────────────────────────────────────────────
+
+  openAddCategoryModal(): void {
+    this.isAddCategoryModalOpen = true;
+  }
+
+  onAddCategoryClosed(): void {
+    this.isAddCategoryModalOpen = false;
+  }
+
+  onCategoryCreated(categoryName: string): void {
+    this.isAddCategoryModalOpen = false;
+    this.loadSounds(true);
+  }
+
   // ── Delete category ─────────────────────────────────────────────────────────
 
   onDeleteCategory(categoryName: string): void {
@@ -1174,16 +1204,57 @@ export class AppComponent implements OnInit, OnDestroy {
   // ── Add Sound modal handlers ───────────────────────────────────────────────
 
   openAddSoundModal(): void {
+    this.addSoundPreSelectedFile = null;
+    this.addSoundPreSelectedCategory = '';
     this.isAddSoundModalOpen = true;
   }
 
   onAddSoundClosed(): void {
     this.isAddSoundModalOpen = false;
+    this.addSoundPreSelectedFile = null;
+    this.addSoundPreSelectedCategory = '';
   }
 
   onSoundAdded(): void {
     this.isAddSoundModalOpen = false;
+    this.addSoundPreSelectedFile = null;
+    this.addSoundPreSelectedCategory = '';
     this.loadSounds(true);
+  }
+
+  onFilesDroppedOnCategory(event: { files: File[]; categoryName: string }): void {
+    if (event.files.length === 1) {
+      // Single file: open modal pre-populated with file and category
+      this.addSoundPreSelectedFile = event.files[0];
+      this.addSoundPreSelectedCategory = event.categoryName;
+      this.isAddSoundModalOpen = true;
+    } else if (event.files.length > 1) {
+      // Multiple files: batch upload directly to the category
+      this.batchUploadSounds(event.files, event.categoryName);
+    }
+  }
+
+  private batchUploadSounds(files: File[], categoryName: string): void {
+    let completed = 0;
+    for (const file of files) {
+      const displayName = file.name.replace(/\.[^/.]+$/, '');
+      this.soundService.addSound(file, categoryName, displayName)
+        .pipe(take(1))
+        .subscribe({
+          next: () => {
+            completed++;
+            if (completed === files.length) {
+              this.loadSounds(true);
+            }
+          },
+          error: () => {
+            completed++;
+            if (completed === files.length) {
+              this.loadSounds(true);
+            }
+          }
+        });
+    }
   }
 
   // ── VB-Cable ────────────────────────────────────────────────────────────
